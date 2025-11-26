@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppModule, AdminViewState } from './types';
 import { MOCK_USERS } from './constants';
@@ -45,16 +44,19 @@ const App: React.FC = () => {
   const initialPid = params.get('pid');
 
   // --- SECURITY LOCK STATE ---
+  // Correctly initialize admin code and lock state
   const [adminCode, setAdminCode] = useState(() => {
       const stored = localStorage.getItem('rn_admin_code');
-      // If stored is null, use default. If it's an empty string or other value, use it.
+      // If stored is null, it means first time visit -> Default Code
+      // If stored is empty string "" -> It means user cleared it -> Empty Code
       return stored !== null ? stored : '141089';
   });
 
   const [isLocked, setIsLocked] = useState(() => {
-      // If admin code is empty string, bypass lock screen
       const stored = localStorage.getItem('rn_admin_code');
+      // If explicit empty string, unlock.
       if (stored === '') return false;
+      // Otherwise (default or custom code), lock.
       return true;
   });
 
@@ -118,6 +120,13 @@ const App: React.FC = () => {
       }
   }, [initialPid]);
 
+  // Watch for admin code changes to update lock state immediately
+  useEffect(() => {
+      if (adminCode === '') {
+          setIsLocked(false);
+      }
+  }, [adminCode]);
+
   const handleUnlock = (e?: React.FormEvent) => {
       e?.preventDefault();
       if (inputCode === adminCode) {
@@ -132,7 +141,7 @@ const App: React.FC = () => {
   const handleUpdateAdminCode = (newCode: string) => {
       setAdminCode(newCode);
       localStorage.setItem('rn_admin_code', newCode);
-      // If code is cleared, allow entry
+      // If code is cleared, immediately unlock
       if (newCode === '') setIsLocked(false);
   };
 
