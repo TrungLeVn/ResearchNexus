@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Project, MeetingNote, AcademicYearDoc, Reminder } from '../types';
 import { ProjectManager } from './ProjectManager';
 import { MOCK_MEETINGS } from '../constants';
-import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, Calendar, Tag, FolderPlus, Sparkles, Loader2 } from 'lucide-react';
+import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, Calendar, Tag, FolderPlus, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
 
 interface AdminModuleProps {
@@ -72,6 +72,21 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
         setIsAddingFolder(false);
     };
 
+    const handleDeleteFolder = (year: string) => {
+        if (window.confirm(`Are you sure you want to delete the folder "${year}"? This will hide documents associated with this year.`)) {
+            setAvailableYears(availableYears.filter(y => y !== year));
+            // Optional: Remove docs. For now we keep them in state but they won't show unless year exists
+            // Or cleaner: delete docs too
+            setDocs(docs.filter(d => d.year !== year));
+        }
+    };
+
+    const handleDeleteDoc = (id: string) => {
+        if (window.confirm("Are you sure you want to remove this document link?")) {
+            setDocs(docs.filter(d => d.id !== id));
+        }
+    };
+
     const handleAddMeeting = () => {
         if (!newMeetingData.title) return;
         const newMeeting: MeetingNote = {
@@ -85,6 +100,12 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
         setMeetings([newMeeting, ...meetings]);
         setIsAddingMeeting(false);
         setNewMeetingData({ title: '', date: new Date().toISOString().split('T')[0], url: '', tags: '' });
+    };
+
+    const handleDeleteMeeting = (id: string) => {
+        if (window.confirm("Are you sure you want to delete this meeting note?")) {
+            setMeetings(meetings.filter(m => m.id !== id));
+        }
     };
 
     const handleSmartPlan = async () => {
@@ -263,35 +284,47 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {filteredMeetings.map(meeting => (
-                                <a 
+                                <div 
                                     key={meeting.id} 
-                                    href={meeting.content.startsWith('http') ? meeting.content : '#'}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group"
+                                    className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group relative"
                                 >
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 transition-colors">
-                                            <FileText className="w-5 h-5" />
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded">
-                                            <Calendar className="w-3 h-3" />
-                                            {meeting.date}
-                                        </div>
-                                    </div>
-                                    <h3 className="font-bold text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1">{meeting.title}</h3>
+                                    <button 
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteMeeting(meeting.id); }}
+                                        className="absolute top-2 right-2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+                                        title="Delete Meeting"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                     
-                                    <div className="flex flex-wrap gap-2 mt-auto">
-                                        {meeting.tags.map(t => (
-                                            <span key={t} className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] uppercase font-bold tracking-wider rounded-md border border-slate-200">
-                                                {t}
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 flex items-center gap-1 text-xs text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                                        Open in Google Docs <ExternalLink className="w-3 h-3" />
-                                    </div>
-                                </a>
+                                    <a 
+                                        href={meeting.content.startsWith('http') ? meeting.content : '#'}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="block h-full"
+                                    >
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 transition-colors">
+                                                <FileText className="w-5 h-5" />
+                                            </div>
+                                            <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded">
+                                                <Calendar className="w-3 h-3" />
+                                                {meeting.date}
+                                            </div>
+                                        </div>
+                                        <h3 className="font-bold text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1 pr-6">{meeting.title}</h3>
+                                        
+                                        <div className="flex flex-wrap gap-2 mt-auto">
+                                            {meeting.tags.map(t => (
+                                                <span key={t} className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] uppercase font-bold tracking-wider rounded-md border border-slate-200">
+                                                    {t}
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <div className="mt-4 flex items-center gap-1 text-xs text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                            Open in Google Docs <ExternalLink className="w-3 h-3" />
+                                        </div>
+                                    </a>
+                                </div>
                             ))}
                              {filteredMeetings.length === 0 && (
                                 <div className="col-span-full text-center py-12 text-slate-400">
@@ -401,10 +434,19 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                             if (searchDocQuery && yearDocs.length === 0) return null;
 
                             return (
-                                <div key={year}>
-                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                        <Folder className="w-4 h-4" /> Academic Year {year}
-                                    </h3>
+                                <div key={year} className="group/folder">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                            <Folder className="w-4 h-4" /> Academic Year {year}
+                                        </h3>
+                                        <button 
+                                            onClick={() => handleDeleteFolder(year)}
+                                            className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                                            title="Delete Folder"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100">
                                         {yearDocs.length === 0 ? (
                                             <div className="p-6 text-center">
@@ -420,26 +462,34 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                 </button>
                                             </div>
                                         ) : yearDocs.map(doc => (
-                                            <a 
-                                                key={doc.id} 
-                                                href={doc.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors group"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 bg-slate-100 group-hover:bg-white rounded text-slate-500 group-hover:text-indigo-600 transition-colors">
-                                                        <FileText className="w-4 h-4" />
+                                            <div key={doc.id} className="relative group/doc">
+                                                <a 
+                                                    href={doc.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-slate-100 group-hover/doc:bg-white rounded text-slate-500 group-hover/doc:text-indigo-600 transition-colors">
+                                                            <FileText className="w-4 h-4" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
+                                                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 group-hover/doc:bg-white rounded text-slate-500 uppercase">{doc.category}</span>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium text-slate-800 group-hover:text-indigo-700">{doc.name}</p>
-                                                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 group-hover:bg-white rounded text-slate-500 uppercase">{doc.category}</span>
+                                                    <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
+                                                        <ExternalLink className="w-4 h-4" />
                                                     </div>
-                                                </div>
-                                                <div className="p-2 text-slate-400 group-hover:text-indigo-600">
-                                                    <ExternalLink className="w-4 h-4" />
-                                                </div>
-                                            </a>
+                                                </a>
+                                                <button 
+                                                    onClick={(e) => { e.preventDefault(); handleDeleteDoc(doc.id); }}
+                                                    className="absolute top-3 right-10 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/doc:opacity-100 transition-opacity"
+                                                    title="Delete Document"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>

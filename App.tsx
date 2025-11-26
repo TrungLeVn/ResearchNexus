@@ -45,10 +45,21 @@ const App: React.FC = () => {
   const initialPid = params.get('pid');
 
   // --- SECURITY LOCK STATE ---
-  const [isLocked, setIsLocked] = useState(true);
+  const [adminCode, setAdminCode] = useState(() => {
+      const stored = localStorage.getItem('rn_admin_code');
+      // If stored is null, use default. If it's an empty string or other value, use it.
+      return stored !== null ? stored : '141089';
+  });
+
+  const [isLocked, setIsLocked] = useState(() => {
+      // If admin code is empty string, bypass lock screen
+      const stored = localStorage.getItem('rn_admin_code');
+      if (stored === '') return false;
+      return true;
+  });
+
   const [inputCode, setInputCode] = useState('');
   const [unlockError, setUnlockError] = useState(false);
-  const [adminCode, setAdminCode] = useState(() => localStorage.getItem('rn_admin_code') || '141089');
 
   // User Session
   const [currentUser, setCurrentUser] = useState<Collaborator | null>(() => {
@@ -120,6 +131,8 @@ const App: React.FC = () => {
   const handleUpdateAdminCode = (newCode: string) => {
       setAdminCode(newCode);
       localStorage.setItem('rn_admin_code', newCode);
+      // If code is cleared, ensure we don't lock out immediately but next refresh will be unlocked
+      if (newCode === '') setIsLocked(false);
   };
 
   const handleLogin = (user: Collaborator) => {
