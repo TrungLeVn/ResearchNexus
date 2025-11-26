@@ -161,3 +161,49 @@ export const suggestProjectSchedule = async (projectTitle: string, status: strin
         return [];
     }
 }
+
+/**
+ * Generates a detailed project outline including milestones and research questions.
+ * Uses gemini-3-pro-preview.
+ */
+export const generateProjectDetails = async (title: string, description: string): Promise<{ tasks: {title: string, priority: string, daysFromNow: number}[], questions: string[] }> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        I am starting a new scientific research project.
+        Title: "${title}"
+        Description: "${description}"
+        
+        Please act as a senior research principal and generate:
+        1. 4-6 Key Milestones/Tasks to get started (e.g. Literature Review, Data Collection) with suggested priorities (high/medium/low) and realistic timelines relative to today.
+        2. 3 Critical Research Questions that this project should answer.
+        
+        Return STRICTLY JSON format:
+        {
+            "tasks": [
+                { "title": "Task Name", "priority": "high", "daysFromNow": 5 }
+            ],
+            "questions": [ "Question 1", "Question 2" ]
+        }
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response from AI");
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Gemini Project Gen Error:", error);
+        // Fallback
+        return { 
+            tasks: [{ title: "Initial Literature Review", priority: "high", daysFromNow: 3 }], 
+            questions: ["What is the primary impact of this research?"] 
+        };
+    }
+}

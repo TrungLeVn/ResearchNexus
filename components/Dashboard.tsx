@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Project, ProjectStatus, Reminder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Clock, CheckCircle2, FileText, AlertCircle, TrendingUp, Calendar, Plus, Sparkles, Bell } from 'lucide-react';
+import { Clock, CheckCircle2, FileText, AlertCircle, TrendingUp, Calendar, Plus, Sparkles, Bell, Trash2 } from 'lucide-react';
 import { suggestProjectSchedule } from '../services/gemini';
 
 interface DashboardProps {
@@ -9,9 +9,10 @@ interface DashboardProps {
   reminders: Reminder[];
   onAddReminder: (r: Reminder) => void;
   onToggleReminder: (id: string) => void;
+  onDeleteReminder: (id: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAddReminder, onToggleReminder }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAddReminder, onToggleReminder, onDeleteReminder }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const activeProjects = projects.filter(p => p.status === ProjectStatus.ACTIVE);
   const completedProjects = projects.filter(p => p.status === ProjectStatus.COMPLETED).length;
@@ -190,7 +191,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
                         </div>
                     )}
                     {reminders.map(reminder => (
-                        <div key={reminder.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg group hover:bg-slate-100 transition-colors">
+                        <div key={reminder.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg group hover:bg-slate-100 transition-colors relative pr-8">
                             <button 
                                 onClick={() => onToggleReminder(reminder.id)}
                                 className={`mt-1 flex-shrink-0 w-4 h-4 rounded border transition-colors ${
@@ -219,6 +220,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
                                     </span>
                                 </div>
                             </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDeleteReminder(reminder.id); }}
+                                className="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                title="Delete Reminder"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                         </div>
                     ))}
                 </div>

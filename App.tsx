@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus } from './types';
 import { MOCK_PROJECTS, MOCK_IDEAS, MOCK_REMINDERS, MOCK_USERS } from './constants';
@@ -88,6 +87,10 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAddProject = (newProject: Project) => {
+      setProjects(prev => [newProject, ...prev]);
+  };
+
   const handleDeleteProject = (projectId: string) => {
       if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
           setProjects(prev => prev.filter(p => p.id !== projectId));
@@ -121,6 +124,10 @@ const App: React.FC = () => {
       setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
   };
 
+  const handleDeleteReminder = (id: string) => {
+      setReminders(prev => prev.filter(r => r.id !== id));
+  };
+
   // Callback to update local user state when changed in Settings
   const handleUpdateUser = (updatedUser: Collaborator) => {
       setCurrentUser(prev => prev ? ({ ...prev, ...updatedUser }) : null);
@@ -135,6 +142,7 @@ const App: React.FC = () => {
                 reminders={visibleReminders}
                 onAddReminder={handleAddReminder}
                 onToggleReminder={handleToggleReminder}
+                onDeleteReminder={handleDeleteReminder}
             />
         );
       case ViewState.PROJECTS:
@@ -146,6 +154,7 @@ const App: React.FC = () => {
             onUpdateProject={handleUpdateProject}
             onDeleteProject={handleDeleteProject}
             onArchiveProject={handleArchiveProject}
+            onAddProject={handleAddProject}
           />
         );
       case ViewState.IDEAS:
@@ -177,6 +186,7 @@ const App: React.FC = () => {
                 reminders={visibleReminders}
                 onAddReminder={handleAddReminder}
                 onToggleReminder={handleToggleReminder}
+                onDeleteReminder={handleDeleteReminder}
             />
         );
     }
