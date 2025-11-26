@@ -1,112 +1,99 @@
 import React, { useState, useEffect } from 'react';
 import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus } from './types';
-import { MOCK_PROJECTS, MOCK_IDEAS, MOCK_REMINDERS, MOCK_USERS } from './constants';
+import { MOCK_USERS } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { ProjectManager } from './components/ProjectManager';
 import { IdeaLab } from './components/IdeaLab';
 import { AIChat } from './components/AIChat';
 import { LoginScreen } from './components/LoginScreen';
 import { SettingsPage } from './components/SettingsPage';
-import { LayoutDashboard, FolderKanban, Lightbulb, MessageSquareText, Beaker, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Lightbulb, MessageSquareText, Beaker, Settings, LogOut, CloudOff } from 'lucide-react';
+import { 
+  getDb, 
+  subscribeToProjects, 
+  subscribeToIdeas, 
+  subscribeToReminders, 
+  saveProject, 
+  deleteProject, 
+  saveIdea, 
+  deleteIdea, 
+  saveReminder, 
+  deleteReminder 
+} from './services/firebase';
 
 const App: React.FC = () => {
-  // Check URL params immediately for initialization
   const params = new URLSearchParams(window.location.search);
   const initialPid = params.get('pid');
 
-  // --- PERSISTENCE HELPERS ---
-  const loadFromStorage = <T,>(key: string, fallback: T): T => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : fallback;
-    } catch (e) {
-      console.error(`Error loading ${key}`, e);
-      return fallback;
-    }
-  };
-
-  // Special loader for reminders because they contain Date objects
-  const loadRemindersFromStorage = (): Reminder[] => {
-    try {
-      const saved = localStorage.getItem('rn_reminders');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.map((r: any) => ({ ...r, date: new Date(r.date) }));
-      }
-      return MOCK_REMINDERS;
-    } catch (e) {
-      return MOCK_REMINDERS;
-    }
-  };
-
-  // --- STATE INITIALIZATION ---
-  
-  // User Session
+  // User Session (Keep local for simplicity in this version)
   const [currentUser, setCurrentUser] = useState<Collaborator | null>(() => {
-    // If invite link is present, prioritize Guest flow (start null)
     if (initialPid) return null;
-    return loadFromStorage('rn_user', MOCK_USERS[0]);
+    const saved = localStorage.getItem('rn_user');
+    return saved ? JSON.parse(saved) : MOCK_USERS[0];
   });
   
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
   
-  // Data State with Persistence
-  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage('rn_projects', MOCK_PROJECTS));
-  const [ideas, setIdeas] = useState<Idea[]>(() => loadFromStorage('rn_ideas', MOCK_IDEAS));
-  const [reminders, setReminders] = useState<Reminder[]>(() => loadRemindersFromStorage());
+  // Data State (Managed by Firebase)
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [dbConnected, setDbConnected] = useState(true);
   
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(initialPid);
 
-  // --- PERSISTENCE EFFECTS ---
+  // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
-    if (projects) localStorage.setItem('rn_projects', JSON.stringify(projects));
-  }, [projects]);
+    if (!getDb()) {
+      setDbConnected(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (ideas) localStorage.setItem('rn_ideas', JSON.stringify(ideas));
-  }, [ideas]);
+    const unsubProjects = subscribeToProjects((data) => {
+      setProjects(data);
+      // Update selected project if it exists in the new data to keep it fresh
+      if (selectedProject) {
+        const fresh = data.find(p => p.id === selectedProject.id);
+        if (fresh) setSelectedProject(fresh);
+      }
+    });
 
-  useEffect(() => {
-    if (reminders) localStorage.setItem('rn_reminders', JSON.stringify(reminders));
-  }, [reminders]);
+    const unsubIdeas = subscribeToIdeas(setIdeas);
+    const unsubReminders = subscribeToReminders(setReminders);
 
+    return () => {
+      unsubProjects();
+      unsubIdeas();
+      unsubReminders();
+    };
+  }, [selectedProject?.id]); // Re-bind if needed, but mainly we just want the fresh data logic inside
+
+  // Persist User Session
   useEffect(() => {
-    // Only save user if logged in and NOT a guest (don't persist guest sessions typically, or handle differently)
     if (currentUser && currentUser.role !== 'Guest') {
       localStorage.setItem('rn_user', JSON.stringify(currentUser));
     }
   }, [currentUser]);
 
   useEffect(() => {
-      // If we are in "Invite Mode", ensure we set the project ID
       if (initialPid) {
           setInviteProjectId(initialPid);
       }
   }, [initialPid]);
 
-  // Authentication Handler
   const handleLogin = (user: Collaborator) => {
       setCurrentUser(user);
-      
-      // If invited, auto-select the project and switch view
       if (inviteProjectId && user.role === 'Guest') {
           const invitedProject = projects.find(p => p.id === inviteProjectId);
           if (invitedProject) {
               setSelectedProject(invitedProject);
               setCurrentView(ViewState.PROJECTS);
-              // Add guest to project collaborators locally for this session (and persist)
-              setProjects(prev => prev.map(p => 
-                  p.id === inviteProjectId && !p.collaborators.some(c => c.id === user.id)
-                  ? { ...p, collaborators: [...p.collaborators, user] }
-                  : p
-              ));
           }
       }
   };
 
   const handleLogout = () => {
-      // Clear user session from storage but keep data
       localStorage.removeItem('rn_user');
       window.location.href = window.location.origin;
   };
@@ -115,10 +102,10 @@ const App: React.FC = () => {
       return <LoginScreen onLogin={handleLogin} inviteProjectId={inviteProjectId} />;
   }
 
-  // Filter Data based on Current User Access
+  // Filter Data
   const visibleProjects = currentUser.role === 'Guest' 
       ? projects.filter(p => p.id === inviteProjectId) 
-      : projects.filter(project => project.collaborators.some(c => c.id === currentUser.id));
+      : projects; // Owner sees all
 
   const visibleReminders = reminders.filter(reminder => {
     if (reminder.projectId) {
@@ -127,55 +114,61 @@ const App: React.FC = () => {
     return currentUser.role === 'Owner'; 
   });
 
+  // --- CRUD HANDLERS (Now calling Firebase) ---
+
   const handleUpdateProject = (updatedProject: Project) => {
-    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+    saveProject(updatedProject);
+    // Optimistic update for smoother UI (optional, but good)
     if (selectedProject?.id === updatedProject.id) {
         setSelectedProject(updatedProject);
     }
   };
 
   const handleAddProject = (newProject: Project) => {
-      setProjects(prev => [newProject, ...prev]);
+      saveProject(newProject);
   };
 
   const handleDeleteProject = (projectId: string) => {
-      if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-          setProjects(prev => prev.filter(p => p.id !== projectId));
+      if (window.confirm("Are you sure you want to delete this project?")) {
+          deleteProject(projectId);
           if (selectedProject?.id === projectId) setSelectedProject(null);
       }
   };
 
   const handleArchiveProject = (projectId: string) => {
-      setProjects(prev => prev.map(p => 
-          p.id === projectId ? { ...p, status: ProjectStatus.ARCHIVED } : p
-      ));
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+          saveProject({ ...project, status: ProjectStatus.ARCHIVED });
+      }
   };
 
   const handleUpdateIdea = (updatedIdea: Idea) => {
-      setIdeas(prev => prev.map(i => i.id === updatedIdea.id ? updatedIdea : i));
+      saveIdea(updatedIdea);
   };
 
   const handleDeleteIdea = (id: string) => {
-      setIdeas(prev => prev.filter(i => i.id !== id));
-  }
+      deleteIdea(id);
+  };
 
   const handleAddIdea = (newIdea: Idea) => {
-      setIdeas(prev => [newIdea, ...prev]);
+      saveIdea(newIdea);
   };
 
   const handleAddReminder = (newReminder: Reminder) => {
-      setReminders(prev => [...prev, newReminder].sort((a, b) => a.date.getTime() - b.date.getTime()));
+      saveReminder(newReminder);
   };
 
   const handleToggleReminder = (id: string) => {
-      setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
+      const r = reminders.find(rem => rem.id === id);
+      if (r) {
+          saveReminder({ ...r, completed: !r.completed });
+      }
   };
 
   const handleDeleteReminder = (id: string) => {
-      setReminders(prev => prev.filter(r => r.id !== id));
+      deleteReminder(id);
   };
 
-  // Callback to update local user state when changed in Settings
   const handleUpdateUser = (updatedUser: Collaborator) => {
       setCurrentUser(prev => prev ? ({ ...prev, ...updatedUser }) : null);
   }
@@ -269,6 +262,15 @@ const App: React.FC = () => {
             <p className="text-xs text-slate-400 font-medium">Research Suite</p>
           </div>
         </div>
+
+        {!dbConnected && (
+            <div className="px-4 mb-2">
+                <div className="bg-red-50 text-red-700 text-xs p-2 rounded border border-red-200 flex items-center gap-2">
+                    <CloudOff className="w-4 h-4" />
+                    <span>Database Not Connected</span>
+                </div>
+            </div>
+        )}
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
           {currentUser.role !== 'Guest' && <NavItem view={ViewState.DASHBOARD} icon={LayoutDashboard} label="Dashboard" />}

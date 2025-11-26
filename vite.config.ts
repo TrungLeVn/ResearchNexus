@@ -3,17 +3,24 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // Expose process.env.API_KEY to the client-side code
+  // Expose process.env variables to the client-side code
   define: {
-    // Crucial fix: Add || '' to ensure it is always a string, preventing undefined error
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
+    // Polyfill process.env
+    'process.env': {}, 
+    // Inject variables individually to ensure they exist even if import.meta.env fails
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
+    'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(process.env.VITE_FIREBASE_API_KEY || ''),
+    'process.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(process.env.VITE_FIREBASE_AUTH_DOMAIN || ''),
+    'process.env.VITE_FIREBASE_PROJECT_ID': JSON.stringify(process.env.VITE_FIREBASE_PROJECT_ID || ''),
+    'process.env.VITE_FIREBASE_STORAGE_BUCKET': JSON.stringify(process.env.VITE_FIREBASE_STORAGE_BUCKET || ''),
+    'process.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || ''),
+    'process.env.VITE_FIREBASE_APP_ID': JSON.stringify(process.env.VITE_FIREBASE_APP_ID || '')
   },
   build: {
-    chunkSizeWarningLimit: 1000, // Increase warning limit to 1MB
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Split vendor code into separate chunks for better caching and performance
           'vendor-react': ['react', 'react-dom'],
           'vendor-ui': ['lucide-react', 'recharts', 'react-markdown'],
           'vendor-ai': ['@google/genai']
