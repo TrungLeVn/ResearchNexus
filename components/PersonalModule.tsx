@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2 } from 'lucide-react';
+import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot } from 'lucide-react';
 import { PersonalGoal, Habit, GoalMilestone, GoalLog } from '../types';
 import { generateGoalMilestones } from '../services/gemini';
 import { subscribeToPersonalGoals, subscribeToHabits, savePersonalGoal, deletePersonalGoal, saveHabit, deleteHabit } from '../services/firebase';
+import { AIChat } from './AIChat';
 
 // --- SUB-COMPONENTS ---
 
@@ -417,6 +418,7 @@ export const PersonalModule: React.FC = () => {
     // State managed by Firebase
     const [goals, setGoals] = useState<PersonalGoal[]>([]);
     const [habits, setHabits] = useState<Habit[]>([]);
+    const [showChat, setShowChat] = useState(false);
 
     const [isCreating, setIsCreating] = useState(false);
     const [selectedGoal, setSelectedGoal] = useState<PersonalGoal | null>(null);
@@ -497,6 +499,14 @@ export const PersonalModule: React.FC = () => {
                     </h1>
                     <p className="text-slate-500">Track habits, fitness, and self-improvement goals.</p>
                 </div>
+                 {/* Chat Toggle Button */}
+                 <button 
+                    onClick={() => setShowChat(!showChat)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm shadow-sm transition-all ${showChat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+                >
+                    <Bot className="w-4 h-4" />
+                    <span>Personal Coach</span>
+                </button>
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
@@ -560,6 +570,23 @@ export const PersonalModule: React.FC = () => {
                 onDelete={deleteHabitHandler}
                 onAdd={addHabitHandler}
             />
+
+            {/* Chat Slide-Over */}
+            {showChat && (
+                <div className="absolute top-0 right-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <Bot className="w-4 h-4 text-indigo-600" /> Personal Coach
+                        </h3>
+                        <button onClick={() => setShowChat(false)} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <AIChat moduleContext={{ type: 'personal', data: { goals, habits } }} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -139,10 +139,19 @@ export enum AdminViewState {
 
 // --- NEW TYPES FOR MODULES ---
 
+export interface StickyNote {
+    id: string;
+    title: string;
+    content: string;
+    color: 'yellow' | 'blue' | 'rose' | 'green' | 'purple';
+    createdAt: string;
+}
+
 export interface JournalEntry {
     id: string;
     date: string; // YYYY-MM-DD
-    content: string; // Markdown notes
+    content: string; // Deprecated: Kept for backward compatibility
+    notes?: StickyNote[]; // New: Sticky Note Board
     tasks: { id: string, text: string, done: boolean }[];
     links: LinkResource[];
 }
@@ -227,8 +236,9 @@ export interface AcademicYearDoc {
     name: string;
     type: 'pdf' | 'doc' | 'sheet';
     year: string; // e.g. "2023-2024"
-    url: string;
+    url: string; // or content if it's a note
     category: 'Report' | 'Regulation' | 'Form' | 'Meeting';
+    content?: string; // Content for Meeting notes created from Journal
 }
 
 // --- SYSTEM SETTINGS (Synced via Firebase) ---

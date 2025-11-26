@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Project, AcademicYearDoc, Reminder, AdminViewState } from '../types';
 import { ProjectManager } from './ProjectManager';
-import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2, Bot, X } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
 import { subscribeToAdminDocs, saveAdminDoc, deleteAdminDoc } from '../services/firebase';
+import { AIChat } from './AIChat';
 
 interface AdminModuleProps {
     activeView: AdminViewState;
@@ -29,6 +30,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     onAddReminder
 }) => {
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+    const [showChat, setShowChat] = useState(false);
 
     // Document State from Firebase
     const [docs, setDocs] = useState<AcademicYearDoc[]>([]);
@@ -128,7 +130,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500">
+        <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
              <header className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -137,17 +139,26 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                     </h1>
                     <p className="text-slate-500">Manage department projects, meetings, and official documents.</p>
                 </div>
-                <button 
-                    onClick={handleSmartPlan}
-                    disabled={isGeneratingPlan}
-                    className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm hover:opacity-90 transition-opacity shadow-sm"
-                >
-                    {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    <span>Gemini Smart Plan</span>
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowChat(!showChat)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm shadow-sm transition-all ${showChat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+                    >
+                        <Bot className="w-4 h-4" />
+                        <span>Admin AI</span>
+                    </button>
+                    <button 
+                        onClick={handleSmartPlan}
+                        disabled={isGeneratingPlan}
+                        className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm hover:opacity-90 transition-opacity shadow-sm"
+                    >
+                        {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        <span>Gemini Smart Plan</span>
+                    </button>
+                </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto relative">
                 {activeView === AdminViewState.PROJECTS && (
                     <ProjectManager 
                         projects={adminProjects}
@@ -331,6 +342,23 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Chat Slide-Over */}
+            {showChat && (
+                <div className="absolute top-0 right-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <Bot className="w-4 h-4 text-indigo-600" /> Admin Assistant
+                        </h3>
+                        <button onClick={() => setShowChat(false)} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <AIChat moduleContext={{ type: 'admin', data: { docs, projects: adminProjects } }} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

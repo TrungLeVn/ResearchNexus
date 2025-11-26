@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, FolderDot, Globe } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, FolderDot, Globe, BookOpen, Target, Calendar, Briefcase } from 'lucide-react';
 import { ChatMessage, Project, Idea, Reminder } from '../types';
 import { sendChatMessage } from '../services/gemini';
 import ReactMarkdown from 'react-markdown';
@@ -11,10 +10,14 @@ interface AIChatProps {
         projects: Project[];
         ideas: Idea[];
         reminders: Reminder[];
-    }
+    };
+    moduleContext?: {
+        type: 'teaching' | 'personal' | 'journal' | 'admin';
+        data: any;
+    };
 }
 
-export const AIChat: React.FC<AIChatProps> = ({ project, globalContext }) => {
+export const AIChat: React.FC<AIChatProps> = ({ project, globalContext, moduleContext }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,24 +25,36 @@ export const AIChat: React.FC<AIChatProps> = ({ project, globalContext }) => {
 
   // Initialize Messages based on mode
   useEffect(() => {
+    let initialText = "Hello! I'm your AI Assistant.";
+    
     if (globalContext) {
-        setMessages([{
-            id: 'welcome',
-            role: 'model',
-            text: "Hello! I am **TrungLe's Corner AI**. I have access to your entire workspace (Research, Teaching, Admin, Personal). Ask me anything!",
-            timestamp: new Date()
-        }]);
-    } else {
-        setMessages([{
-            id: 'welcome',
-            role: 'model',
-            text: project 
-              ? `Context switched to **${project.title}**. How can I assist with this project?`
-              : "Hello! I'm your Research Assistant. How can I help you today?",
-            timestamp: new Date()
-        }]);
+        initialText = "Hello! I am **TrungLe's Corner AI**. I have access to your entire workspace (Research, Teaching, Admin, Personal). Ask me anything!";
+    } else if (moduleContext) {
+        switch(moduleContext.type) {
+            case 'teaching':
+                initialText = "I'm here to help with your courses, schedules, and teaching resources. What's on your mind?";
+                break;
+            case 'personal':
+                initialText = "Ready to track your growth? I can help with your goals and habits.";
+                break;
+            case 'journal':
+                initialText = "Reflecting on your day? I can help summarize entries or plan tomorrow.";
+                break;
+            case 'admin':
+                initialText = "I have access to your department docs and admin projects. How can I assist?";
+                break;
+        }
+    } else if (project) {
+        initialText = `Context switched to **${project.title}**. How can I assist with this project?`;
     }
-  }, [project?.id, !!globalContext]);
+
+    setMessages([{
+        id: 'welcome',
+        role: 'model',
+        text: initialText,
+        timestamp: new Date()
+    }]);
+  }, [project?.id, !!globalContext, moduleContext?.type]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,8 +84,14 @@ export const AIChat: React.FC<AIChatProps> = ({ project, globalContext }) => {
         .filter(m => !m.isError)
         .map(m => ({ role: m.role, text: m.text }));
 
-      // Pass project context OR global context
-      const responseText = await sendChatMessage(history, userMsg.text, project || undefined, globalContext);
+      // Pass relevant context
+      const responseText = await sendChatMessage(
+          history, 
+          userMsg.text, 
+          project || undefined, 
+          globalContext,
+          moduleContext
+      );
 
       const botMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -100,6 +121,24 @@ export const AIChat: React.FC<AIChatProps> = ({ project, globalContext }) => {
   };
 
   const isGlobal = !!globalContext;
+  
+  // Icon and Color helpers
+  const getHeaderIcon = () => {
+      if (globalContext) return <Globe className="w-3 h-3" />;
+      if (moduleContext) {
+          if (moduleContext.type === 'teaching') return <BookOpen className="w-3 h-3" />;
+          if (moduleContext.type === 'personal') return <Target className="w-3 h-3" />;
+          if (moduleContext.type === 'journal') return <Calendar className="w-3 h-3" />;
+          if (moduleContext.type === 'admin') return <Briefcase className="w-3 h-3" />;
+      }
+      return <FolderDot className="w-3 h-3" />;
+  };
+
+  const getHeaderLabel = () => {
+      if (globalContext) return "Global";
+      if (moduleContext) return moduleContext.type.charAt(0).toUpperCase() + moduleContext.type.slice(1);
+      return project ? project.title.substring(0, 15) : "Research";
+  };
 
   return (
     <div className="flex flex-col h-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
@@ -112,22 +151,19 @@ export const AIChat: React.FC<AIChatProps> = ({ project, globalContext }) => {
         </div>
         <div>
           <h2 className={`font-semibold text-lg ${project ? 'text-slate-800' : 'text-white'}`}>
-            {isGlobal ? "Global AI Assistant" : project ? 'Project Assistant' : 'Research Assistant'}
+            {isGlobal ? "Global AI Assistant" : project ? 'Project Assistant' : 'AI Assistant'}
           </h2>
           <p className={`text-xs flex items-center gap-1 ${project ? 'text-slate-500' : 'text-indigo-100'}`}>
-            <Sparkles className="w-3 h-3" /> Powered by Gemini 3 Pro
+            <Sparkles className="w-3 h-3" /> Powered by Gemini
           </p>
         </div>
-        {project && (
-             <div className="ml-auto flex items-center gap-1 text-xs text-indigo-600 bg-white px-2 py-1 rounded border border-indigo-100">
-                 <FolderDot className="w-3 h-3" /> {project.title.substring(0, 15)}...
-             </div>
-        )}
-        {isGlobal && (
-             <div className="ml-auto flex items-center gap-1 text-xs text-amber-400 bg-slate-800 px-2 py-1 rounded border border-slate-700">
-                 <Globe className="w-3 h-3" /> All Data
-             </div>
-        )}
+        <div className={`ml-auto flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+            project ? 'text-indigo-600 bg-white border-indigo-100' : 
+            isGlobal ? 'text-amber-400 bg-slate-800 border-slate-700' : 
+            'text-white bg-white/20 border-white/20'
+        }`}>
+            {getHeaderIcon()} {getHeaderLabel()}
+        </div>
       </div>
 
       {/* Messages */}
@@ -185,7 +221,7 @@ export const AIChat: React.FC<AIChatProps> = ({ project, globalContext }) => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyPress}
-            placeholder={isGlobal ? "Ask about any project, class, or admin task..." : (project ? `Ask Gemini about ${project.title}...` : "Ask about your research...")}
+            placeholder={isGlobal ? "Ask about any project, class, or admin task..." : (project ? `Ask Gemini about ${project.title}...` : "Type a message...")}
             className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none h-14 max-h-32 text-sm"
           />
           <button

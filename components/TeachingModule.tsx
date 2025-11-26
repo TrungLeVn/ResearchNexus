@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Users, Plus, Calendar, FileText, Archive, HardDrive, MapPin, Presentation, FileCheck, FileBarChart, Layers, Users2, Sparkles, Loader2, Image as ImageIcon, Search, Clock, Trash2 } from 'lucide-react';
+import { BookOpen, Users, Plus, Calendar, FileText, Archive, HardDrive, MapPin, Presentation, FileCheck, FileBarChart, Layers, Users2, Sparkles, Loader2, Image as ImageIcon, Search, Clock, Trash2, Bot, X } from 'lucide-react';
 import { Course, Reminder } from '../types';
 import { generateCourseImage, suggestTeachingPlan } from '../services/gemini';
 import { subscribeToCourses, saveCourse, deleteCourse } from '../services/firebase';
+import { AIChat } from './AIChat';
 
 interface TeachingModuleProps {
     currentUser?: any;
@@ -13,6 +14,7 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
     const [activeTab, setActiveTab] = useState<'current' | 'archived' | 'calendar'>('current');
     const [searchQuery, setSearchQuery] = useState('');
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+    const [showChat, setShowChat] = useState(false);
     
     // Firebase Data
     const [courses, setCourses] = useState<Course[]>([]);
@@ -282,7 +284,7 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
     };
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500">
+        <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -292,6 +294,15 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
                     <p className="text-slate-500">Manage courses, schedules, and student resources.</p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                    {/* Chat Toggle Button */}
+                    <button 
+                        onClick={() => setShowChat(!showChat)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm shadow-sm transition-all ${showChat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+                    >
+                        <Bot className="w-4 h-4" />
+                        <span>Teaching AI</span>
+                    </button>
+
                     {/* Smart Plan Button */}
                     <button 
                         onClick={handleSmartPlan}
@@ -337,7 +348,7 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
                 </div>
             </header>
 
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden relative">
                 {activeTab === 'current' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto h-full pb-6">
                         {currentCourses.map(course => renderCourseCard(course))}
@@ -374,6 +385,23 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
                     </div>
                 )}
             </div>
+
+            {/* Chat Slide-Over */}
+            {showChat && (
+                <div className="absolute top-0 right-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <Bot className="w-4 h-4 text-indigo-600" /> Teaching Assistant
+                        </h3>
+                        <button onClick={() => setShowChat(false)} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <AIChat moduleContext={{ type: 'teaching', data: courses }} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

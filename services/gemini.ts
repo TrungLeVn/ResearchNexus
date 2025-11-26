@@ -1,8 +1,5 @@
-
-
-
 import { GoogleGenAI, Chat } from "@google/genai";
-import { Project, Idea, Reminder } from "../types";
+import { Project, Idea, Reminder, Course, PersonalGoal, Habit, JournalEntry, AcademicYearDoc } from "../types";
 
 // Singleton instance variable
 let aiInstance: GoogleGenAI | null = null;
@@ -53,7 +50,88 @@ const generateSystemInstruction = (project?: Project) => {
     You have access to the metadata of the project above. Use it to answer questions about deadlines, resources, and progress specific to this project.`;
 };
 
-// NEW: Global System Instruction
+// NEW: Module-specific System Instructions
+const generateModuleSystemInstruction = (type: string, data: any) => {
+    const base = `You are "TrungLe's Corner AI". You are currently assisting in the **${type.toUpperCase()}** module.`;
+
+    if (type === 'teaching') {
+        const courses = data as Course[];
+        const courseList = courses.map(c => 
+            `- ${c.code}: ${c.name} (${c.studentsCount} students). Schedule: ${c.scheduleDay} at ${c.scheduleTime}, Room ${c.room}. Archived: ${c.isArchived}`
+        ).join('\n');
+        
+        return `${base}
+        You have access to the following teaching courses:
+        ${courseList}
+        
+        Help the professor manage schedules, suggest teaching materials, draft syllabus updates, or plan lectures based on this data.`;
+    }
+
+    if (type === 'personal') {
+        const { goals, habits } = data as { goals: PersonalGoal[], habits: Habit[] };
+        const goalsList = goals.map(g => 
+            `- Goal: ${g.title} (${g.category}). Target: ${g.target}. Progress: ${g.progress}%. Milestones: ${g.milestones.filter(m=>m.completed).length}/${g.milestones.length} done.`
+        ).join('\n');
+        const habitsList = habits.map(h => `- Habit: ${h.title}. Current Streak: ${h.streak} days.`).join('\n');
+
+        return `${base}
+        You are a Personal Growth Coach.
+        
+        CURRENT GOALS:
+        ${goalsList}
+        
+        HABIT TRACKER:
+        ${habitsList}
+        
+        Encourage the user, suggest actionable next steps for their goals, and help them analyze their habit streaks.`;
+    }
+
+    if (type === 'journal') {
+        const entries = data as JournalEntry[];
+        // Only take the last 7 entries to avoid context limit
+        const recentEntries = entries.slice(0, 7).map(e => {
+            let notesText = "";
+            if (e.notes && e.notes.length > 0) {
+                notesText = e.notes.map(n => `[${n.title}] ${n.content}`).join('; ');
+            } else {
+                notesText = e.content.substring(0, 200);
+            }
+
+            return `Date: ${e.date}
+            Tasks: ${e.tasks.filter(t=>t.done).length}/${e.tasks.length} completed.
+            Notes: ${notesText}...`
+        }).join('\n---\n');
+
+        return `${base}
+        You are a reflective journaling companion.
+        
+        RECENT ENTRIES:
+        ${recentEntries}
+        
+        Help the user reflect on their days, summarize their recent progress, and suggest improvements for tomorrow's daily plan.`;
+    }
+
+    if (type === 'admin') {
+        const { docs, projects } = data as { docs: AcademicYearDoc[], projects: Project[] };
+        const docList = docs.map(d => `- [${d.year}] ${d.name} (${d.category})`).join('\n');
+        const projectList = projects.map(p => `- ${p.title} (${p.status})`).join('\n');
+
+        return `${base}
+        You are an Administrative Secretary.
+        
+        DOCUMENTS & RECORDS:
+        ${docList}
+        
+        ADMIN PROJECTS:
+        ${projectList}
+        
+        Help locate documents, summarize administrative workload, and suggest organization strategies.`;
+    }
+
+    return base;
+};
+
+// Global System Instruction
 export const generateGlobalSystemInstruction = (
     projects: Project[],
     ideas: Idea[],
@@ -94,7 +172,8 @@ export const sendChatMessage = async (
   history: { role: 'user' | 'model'; text: string }[],
   newMessage: string,
   project?: Project,
-  globalContext?: { projects: Project[], ideas: Idea[], reminders: Reminder[] }
+  globalContext?: { projects: Project[], ideas: Idea[], reminders: Reminder[] },
+  moduleContext?: { type: 'teaching' | 'personal' | 'journal' | 'admin', data: any }
 ): Promise<string> => {
   try {
     const ai = getGenAI();
@@ -102,6 +181,8 @@ export const sendChatMessage = async (
     let systemInstruction = "";
     if (globalContext) {
         systemInstruction = generateGlobalSystemInstruction(globalContext.projects, globalContext.ideas, globalContext.reminders);
+    } else if (moduleContext) {
+        systemInstruction = generateModuleSystemInstruction(moduleContext.type, moduleContext.data);
     } else {
         systemInstruction = generateSystemInstruction(project);
     }
