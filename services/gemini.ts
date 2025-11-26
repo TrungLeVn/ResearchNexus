@@ -1,9 +1,22 @@
 import { GoogleGenAI, Chat } from "@google/genai";
 import { Project } from "../types";
 
-// Initialize Gemini Client
-// Ensure your Vercel project has the environment variable API_KEY set.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Singleton instance variable
+let aiInstance: GoogleGenAI | null = null;
+
+// Lazy initialization function
+const getGenAI = (): GoogleGenAI => {
+  if (!aiInstance) {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.error("API_KEY is missing. Please set it in Vercel Environment Variables.");
+      // We assume the user might set it later or we handle the error gracefully in the UI
+      throw new Error("API Key is missing in environment variables");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
 
 const generateSystemInstruction = (project?: Project) => {
     const base = `You are a highly intelligent Research Assistant. 
@@ -47,6 +60,7 @@ export const sendChatMessage = async (
   project?: Project
 ): Promise<string> => {
   try {
+    const ai = getGenAI();
     const chat: Chat = ai.chats.create({
       model: 'gemini-3-pro-preview',
       config: {
@@ -59,7 +73,7 @@ export const sendChatMessage = async (
     return result.text || "I'm sorry, I couldn't generate a response.";
   } catch (error) {
     console.error("Gemini Chat Error:", error);
-    throw new Error("Failed to communicate with AI Assistant.");
+    return "Error: Unable to connect to AI. Please check if your API Key is configured in Vercel settings.";
   }
 };
 
@@ -69,6 +83,7 @@ export const sendChatMessage = async (
  */
 export const expandResearchIdea = async (ideaTitle: string, currentContent: string): Promise<string> => {
   try {
+    const ai = getGenAI();
     const prompt = `
       I am a researcher. I have a rough idea: "${ideaTitle}".
       My current notes are: "${currentContent}".
@@ -100,6 +115,7 @@ export const expandResearchIdea = async (ideaTitle: string, currentContent: stri
  */
 export const summarizeText = async (text: string): Promise<string> => {
   try {
+    const ai = getGenAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: `Summarize the following scientific text in 3 concise bullet points:\n\n${text}`,
@@ -118,6 +134,7 @@ export const summarizeText = async (text: string): Promise<string> => {
  */
 export const suggestProjectSchedule = async (projectTitle: string, status: string): Promise<{ title: string; daysFromNow: number; type: 'task' | 'deadline' }[]> => {
     try {
+        const ai = getGenAI();
         const prompt = `
         I have a research project titled "${projectTitle}" which is currently in the "${status}" phase.
         Suggest 3 key milestones or tasks I should set as reminders for the next 2 weeks.

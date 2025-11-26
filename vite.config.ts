@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   // Expose process.env.API_KEY to the client-side code
   define: {
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    // Crucial fix: Add || '' to ensure it is always a string, preventing undefined error
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
   }
 });
