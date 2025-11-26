@@ -14,21 +14,69 @@ const App: React.FC = () => {
   const params = new URLSearchParams(window.location.search);
   const initialPid = params.get('pid');
 
-  // AUTO-LOGIN LOGIC:
-  // If there is NO invite link (initialPid is null), default to MOCK_USERS[0] (The Owner).
-  // If there IS an invite link, start as null to show the Guest Login Screen.
-  const [currentUser, setCurrentUser] = useState<Collaborator | null>(
-      initialPid ? null : MOCK_USERS[0]
-  );
+  // --- PERSISTENCE HELPERS ---
+  const loadFromStorage = <T,>(key: string, fallback: T): T => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : fallback;
+    } catch (e) {
+      console.error(`Error loading ${key}`, e);
+      return fallback;
+    }
+  };
+
+  // Special loader for reminders because they contain Date objects
+  const loadRemindersFromStorage = (): Reminder[] => {
+    try {
+      const saved = localStorage.getItem('rn_reminders');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map((r: any) => ({ ...r, date: new Date(r.date) }));
+      }
+      return MOCK_REMINDERS;
+    } catch (e) {
+      return MOCK_REMINDERS;
+    }
+  };
+
+  // --- STATE INITIALIZATION ---
+  
+  // User Session
+  const [currentUser, setCurrentUser] = useState<Collaborator | null>(() => {
+    // If invite link is present, prioritize Guest flow (start null)
+    if (initialPid) return null;
+    return loadFromStorage('rn_user', MOCK_USERS[0]);
+  });
   
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
   
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
-  const [ideas, setIdeas] = useState<Idea[]>(MOCK_IDEAS);
-  const [reminders, setReminders] = useState<Reminder[]>(MOCK_REMINDERS);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  // Data State with Persistence
+  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage('rn_projects', MOCK_PROJECTS));
+  const [ideas, setIdeas] = useState<Idea[]>(() => loadFromStorage('rn_ideas', MOCK_IDEAS));
+  const [reminders, setReminders] = useState<Reminder[]>(() => loadRemindersFromStorage());
   
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(initialPid);
+
+  // --- PERSISTENCE EFFECTS ---
+  useEffect(() => {
+    if (projects) localStorage.setItem('rn_projects', JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+    if (ideas) localStorage.setItem('rn_ideas', JSON.stringify(ideas));
+  }, [ideas]);
+
+  useEffect(() => {
+    if (reminders) localStorage.setItem('rn_reminders', JSON.stringify(reminders));
+  }, [reminders]);
+
+  useEffect(() => {
+    // Only save user if logged in and NOT a guest (don't persist guest sessions typically, or handle differently)
+    if (currentUser && currentUser.role !== 'Guest') {
+      localStorage.setItem('rn_user', JSON.stringify(currentUser));
+    }
+  }, [currentUser]);
 
   useEffect(() => {
       // If we are in "Invite Mode", ensure we set the project ID
@@ -47,9 +95,9 @@ const App: React.FC = () => {
           if (invitedProject) {
               setSelectedProject(invitedProject);
               setCurrentView(ViewState.PROJECTS);
-              // Add guest to project collaborators locally for this session
+              // Add guest to project collaborators locally for this session (and persist)
               setProjects(prev => prev.map(p => 
-                  p.id === inviteProjectId 
+                  p.id === inviteProjectId && !p.collaborators.some(c => c.id === user.id)
                   ? { ...p, collaborators: [...p.collaborators, user] }
                   : p
               ));
@@ -58,9 +106,8 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-      // Resetting to base state means reloading the app to the root
-      // This effectively "logs in" the owner again if they go to root, 
-      // or resets the guest flow if they are on a link.
+      // Clear user session from storage but keep data
+      localStorage.removeItem('rn_user');
       window.location.href = window.location.origin;
   };
 
@@ -254,11 +301,6 @@ const App: React.FC = () => {
                         <p className="text-xs text-slate-400 truncate">{currentUser.role === 'Guest' ? 'Guest Access' : currentUser.email}</p>
                     </div>
                 </div>
-                {/* 
-                  Log out actually just redirects to home. 
-                  If user is Guest, this takes them out of guest mode. 
-                  If user is Owner, it basically refreshes the page (keeping them logged in).
-                */}
                 <button 
                     onClick={handleLogout}
                     className="w-full flex items-center gap-3 px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"

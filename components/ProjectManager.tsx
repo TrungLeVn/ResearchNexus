@@ -8,6 +8,225 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis
 import { AIChat } from './AIChat';
 import { MOCK_USERS } from '../constants';
 
+// --- EXTRACTED COMPONENTS ---
+
+interface TaskEditModalProps {
+    task: Task;
+    collaborators: Collaborator[];
+    onClose: () => void;
+    onSave: (task: Task) => void;
+    onDelete: (id: string) => void;
+}
+
+const TaskEditModal: React.FC<TaskEditModalProps> = ({ task, collaborators, onClose, onSave, onDelete }) => {
+    const [formData, setFormData] = useState<Task>(task);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <ListTodo className="w-5 h-5 text-indigo-600" /> 
+                        Edit Task
+                    </h3>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Title</label>
+                        <input 
+                            value={formData.title}
+                            onChange={e => setFormData({...formData, title: e.target.value})}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</label>
+                        <textarea 
+                            value={formData.description || ''}
+                            onChange={e => setFormData({...formData, description: e.target.value})}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-24 text-sm"
+                            placeholder="Add details about this task..."
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+                            <select 
+                                value={formData.status}
+                                onChange={e => setFormData({...formData, status: e.target.value as TaskStatus})}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                            >
+                                <option value="todo">To Do</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="done">Done</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                            <select 
+                                value={formData.priority}
+                                onChange={e => setFormData({...formData, priority: e.target.value as TaskPriority})}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                            >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                            <input 
+                                type="date"
+                                value={formData.dueDate}
+                                onChange={e => setFormData({...formData, dueDate: e.target.value})}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Assignee</label>
+                            <select 
+                                value={formData.assigneeId || ''}
+                                onChange={e => setFormData({...formData, assigneeId: e.target.value})}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                            >
+                                {collaborators.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between">
+                    <button 
+                        onClick={() => onDelete(formData.id)}
+                        className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+                    >
+                        <Trash2 className="w-4 h-4" /> Delete
+                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={onClose}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={() => onSave(formData)}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                            <Save className="w-4 h-4" /> Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface NewProjectModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    data: { title: string; description: string; tags: string };
+    setData: (data: { title: string; description: string; tags: string }) => void;
+    onCreate: () => void;
+    isGenerating: boolean;
+}
+
+const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClose, data, setData, onCreate, isGenerating }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                    <div className="flex items-center gap-2">
+                        <div className="p-2 bg-indigo-100 rounded-lg">
+                            <Sparkles className="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <h3 className="font-bold text-slate-800">New Research Project</h3>
+                    </div>
+                    <button onClick={onClose} className="p-1 hover:bg-indigo-100 rounded-full text-slate-500">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <p className="text-sm text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        Gemini will analyze your project description to suggest milestones, research questions, and an initial timeline.
+                    </p>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Project Title</label>
+                        <input 
+                            value={data.title}
+                            onChange={e => setData({...data, title: e.target.value})}
+                            placeholder="e.g. Quantum Error Correction in..."
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description & Goals</label>
+                        <textarea 
+                            value={data.description}
+                            onChange={e => setData({...data, description: e.target.value})}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-32 text-sm"
+                            placeholder="Describe the research objective, methodology, and scope..."
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Tags (comma separated)</label>
+                        <input 
+                            value={data.tags}
+                            onChange={e => setData({...data, tags: e.target.value})}
+                            placeholder="AI, Physics, Biology..."
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                        />
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                    <button 
+                        onClick={onClose}
+                        className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={onCreate}
+                        disabled={!data.title || isGenerating}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" /> Generating Plan...
+                            </>
+                        ) : (
+                            <>
+                                <Sparkles className="w-4 h-4" /> Create with AI
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// --- MAIN COMPONENT ---
+
 interface ProjectManagerProps {
   projects: Project[];
   onUpdateProject: (p: Project) => void;
@@ -273,208 +492,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
     setDraggedTaskId(null);
   };
 
-  // --- SUB-COMPONENTS FOR VIEWS ---
+  // --- RENDER FUNCTIONS (Instead of components to avoid focus loss and recreation) ---
 
-  const TaskEditModal = () => {
-      if (!editingTask || !selectedProject) return null;
-      
-      const [formData, setFormData] = useState<Task>(editingTask);
-
-      return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                          <ListTodo className="w-5 h-5 text-indigo-600" /> 
-                          Edit Task
-                      </h3>
-                      <button onClick={() => setEditingTask(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
-                          <X className="w-5 h-5" />
-                      </button>
-                  </div>
-                  
-                  <div className="p-6 space-y-4">
-                      <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Title</label>
-                          <input 
-                              value={formData.title}
-                              onChange={e => setFormData({...formData, title: e.target.value})}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium"
-                          />
-                      </div>
-
-                      <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</label>
-                          <textarea 
-                              value={formData.description || ''}
-                              onChange={e => setFormData({...formData, description: e.target.value})}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-24 text-sm"
-                              placeholder="Add details about this task..."
-                          />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Status</label>
-                              <select 
-                                  value={formData.status}
-                                  onChange={e => setFormData({...formData, status: e.target.value as TaskStatus})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
-                              >
-                                  <option value="todo">To Do</option>
-                                  <option value="in_progress">In Progress</option>
-                                  <option value="done">Done</option>
-                              </select>
-                          </div>
-                          <div>
-                              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
-                              <select 
-                                  value={formData.priority}
-                                  onChange={e => setFormData({...formData, priority: e.target.value as TaskPriority})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
-                              >
-                                  <option value="low">Low</option>
-                                  <option value="medium">Medium</option>
-                                  <option value="high">High</option>
-                              </select>
-                          </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
-                              <input 
-                                  type="date"
-                                  value={formData.dueDate}
-                                  onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-                              />
-                          </div>
-                          <div>
-                              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Assignee</label>
-                              <select 
-                                  value={formData.assigneeId || ''}
-                                  onChange={e => setFormData({...formData, assigneeId: e.target.value})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
-                              >
-                                  {selectedProject.collaborators.map(c => (
-                                      <option key={c.id} value={c.id}>{c.name}</option>
-                                  ))}
-                              </select>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between">
-                      <button 
-                          onClick={() => handleDeleteTask(formData.id)}
-                          className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
-                      >
-                          <Trash2 className="w-4 h-4" /> Delete
-                      </button>
-                      <div className="flex gap-2">
-                          <button 
-                              onClick={() => setEditingTask(null)}
-                              className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
-                          >
-                              Cancel
-                          </button>
-                          <button 
-                              onClick={() => handleSaveTask(formData)}
-                              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
-                          >
-                              <Save className="w-4 h-4" /> Save Changes
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
-  };
-
-  const NewProjectModal = () => {
-      if (!isCreatingProject) return null;
-
-      return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-                      <div className="flex items-center gap-2">
-                          <div className="p-2 bg-indigo-100 rounded-lg">
-                              <Sparkles className="w-5 h-5 text-indigo-600" />
-                          </div>
-                          <h3 className="font-bold text-slate-800">New Research Project</h3>
-                      </div>
-                      <button onClick={() => setIsCreatingProject(false)} className="p-1 hover:bg-indigo-100 rounded-full text-slate-500">
-                          <X className="w-5 h-5" />
-                      </button>
-                  </div>
-                  
-                  <div className="p-6 space-y-4">
-                      <p className="text-sm text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                          Gemini will analyze your project description to suggest milestones, research questions, and an initial timeline.
-                      </p>
-
-                      <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Project Title</label>
-                          <input 
-                              value={newProjectData.title}
-                              onChange={e => setNewProjectData({...newProjectData, title: e.target.value})}
-                              placeholder="e.g. Quantum Error Correction in..."
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium"
-                          />
-                      </div>
-
-                      <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description & Goals</label>
-                          <textarea 
-                              value={newProjectData.description}
-                              onChange={e => setNewProjectData({...newProjectData, description: e.target.value})}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-32 text-sm"
-                              placeholder="Describe the research objective, methodology, and scope..."
-                          />
-                      </div>
-
-                      <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Tags (comma separated)</label>
-                          <input 
-                              value={newProjectData.tags}
-                              onChange={e => setNewProjectData({...newProjectData, tags: e.target.value})}
-                              placeholder="AI, Physics, Biology..."
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-                          />
-                      </div>
-                  </div>
-
-                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-                      <button 
-                          onClick={() => setIsCreatingProject(false)}
-                          className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
-                      >
-                          Cancel
-                      </button>
-                      <button 
-                          onClick={handleCreateProject}
-                          disabled={!newProjectData.title || isGeneratingProject}
-                          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50"
-                      >
-                          {isGeneratingProject ? (
-                              <>
-                                  <Loader2 className="w-4 h-4 animate-spin" /> Generating Plan...
-                              </>
-                          ) : (
-                              <>
-                                  <Sparkles className="w-4 h-4" /> Create with AI
-                              </>
-                          )}
-                      </button>
-                  </div>
-              </div>
-          </div>
-      );
-  };
-
-  const TaskToolbar = () => {
+  const renderTaskToolbar = () => {
       if (!selectedProject) return null;
       return (
           <div className="flex flex-wrap items-center gap-3 mb-4 bg-white p-2 rounded-lg border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-2">
@@ -536,7 +556,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
       )
   };
 
-  const ProjectDashboard = () => {
+  const renderProjectDashboard = () => {
       if(!selectedProject) return null;
 
       const tasks = selectedProject.tasks;
@@ -684,7 +704,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
       );
   };
 
-  const KanbanBoard = () => {
+  const renderKanbanBoard = () => {
       if(!selectedProject) return null;
       
       const columns: {id: TaskStatus, label: string, color: string}[] = [
@@ -695,7 +715,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
 
       return (
           <div className="flex flex-col h-full">
-            <TaskToolbar />
+            {renderTaskToolbar()}
             <div className="flex gap-6 h-full overflow-x-auto pb-4">
               {columns.map(col => (
                   <div 
@@ -818,7 +838,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
       );
   };
 
-  const TimelineView = () => {
+  const renderTimelineView = () => {
       if(!selectedProject) return null;
       
       // Use processedTasks (filtered/sorted) instead of raw sorting
@@ -826,7 +846,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
 
       return (
           <div className="max-w-3xl mx-auto flex flex-col gap-4">
-              <TaskToolbar />
+              {renderTaskToolbar()}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between">
                     <span>Project Timeline</span>
@@ -896,7 +916,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
       );
   };
 
-  const CalendarView = () => {
+  const renderCalendarView = () => {
       // Simplified Month View
       const days = Array.from({length: 35}, (_, i) => {
           const d = new Date();
@@ -1027,7 +1047,15 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
     return (
       <div className="h-full flex flex-col bg-slate-50 relative">
         {/* Task Edit Modal */}
-        <TaskEditModal />
+        {editingTask && (
+            <TaskEditModal 
+                task={editingTask}
+                collaborators={selectedProject.collaborators}
+                onClose={() => setEditingTask(null)}
+                onSave={handleSaveTask}
+                onDelete={handleDeleteTask}
+            />
+        )}
 
         {/* Share Modal */}
         {showShareModal && (
@@ -1181,10 +1209,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
 
             {/* Main Content Area */}
             <div className="flex-1 p-6 overflow-y-auto bg-slate-50">
-                {activeTab === 'dashboard' && <ProjectDashboard />}
-                {activeTab === 'board' && <KanbanBoard />}
-                {activeTab === 'timeline' && <TimelineView />}
-                {activeTab === 'calendar' && <CalendarView />}
+                {activeTab === 'dashboard' && renderProjectDashboard()}
+                {activeTab === 'board' && renderKanbanBoard()}
+                {activeTab === 'timeline' && renderTimelineView()}
+                {activeTab === 'calendar' && renderCalendarView()}
                 {activeTab === 'assistant' && (
                     <div className="h-full">
                         <AIChat project={selectedProject} />
@@ -1262,7 +1290,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in fade-in duration-500" onClick={() => setMenuOpenId(null)}>
         {/* New Project Modal */}
-        <NewProjectModal />
+        <NewProjectModal 
+            isOpen={isCreatingProject}
+            onClose={() => setIsCreatingProject(false)}
+            data={newProjectData}
+            setData={setNewProjectData}
+            onCreate={handleCreateProject}
+            isGenerating={isGeneratingProject}
+        />
 
         <header className="flex justify-between items-center mb-8">
             <div>

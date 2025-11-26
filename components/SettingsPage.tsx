@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Collaborator } from '../types';
-import { User, Bell, Download, Shield, Sparkles, Building, Mail, Save } from 'lucide-react';
+import { User, Bell, Download, Upload, Shield, Sparkles, Building, Mail, Save, AlertTriangle } from 'lucide-react';
 
 interface SettingsPageProps {
   currentUser: Collaborator;
@@ -18,6 +18,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
       weeklyReport: false
   });
   const [isSaved, setIsSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
       // Simulate API call to save user data
@@ -29,18 +30,73 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
   };
 
   const handleExportData = () => {
+      const projects = localStorage.getItem('rn_projects');
+      const ideas = localStorage.getItem('rn_ideas');
+      const reminders = localStorage.getItem('rn_reminders');
+
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ 
           user: currentUser, 
+          projects: projects ? JSON.parse(projects) : [],
+          ideas: ideas ? JSON.parse(ideas) : [],
+          reminders: reminders ? JSON.parse(reminders) : [],
           exportedAt: new Date().toISOString(),
-          note: "This is a mock export of your research data." 
+          note: "ResearchNexus Backup Data" 
       }, null, 2));
+      
       const downloadAnchorNode = document.createElement('a');
       downloadAnchorNode.setAttribute("href", dataStr);
-      downloadAnchorNode.setAttribute("download", "research_nexus_data.json");
+      downloadAnchorNode.setAttribute("download", `research_nexus_backup_${new Date().toISOString().split('T')[0]}.json`);
       document.body.appendChild(downloadAnchorNode);
       downloadAnchorNode.click();
       downloadAnchorNode.remove();
   };
+
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      if (!window.confirm("WARNING: This will overwrite your current data with the imported file. Continue?")) {
+          if (fileInputRef.current) fileInputRef.current.value = ''; // Reset input
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+          try {
+              const json = e.target?.result as string;
+              const data = JSON.parse(json);
+
+              // Basic validation to check if it looks like our data
+              if (!data.projects && !data.ideas && !data.reminders) {
+                  throw new Error("Invalid backup file format");
+              }
+
+              // Update LocalStorage
+              if (data.user) localStorage.setItem('rn_user', JSON.stringify(data.user));
+              if (data.projects) localStorage.setItem('rn_projects', JSON.stringify(data.projects));
+              if (data.ideas) localStorage.setItem('rn_ideas', JSON.stringify(data.ideas));
+              if (data.reminders) localStorage.setItem('rn_reminders', JSON.stringify(data.reminders));
+
+              alert("Data imported successfully! The application will now reload.");
+              window.location.reload();
+          } catch (error) {
+              console.error("Import failed", error);
+              alert("Failed to import data. Please ensure the file is a valid ResearchNexus backup JSON.");
+          }
+      };
+      reader.readAsText(file);
+  };
+
+  const handleResetData = () => {
+      if (window.confirm("WARNING: This will delete ALL your saved projects, ideas, and settings from this browser. This action cannot be undone. Are you sure?")) {
+          localStorage.clear();
+          window.location.reload();
+      }
+  }
 
   const apiKeyStatus = process.env.API_KEY ? 'Connected' : 'Not Configured';
 
@@ -160,15 +216,51 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
                     <Shield className="w-5 h-5 text-slate-600" />
                     <h3 className="font-semibold text-slate-800">Data Management</h3>
                 </div>
-                <div className="p-6">
-                    <p className="text-sm text-slate-600 mb-4">Export all your projects, tasks, and ideas to a JSON file for backup.</p>
-                    <button 
-                        onClick={handleExportData}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-700 transition-colors"
-                    >
-                        <Download className="w-4 h-4" /> Export Data
-                    </button>
+                <div className="p-6 space-y-3">
+                    <p className="text-sm text-slate-600">Export your data to JSON for backup or migration.</p>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleExportData}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-700 transition-colors text-sm font-medium"
+                        >
+                            <Download className="w-4 h-4" /> Export
+                        </button>
+                        <button 
+                            onClick={handleImportClick}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm font-medium"
+                        >
+                            <Upload className="w-4 h-4" /> Import
+                        </button>
+                        {/* Hidden Input for File Upload */}
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            onChange={handleFileChange} 
+                            accept=".json" 
+                            className="hidden" 
+                        />
+                    </div>
                 </div>
+            </div>
+        </div>
+
+        {/* Danger Zone */}
+        <div className="bg-red-50 rounded-xl shadow-sm border border-red-100 overflow-hidden">
+            <div className="p-4 border-b border-red-100 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <h3 className="font-semibold text-red-900">Danger Zone</h3>
+            </div>
+            <div className="p-6 flex items-center justify-between">
+                <div>
+                    <p className="text-sm font-medium text-red-900">Reset Application</p>
+                    <p className="text-xs text-red-700">Deletes all local data and restores default mock projects.</p>
+                </div>
+                <button 
+                    onClick={handleResetData}
+                    className="px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors text-sm font-medium"
+                >
+                    Reset to Defaults
+                </button>
             </div>
         </div>
       </div>
