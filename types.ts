@@ -8,6 +8,13 @@ export enum ProjectStatus {
   ARCHIVED = 'Archived'
 }
 
+export enum AppModule {
+  RESEARCH = 'research',
+  TEACHING = 'teaching',
+  PERSONAL = 'personal',
+  JOURNAL = 'journal'
+}
+
 export interface Paper {
   id: string;
   title: string;
@@ -117,4 +124,40 @@ export enum ViewState {
   IDEAS = 'ideas',
   CHAT = 'chat',
   SETTINGS = 'settings'
+}
+
+// --- NEW TYPES FOR MODULES ---
+
+export interface JournalEntry {
+    id: string;
+    date: string; // YYYY-MM-DD
+    content: string; // Markdown notes
+    tasks: { id: string, text: string, done: boolean }[];
+    links: LinkResource[];
+}
+
+export interface Course {
+    id: string;
+    code: string;
+    name: string;
+    semester: string;
+    studentsCount: number;
+    schedule: string;
+    driveLink?: string;
+}
+
+export interface AdminTask {
+    id: string;
+    title: string;
+    dueDate: string;
+    status: 'pending' | 'completed';
+    category: 'Department' | 'Paperwork' | 'Committee';
+}
+
+export interface PersonalGoal {
+    id: string;
+    title: string;
+    category: 'Fitness' | 'Learning' | 'Hobby';
+    progress: number;
+    target: string;
 }
