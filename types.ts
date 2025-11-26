@@ -130,6 +130,12 @@ export enum ViewState {
   SETTINGS = 'settings'
 }
 
+// NEW: Admin specific view states
+export enum AdminViewState {
+    DOCS = 'docs', // Includes Meetings
+    PROJECTS = 'projects'
+}
+
 // --- NEW TYPES FOR MODULES ---
 
 export interface JournalEntry {

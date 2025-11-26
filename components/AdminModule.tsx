@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
-import { Project, AcademicYearDoc, Reminder } from '../types';
+import { Project, AcademicYearDoc, Reminder, AdminViewState } from '../types';
 import { ProjectManager } from './ProjectManager';
 import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
 
 interface AdminModuleProps {
+    activeView: AdminViewState;
     adminProjects: Project[];
     currentUser?: any;
     onUpdateProject: (p: Project) => void;
@@ -17,6 +18,7 @@ interface AdminModuleProps {
 }
 
 export const AdminModule: React.FC<AdminModuleProps> = ({
+    activeView,
     adminProjects,
     currentUser,
     onUpdateProject,
@@ -26,8 +28,6 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     onAddProject,
     onAddReminder
 }) => {
-    // Only two tabs now: 'projects' or 'docs' (which includes meetings)
-    const [adminSubTab, setAdminSubTab] = useState<'projects' | 'docs'>('docs');
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
     // Document State (Includes Meetings now)
@@ -105,7 +105,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     };
 
     // If an admin project is selected and we are in projects tab, show the project manager view
-    if (selectedProject && adminSubTab === 'projects') {
+    if (selectedProject && activeView === AdminViewState.PROJECTS) {
         return (
             <ProjectManager 
                 projects={adminProjects}
@@ -143,23 +143,8 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                 </button>
             </header>
 
-            <div className="flex gap-4 mb-6 border-b border-slate-200 pb-2">
-                <button 
-                    onClick={() => setAdminSubTab('docs')}
-                    className={`pb-2 text-sm font-medium transition-colors ${adminSubTab === 'docs' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                    Academic Docs & Meetings
-                </button>
-                <button 
-                    onClick={() => setAdminSubTab('projects')}
-                    className={`pb-2 text-sm font-medium transition-colors ${adminSubTab === 'projects' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                    Admin Projects
-                </button>
-            </div>
-
             <div className="flex-1 overflow-y-auto">
-                {adminSubTab === 'projects' && (
+                {activeView === AdminViewState.PROJECTS && (
                     <ProjectManager 
                         projects={adminProjects}
                         selectedProject={null} // Force list view initially
@@ -172,7 +157,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                     />
                 )}
 
-                {adminSubTab === 'docs' && (
+                {activeView === AdminViewState.DOCS && (
                     <div className="space-y-6">
                         {/* Search and Add Header */}
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">

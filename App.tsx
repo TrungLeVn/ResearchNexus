@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppModule } from './types';
+import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppModule, AdminViewState } from './types';
 import { MOCK_USERS } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { ProjectManager } from './components/ProjectManager';
@@ -71,6 +71,7 @@ const App: React.FC = () => {
   // Navigation State
   const [activeModule, setActiveModule] = useState<AppModule>(AppModule.RESEARCH);
   const [currentResearchView, setCurrentResearchView] = useState<ViewState>(ViewState.DASHBOARD);
+  const [currentAdminView, setCurrentAdminView] = useState<AdminViewState>(AdminViewState.DOCS);
   
   // Data State (Managed by Firebase)
   const [projects, setProjects] = useState<Project[]>([]);
@@ -310,6 +311,7 @@ const App: React.FC = () => {
           case AppModule.ADMIN:
               return (
                   <AdminModule 
+                      activeView={currentAdminView}
                       adminProjects={adminProjects}
                       currentUser={currentUser}
                       onUpdateProject={handleUpdateProject}
@@ -457,12 +459,27 @@ const App: React.FC = () => {
                     label="Teaching" 
                     onClick={() => { setActiveModule(AppModule.TEACHING); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }} 
                 />
-                <SidebarItem 
-                    active={activeModule === AppModule.ADMIN && currentResearchView !== ViewState.SETTINGS} 
-                    icon={Briefcase} 
-                    label="Admin" 
-                    onClick={() => { setActiveModule(AppModule.ADMIN); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }} 
-                />
+                
+                {/* ADMIN MODULE + SUB-TABS */}
+                <button
+                    onClick={() => { setActiveModule(AppModule.ADMIN); setCurrentAdminView(AdminViewState.DOCS); setSelectedProject(null); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 mb-1 ${
+                        activeModule === AppModule.ADMIN && currentResearchView !== ViewState.SETTINGS
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                >
+                    <Briefcase className="w-5 h-5" />
+                    <span className="font-medium">Admin</span>
+                </button>
+                
+                {activeModule === AppModule.ADMIN && currentResearchView !== ViewState.SETTINGS && (
+                    <div className="ml-4 pl-4 border-l-2 border-slate-100 space-y-1 mb-4 animate-in slide-in-from-left-2 duration-200">
+                        <button onClick={() => setCurrentAdminView(AdminViewState.DOCS)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${currentAdminView === AdminViewState.DOCS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'}`}><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Docs & Meetings</button>
+                        <button onClick={() => setCurrentAdminView(AdminViewState.PROJECTS)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${currentAdminView === AdminViewState.PROJECTS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'}`}><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Admin Projects</button>
+                    </div>
+                )}
+
                 <SidebarItem 
                     active={activeModule === AppModule.PERSONAL && currentResearchView !== ViewState.SETTINGS} 
                     icon={Target} 
