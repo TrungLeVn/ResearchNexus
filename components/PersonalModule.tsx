@@ -1,9 +1,8 @@
-
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2 } from 'lucide-react';
 import { PersonalGoal, Habit, GoalMilestone, GoalLog } from '../types';
 import { generateGoalMilestones } from '../services/gemini';
+import { subscribeToPersonalGoals, subscribeToHabits, savePersonalGoal, deletePersonalGoal, saveHabit, deleteHabit } from '../services/firebase';
 
 // --- SUB-COMPONENTS ---
 
@@ -415,86 +414,74 @@ const HabitTracker: React.FC<{ habits: Habit[], onToggle: (id: string, date: str
 // --- MAIN COMPONENT ---
 
 export const PersonalModule: React.FC = () => {
-    // Initial State
-    const [goals, setGoals] = useState<PersonalGoal[]>([
-        { 
-            id: '1', 
-            title: 'Read 20 Books', 
-            category: 'Learning', 
-            progress: 35, 
-            target: '20 books',
-            milestones: [
-                { id: 'm1', title: 'Read 5 books', completed: true },
-                { id: 'm2', title: 'Read 10 books', completed: false }
-            ],
-            logs: [{ id: 'l1', date: '2023-10-01', content: 'Finished "Atomic Habits". Great read!' }] 
-        },
-        { 
-            id: '2', 
-            title: 'Marathon Training', 
-            category: 'Fitness', 
-            progress: 60, 
-            target: '42km',
-            milestones: [
-                { id: 'm3', title: 'Run 10km', completed: true },
-                { id: 'm4', title: 'Run Half Marathon', completed: true },
-                { id: 'm5', title: 'Run 30km', completed: false }
-            ],
-            logs: [] 
-        }
-    ]);
-
-    const [habits, setHabits] = useState<Habit[]>([
-        { id: 'h1', title: 'Morning Meditation', streak: 5, history: [] }, // History would be populated in real app
-        { id: 'h2', title: 'No Sugar', streak: 2, history: [] }
-    ]);
+    // State managed by Firebase
+    const [goals, setGoals] = useState<PersonalGoal[]>([]);
+    const [habits, setHabits] = useState<Habit[]>([]);
 
     const [isCreating, setIsCreating] = useState(false);
     const [selectedGoal, setSelectedGoal] = useState<PersonalGoal | null>(null);
 
+    // Subscribe to Data
+    useEffect(() => {
+        const unsubGoals = subscribeToPersonalGoals(setGoals);
+        const unsubHabits = subscribeToHabits(setHabits);
+        return () => {
+            unsubGoals();
+            unsubHabits();
+        };
+    }, []);
+
     const handleAddGoal = (goal: PersonalGoal) => {
-        setGoals([...goals, goal]);
+        savePersonalGoal(goal);
         setIsCreating(false);
     };
 
     const handleUpdateGoal = (updated: PersonalGoal) => {
-        setGoals(goals.map(g => g.id === updated.id ? updated : g));
+        savePersonalGoal(updated);
+        // Optimistic UI update for selected modal
         if (selectedGoal?.id === updated.id) setSelectedGoal(updated);
     };
 
     const handleDeleteGoal = (id: string) => {
         if(window.confirm("Delete this goal?")) {
-            setGoals(goals.filter(g => g.id !== id));
+            deletePersonalGoal(id);
             setSelectedGoal(null);
         }
     };
 
     // Habit Logic
     const toggleHabit = (id: string, dateStr: string) => {
-        setHabits(habits.map(h => {
-            if (h.id !== id) return h;
-            
-            const exists = h.history.includes(dateStr);
-            let newHistory = exists 
-                ? h.history.filter(d => d !== dateStr) 
-                : [...h.history, dateStr];
-            
-            // Simple Streak Calc (Just count total for demo, real calc needs consecutive logic)
-            // Ideally: sort dates, check gap between dates.
-            return {
-                ...h,
-                history: newHistory,
-                streak: newHistory.length // Simplified for UI demo
-            };
-        }));
+        const habit = habits.find(h => h.id === id);
+        if (!habit) return;
+
+        const exists = habit.history.includes(dateStr);
+        const newHistory = exists 
+            ? habit.history.filter(d => d !== dateStr) 
+            : [...habit.history, dateStr];
+        
+        // Simple Streak Logic
+        const updatedHabit = {
+            ...habit,
+            history: newHistory,
+            streak: newHistory.length // Simplified calculation
+        };
+        saveHabit(updatedHabit);
     };
 
-    const deleteHabit = (id: string) => {
-        setHabits(habits.filter(h => h.id !== id));
+    const deleteHabitHandler = (id: string) => {
+        if(window.confirm("Delete this habit?")) {
+            deleteHabit(id);
+        }
     };
 
-    const addHabit = (title: string) => {
-        setHabits([...habits, { id: Date.now().toString(), title, streak: 0, history: [] }]);
+    const addHabitHandler = (title: string) => {
+        const newHabit: Habit = { 
+            id: Date.now().toString(), 
+            title, 
+            streak: 0, 
+            history: [] 
+        };
+        saveHabit(newHabit);
     };
 
     return (
@@ -570,8 +557,8 @@ export const PersonalModule: React.FC = () => {
             <HabitTracker 
                 habits={habits}
                 onToggle={toggleHabit}
-                onDelete={deleteHabit}
-                onAdd={addHabit}
+                onDelete={deleteHabitHandler}
+                onAdd={addHabitHandler}
             />
         </div>
     );

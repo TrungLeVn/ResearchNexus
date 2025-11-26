@@ -1,9 +1,9 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Project, AcademicYearDoc, Reminder, AdminViewState } from '../types';
 import { ProjectManager } from './ProjectManager';
 import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
+import { subscribeToAdminDocs, saveAdminDoc, deleteAdminDoc } from '../services/firebase';
 
 interface AdminModuleProps {
     activeView: AdminViewState;
@@ -30,14 +30,16 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 }) => {
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-    // Document State (Includes Meetings now)
-    const [docs, setDocs] = useState<AcademicYearDoc[]>([
-        { id: '1', name: 'Faculty Handbook', year: '2023-2024', type: 'pdf', url: 'https://drive.google.com', category: 'Regulation' },
-        { id: '2', name: 'Research Grant Forms', year: '2023-2024', type: 'doc', url: 'https://drive.google.com', category: 'Form' },
-        { id: '3', name: 'Department Monthly Sync', year: '2023-2024', type: 'doc', url: '#', category: 'Meeting' },
-        { id: '4', name: 'Curriculum Committee', year: '2023-2024', type: 'doc', url: '#', category: 'Meeting' }
-    ]);
-    const [availableYears, setAvailableYears] = useState<string[]>(['2023-2024', '2022-2023']);
+    // Document State from Firebase
+    const [docs, setDocs] = useState<AcademicYearDoc[]>([]);
+    
+    // Subscribe
+    useEffect(() => {
+        const unsubscribe = subscribeToAdminDocs(setDocs);
+        return () => unsubscribe();
+    }, []);
+
+    const [availableYears, setAvailableYears] = useState<string[]>(['2023-2024']);
     const [searchDocQuery, setSearchDocQuery] = useState('');
     const [isAddingDoc, setIsAddingDoc] = useState(false);
     const [isAddingFolder, setIsAddingFolder] = useState(false);
@@ -54,7 +56,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             category: newDocData.category as any,
             type: 'doc'
         };
-        setDocs([...docs, newDoc]);
+        saveAdminDoc(newDoc);
         setIsAddingDoc(false);
         setNewDocData({ name: '', url: '', year: availableYears[0] || '2023-2024', category: 'Report' });
     };
@@ -69,15 +71,17 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     };
 
     const handleDeleteFolder = (year: string) => {
-        if (window.confirm(`Are you sure you want to delete the folder "${year}"? This will hide documents associated with this year.`)) {
+        if (window.confirm(`Are you sure you want to hide folder "${year}"? This will hide documents associated with this year until they are reassigned.`)) {
             setAvailableYears(availableYears.filter(y => y !== year));
-            setDocs(docs.filter(d => d.year !== year));
+            // In a real app we might update all docs to a different year or delete them.
+            // For now, just hiding the folder from the view state locally.
+            // If docs exist in that year, they persist in DB but won't show if the year isn't in 'allYears' logic.
         }
     };
 
     const handleDeleteDoc = (id: string) => {
         if (window.confirm("Are you sure you want to remove this document/meeting link?")) {
-            setDocs(docs.filter(d => d.id !== id));
+            deleteAdminDoc(id);
         }
     };
 
@@ -120,7 +124,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
         );
     }
 
-    // Get years including empty ones created manually
+    // Get years including empty ones created manually or existing in docs
     const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
 
     return (

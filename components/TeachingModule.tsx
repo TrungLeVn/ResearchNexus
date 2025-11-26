@@ -1,9 +1,8 @@
-
-import React, { useState } from 'react';
-import { BookOpen, Users, Plus, Calendar, FileText, Archive, HardDrive, MapPin, Presentation, FileCheck, FileBarChart, Layers, Users2, Sparkles, Loader2, Image as ImageIcon, Search, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, Users, Plus, Calendar, FileText, Archive, HardDrive, MapPin, Presentation, FileCheck, FileBarChart, Layers, Users2, Sparkles, Loader2, Image as ImageIcon, Search, Clock, Trash2 } from 'lucide-react';
 import { Course, Reminder } from '../types';
-import { MOCK_COURSES } from '../constants';
 import { generateCourseImage, suggestTeachingPlan } from '../services/gemini';
+import { subscribeToCourses, saveCourse, deleteCourse } from '../services/firebase';
 
 interface TeachingModuleProps {
     currentUser?: any;
@@ -15,10 +14,14 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
     const [searchQuery, setSearchQuery] = useState('');
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     
-    // In real app, these would come from props/firebase
-    // Local state for courses to allow updating images
-    const [courses, setCourses] = useState<Course[]>(MOCK_COURSES);
+    // Firebase Data
+    const [courses, setCourses] = useState<Course[]>([]);
     const [generatingImageFor, setGeneratingImageFor] = useState<string | null>(null);
+
+    useEffect(() => {
+        const unsubscribe = subscribeToCourses(setCourses);
+        return () => unsubscribe();
+    }, []);
 
     // Filter courses based on search query
     const filteredCourses = courses.filter(c => 
@@ -59,10 +62,10 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
         try {
             const base64Image = await generateCourseImage(courseName);
             if (base64Image) {
-                const updatedCourses = courses.map(c => 
-                    c.id === courseId ? { ...c, imageUrl: base64Image } : c
-                );
-                setCourses(updatedCourses);
+                const course = courses.find(c => c.id === courseId);
+                if (course) {
+                    saveCourse({ ...course, imageUrl: base64Image });
+                }
             } else {
                 alert("Could not generate image. Please try again.");
             }
@@ -71,6 +74,38 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
             alert("Error generating image.");
         } finally {
             setGeneratingImageFor(null);
+        }
+    };
+
+    const handleAddNewCourse = () => {
+        const name = prompt("Course Name:");
+        if (!name) return;
+        const code = prompt("Course Code (e.g. CS101):");
+        if (!code) return;
+
+        const newCourse: Course = {
+            id: Date.now().toString(),
+            name,
+            code,
+            semester: 'Current',
+            studentsCount: 0,
+            scheduleDay: 'Mon',
+            scheduleTime: '09:00',
+            durationMins: 90,
+            room: 'TBD',
+            isArchived: false,
+            resources: {}
+        };
+        saveCourse(newCourse);
+    };
+
+    const handleArchiveToggle = (course: Course) => {
+        saveCourse({ ...course, isArchived: !course.isArchived });
+    };
+
+    const handleDeleteCourse = (id: string) => {
+        if(window.confirm("Are you sure you want to delete this course?")) {
+            deleteCourse(id);
         }
     };
 
@@ -87,7 +122,15 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
         ];
 
         return (
-            <div key={course.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group h-full flex flex-col overflow-hidden">
+            <div key={course.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group h-full flex flex-col overflow-hidden relative">
+                <button 
+                    onClick={() => handleDeleteCourse(course.id)}
+                    className="absolute top-2 left-2 z-10 p-1.5 bg-white/80 rounded-full text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete Course"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+
                 {/* Course Cover Image */}
                 <div className="h-32 w-full bg-slate-100 relative group/image">
                     {course.imageUrl ? (
@@ -121,7 +164,12 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
                         <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded uppercase tracking-wider">
                             {course.code}
                         </span>
-                        <span className="text-xs text-slate-400">{course.semester}</span>
+                        <div className="flex gap-2">
+                             <button onClick={() => handleArchiveToggle(course)} className="text-xs text-slate-400 hover:text-indigo-600">
+                                 {course.isArchived ? 'Restore' : 'Archive'}
+                             </button>
+                             <span className="text-xs text-slate-400">{course.semester}</span>
+                        </div>
                     </div>
                     <h3 className="font-bold text-slate-800 text-lg mb-1">{course.name}</h3>
                     
@@ -167,9 +215,18 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
                                 return (
                                     <div 
                                         key={idx}
-                                        onClick={() => alert(`Chưa có đường dẫn cho tài nguyên này: ${btn.label}`)}
+                                        onClick={() => {
+                                            const newUrl = prompt(`Enter URL for ${btn.label}:`);
+                                            if (newUrl) {
+                                                const resourceKey = btn.label.toLowerCase() as keyof typeof course.resources;
+                                                saveCourse({
+                                                    ...course,
+                                                    resources: { ...course.resources, [resourceKey]: newUrl }
+                                                });
+                                            }
+                                        }}
                                         className={commonClasses}
-                                        title="Chưa có link"
+                                        title="Click to add link"
                                     >
                                         <btn.icon className="w-5 h-5 mb-1" />
                                         <span className="text-[10px] font-medium">{btn.label}</span>
@@ -284,7 +341,10 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onA
                 {activeTab === 'current' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto h-full pb-6">
                         {currentCourses.map(course => renderCourseCard(course))}
-                        <button className="border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-6 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors min-h-[250px]">
+                        <button 
+                            onClick={handleAddNewCourse}
+                            className="border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-6 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors min-h-[250px]"
+                        >
                             <Plus className="w-8 h-8 mb-2" />
                             <span className="font-medium">Add New Course</span>
                         </button>

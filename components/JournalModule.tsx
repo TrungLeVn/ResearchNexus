@@ -1,11 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Link as LinkIcon, Save, Plus, Trash2, ChevronLeft, ChevronRight, ExternalLink, Sparkles, Loader2 } from 'lucide-react';
 import { JournalEntry, LinkResource } from '../types';
 import { suggestJournalPlan } from '../services/gemini';
+import { subscribeToJournal, saveJournalEntry } from '../services/firebase';
 
 export const JournalModule: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [allEntries, setAllEntries] = useState<JournalEntry[]>([]);
     const [entry, setEntry] = useState<JournalEntry>({
         id: '',
         date: new Date().toISOString().split('T')[0],
@@ -14,28 +15,41 @@ export const JournalModule: React.FC = () => {
         links: []
     });
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
-    // Mock Loading/Saving (Replace with Firebase in real impl)
+    // Subscribe to Firebase Journal Entries
+    useEffect(() => {
+        const unsubscribe = subscribeToJournal(setAllEntries);
+        return () => unsubscribe();
+    }, []);
+
+    // Update current entry state when selected date changes or allEntries updates
     useEffect(() => {
         const dateStr = selectedDate.toISOString().split('T')[0];
-        const saved = localStorage.getItem(`journal_${dateStr}`);
-        if (saved) {
-            setEntry(JSON.parse(saved));
+        const existing = allEntries.find(e => e.date === dateStr);
+        if (existing) {
+            setEntry(existing);
         } else {
             setEntry({
-                id: Date.now().toString(),
+                id: `journal-${dateStr}`, // Consistent ID format for quick lookup
                 date: dateStr,
                 content: '',
                 tasks: [],
                 links: []
             });
         }
-    }, [selectedDate]);
+    }, [selectedDate, allEntries]);
 
-    const handleSave = () => {
-        const dateStr = selectedDate.toISOString().split('T')[0];
-        localStorage.setItem(`journal_${dateStr}`, JSON.stringify(entry));
-        alert("Journal saved locally.");
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await saveJournalEntry(entry);
+        } catch (error) {
+            console.error(error);
+            alert("Failed to save entry.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const changeDate = (days: number) => {
@@ -46,16 +60,21 @@ export const JournalModule: React.FC = () => {
 
     const toggleTask = (taskId: string) => {
         const newTasks = entry.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t);
-        setEntry({ ...entry, tasks: newTasks });
+        // Auto save on task toggle for better UX
+        const updatedEntry = { ...entry, tasks: newTasks };
+        setEntry(updatedEntry);
+        saveJournalEntry(updatedEntry);
     };
 
     const addTask = () => {
         const text = prompt("New Task:");
         if (text) {
-            setEntry({
+            const updatedEntry = {
                 ...entry,
                 tasks: [...entry.tasks, { id: Date.now().toString(), text, done: false }]
-            });
+            };
+            setEntry(updatedEntry);
+            saveJournalEntry(updatedEntry);
         }
     };
 
@@ -71,10 +90,12 @@ export const JournalModule: React.FC = () => {
                 done: false
             }));
 
-            setEntry({
+            const updatedEntry = {
                 ...entry,
                 tasks: [...entry.tasks, ...newTasks]
-            });
+            };
+            setEntry(updatedEntry);
+            saveJournalEntry(updatedEntry);
         } catch (e) {
             console.error(e);
         } finally {
@@ -87,8 +108,22 @@ export const JournalModule: React.FC = () => {
         const url = prompt("URL:");
         if (title && url) {
             const newLink: LinkResource = { id: Date.now().toString(), title, url, type: 'web' };
-            setEntry({ ...entry, links: [...entry.links, newLink] });
+            const updatedEntry = { ...entry, links: [...entry.links, newLink] };
+            setEntry(updatedEntry);
+            saveJournalEntry(updatedEntry);
         }
+    };
+
+    const handleDeleteTask = (taskId: string) => {
+        const updatedEntry = {...entry, tasks: entry.tasks.filter(t => t.id !== taskId)};
+        setEntry(updatedEntry);
+        saveJournalEntry(updatedEntry);
+    };
+
+    const handleDeleteLink = (linkId: string) => {
+        const updatedEntry = {...entry, links: entry.links.filter(l => l.id !== linkId)};
+        setEntry(updatedEntry);
+        saveJournalEntry(updatedEntry);
     };
 
     return (
@@ -122,7 +157,8 @@ export const JournalModule: React.FC = () => {
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                         <h3 className="font-semibold text-slate-700">Daily Log & Notes</h3>
                         <button onClick={handleSave} className="flex items-center gap-2 text-sm text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors">
-                            <Save className="w-4 h-4" /> Save
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            {isSaving ? 'Saving...' : 'Save'}
                         </button>
                     </div>
                     <textarea 
@@ -130,6 +166,7 @@ export const JournalModule: React.FC = () => {
                         placeholder="What did you work on today? Any blockers? Ideas?"
                         value={entry.content}
                         onChange={(e) => setEntry({ ...entry, content: e.target.value })}
+                        onBlur={handleSave} // Auto-save on blur
                     />
                 </div>
 
@@ -166,7 +203,7 @@ export const JournalModule: React.FC = () => {
                                         {task.text}
                                     </span>
                                     <button 
-                                        onClick={() => setEntry({...entry, tasks: entry.tasks.filter(t => t.id !== task.id)})}
+                                        onClick={() => handleDeleteTask(task.id)}
                                         className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
@@ -193,7 +230,7 @@ export const JournalModule: React.FC = () => {
                                          <span className="truncate">{link.title}</span>
                                      </a>
                                      <button 
-                                        onClick={() => setEntry({...entry, links: entry.links.filter(l => l.id !== link.id)})}
+                                        onClick={() => handleDeleteLink(link.id)}
                                         className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 ml-2"
                                     >
                                         <Trash2 className="w-3 h-3" />

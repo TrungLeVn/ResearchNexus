@@ -10,7 +10,7 @@ import {
   getDoc,
   updateDoc
 } from "firebase/firestore";
-import { Project, Idea, Reminder, Collaborator, SystemSettings } from "../types";
+import { Project, Idea, Reminder, Collaborator, SystemSettings, PersonalGoal, Habit, Course, JournalEntry, AcademicYearDoc } from "../types";
 
 // Helper to check if env vars exist
 const isFirebaseConfigured = () => {
@@ -98,6 +98,53 @@ export const subscribeToSystemSettings = (callback: (settings: SystemSettings | 
     return unsubscribe;
 };
 
+// New Subscriptions
+export const subscribeToCourses = (callback: (courses: Course[]) => void) => {
+    if (!db) return () => {};
+    const unsubscribe = onSnapshot(collection(db, "courses"), (snapshot) => {
+      const courses = snapshot.docs.map(doc => doc.data() as Course);
+      callback(courses);
+    });
+    return unsubscribe;
+};
+
+export const subscribeToPersonalGoals = (callback: (goals: PersonalGoal[]) => void) => {
+    if (!db) return () => {};
+    const unsubscribe = onSnapshot(collection(db, "personal_goals"), (snapshot) => {
+      const goals = snapshot.docs.map(doc => doc.data() as PersonalGoal);
+      callback(goals);
+    });
+    return unsubscribe;
+};
+
+export const subscribeToHabits = (callback: (habits: Habit[]) => void) => {
+    if (!db) return () => {};
+    const unsubscribe = onSnapshot(collection(db, "habits"), (snapshot) => {
+      const habits = snapshot.docs.map(doc => doc.data() as Habit);
+      callback(habits);
+    });
+    return unsubscribe;
+};
+
+export const subscribeToJournal = (callback: (entries: JournalEntry[]) => void) => {
+    if (!db) return () => {};
+    const unsubscribe = onSnapshot(collection(db, "journal_entries"), (snapshot) => {
+      const entries = snapshot.docs.map(doc => doc.data() as JournalEntry);
+      callback(entries);
+    });
+    return unsubscribe;
+};
+
+export const subscribeToAdminDocs = (callback: (docs: AcademicYearDoc[]) => void) => {
+    if (!db) return () => {};
+    const unsubscribe = onSnapshot(collection(db, "admin_docs"), (snapshot) => {
+      const docs = snapshot.docs.map(doc => doc.data() as AcademicYearDoc);
+      callback(docs);
+    });
+    return unsubscribe;
+};
+
+
 // --- WRITE FUNCTIONS ---
 
 export const saveProject = async (project: Project) => {
@@ -134,6 +181,59 @@ export const saveSystemSettings = async (settings: SystemSettings) => {
     if (!db) return;
     await setDoc(doc(db, "settings", "global_config"), settings);
 };
+
+// New Save/Delete Functions
+
+export const saveCourse = async (course: Course) => {
+    if (!db) return;
+    await setDoc(doc(db, "courses", course.id), course);
+};
+
+export const deleteCourse = async (courseId: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, "courses", courseId));
+};
+
+export const savePersonalGoal = async (goal: PersonalGoal) => {
+    if (!db) return;
+    await setDoc(doc(db, "personal_goals", goal.id), goal);
+};
+
+export const deletePersonalGoal = async (goalId: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, "personal_goals", goalId));
+};
+
+export const saveHabit = async (habit: Habit) => {
+    if (!db) return;
+    await setDoc(doc(db, "habits", habit.id), habit);
+};
+
+export const deleteHabit = async (habitId: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, "habits", habitId));
+};
+
+export const saveJournalEntry = async (entry: JournalEntry) => {
+    if (!db) return;
+    await setDoc(doc(db, "journal_entries", entry.id), entry);
+};
+
+export const deleteJournalEntry = async (entryId: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, "journal_entries", entryId));
+};
+
+export const saveAdminDoc = async (adDoc: AcademicYearDoc) => {
+    if (!db) return;
+    await setDoc(doc(db, "admin_docs", adDoc.id), adDoc);
+};
+
+export const deleteAdminDoc = async (docId: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, "admin_docs", docId));
+};
+
 
 // --- COLLABORATION ---
 
