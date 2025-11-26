@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { Collaborator } from '../types';
 import { MOCK_USERS } from '../constants';
-import { Beaker, Users, ArrowLeft } from 'lucide-react';
+import { Beaker, Users, ArrowLeft, Mail, Loader2 } from 'lucide-react';
+import { addCollaboratorToProject } from '../services/firebase';
 
 interface LoginScreenProps {
   onLogin: (user: Collaborator) => void;
@@ -11,17 +12,35 @@ interface LoginScreenProps {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProjectId }) => {
   const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleGuestJoin = () => {
-      if (!guestName.trim()) return;
+  const handleGuestJoin = async () => {
+      if (!guestName.trim() || !guestEmail.trim()) return;
+      
+      setIsLoading(true);
+
       const guestUser: Collaborator = {
-          id: `guest-${Date.now()}`,
+          // Use email as ID for guests to ensure uniqueness/persistence across sessions
+          id: guestEmail.toLowerCase().replace(/[^a-z0-9]/g, '-'), 
           name: guestName,
-          email: '',
+          email: guestEmail,
           role: 'Guest',
           initials: guestName.substring(0, 2).toUpperCase()
       };
-      onLogin(guestUser);
+
+      try {
+          // If this is an invite link, add them to the database
+          if (inviteProjectId) {
+              await addCollaboratorToProject(inviteProjectId, guestUser);
+          }
+          onLogin(guestUser);
+      } catch (error) {
+          console.error("Failed to join project:", error);
+          alert("Could not join project. Please check your connection.");
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   const handleOwnerEntry = () => {
@@ -58,23 +77,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
                       <div>
                           <h3 className="text-sm font-semibold text-indigo-900">Join as Guest</h3>
                           <p className="text-xs text-indigo-700 mt-1">
-                              Enter your name to view the shared project resources. No account required.
+                              Enter your details to collaborate. Your name will appear in task assignments.
                           </p>
                       </div>
                   </div>
-                  <input 
-                      type="text"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                      placeholder="Your Name (e.g. Dr. West)"
-                      value={guestName}
-                      onChange={e => setGuestName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleGuestJoin()}
-                  />
+                  
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Full Name</label>
+                    <input 
+                        type="text"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                        placeholder="e.g. Dr. West"
+                        value={guestName}
+                        onChange={e => setGuestName(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Email Address</label>
+                    <input 
+                        type="email"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                        placeholder="name@university.edu"
+                        value={guestEmail}
+                        onChange={e => setGuestEmail(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleGuestJoin()}
+                    />
+                  </div>
+
                   <button
                     onClick={handleGuestJoin}
-                    disabled={!guestName.trim()}
-                    className="w-full bg-indigo-600 text-white font-medium py-3 px-4 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                    disabled={!guestName.trim() || !guestEmail.trim() || isLoading}
+                    className="w-full bg-indigo-600 text-white font-medium py-3 px-4 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center justify-center gap-2"
                   >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     Join Project
                   </button>
                   <div className="pt-4 border-t border-slate-100 text-center">

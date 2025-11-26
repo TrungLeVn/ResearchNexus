@@ -265,9 +265,15 @@ const App: React.FC = () => {
 
         {!dbConnected && (
             <div className="px-4 mb-2">
-                <div className="bg-red-50 text-red-700 text-xs p-2 rounded border border-red-200 flex items-center gap-2">
-                    <CloudOff className="w-4 h-4" />
-                    <span>Database Not Connected</span>
+                <div 
+                    className="bg-red-50 text-red-700 text-xs p-3 rounded-lg border border-red-200 flex flex-col gap-1 cursor-help group"
+                    title="Please Redeploy in Vercel after setting Environment Variables"
+                >
+                    <div className="flex items-center gap-2 font-bold">
+                        <CloudOff className="w-4 h-4" />
+                        <span>Disconnected</span>
+                    </div>
+                    <p className="opacity-80">Check Vercel Config & Redeploy</p>
                 </div>
             </div>
         )}

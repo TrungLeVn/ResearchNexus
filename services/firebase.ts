@@ -6,14 +6,24 @@ import {
   setDoc, 
   deleteDoc, 
   onSnapshot, 
-  Timestamp 
+  Timestamp,
+  getDoc,
+  updateDoc
 } from "firebase/firestore";
-import { Project, Idea, Reminder } from "../types";
+import { Project, Idea, Reminder, Collaborator } from "../types";
 
 // Helper to check if env vars exist
 const isFirebaseConfigured = () => {
   // Check process.env which is polyfilled in vite.config.ts
-  return !!process.env.VITE_FIREBASE_API_KEY;
+  const hasKey = !!process.env.VITE_FIREBASE_API_KEY;
+  if (!hasKey) {
+      console.warn("Firebase Not Configured. Missing VITE_FIREBASE_API_KEY.");
+      console.log("Current Env Check:", {
+          apiKey: !!process.env.VITE_FIREBASE_API_KEY,
+          projectId: !!process.env.VITE_FIREBASE_PROJECT_ID
+      });
+  }
+  return hasKey;
 };
 
 const firebaseConfig = {
@@ -31,6 +41,7 @@ if (isFirebaseConfigured()) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    console.log("Firebase initialized successfully");
   } catch (error) {
     console.error("Firebase Initialization Error:", error);
   }
@@ -104,4 +115,35 @@ export const saveReminder = async (reminder: Reminder) => {
 export const deleteReminder = async (reminderId: string) => {
   if (!db) return;
   await deleteDoc(doc(db, "reminders", reminderId));
+};
+
+// --- COLLABORATION ---
+
+export const addCollaboratorToProject = async (projectId: string, user: Collaborator) => {
+  if (!db) return;
+  
+  const projectRef = doc(db, "projects", projectId);
+  
+  try {
+    const projectSnap = await getDoc(projectRef);
+    if (projectSnap.exists()) {
+      const projectData = projectSnap.data() as Project;
+      const collaborators = projectData.collaborators || [];
+      
+      // Check if user already exists by email
+      const exists = collaborators.some(c => c.email.toLowerCase() === user.email.toLowerCase());
+      
+      if (!exists) {
+        const updatedCollaborators = [...collaborators, user];
+        await updateDoc(projectRef, {
+          collaborators: updatedCollaborators
+        });
+        console.log("Collaborator added to project");
+      } else {
+        console.log("Collaborator already exists in project");
+      }
+    }
+  } catch (error) {
+    console.error("Error adding collaborator:", error);
+  }
 };
