@@ -198,5 +198,5 @@ export interface AcademicYearDoc {
     type: 'pdf' | 'doc' | 'sheet';
     year: string; // e.g. "2023-2024"
     url: string;
-    category: 'Report' | 'Regulation' | 'Form';
+    category: 'Report' | 'Regulation' | 'Form' | 'Meeting';
 }

@@ -131,7 +131,7 @@ const App: React.FC = () => {
   const handleUpdateAdminCode = (newCode: string) => {
       setAdminCode(newCode);
       localStorage.setItem('rn_admin_code', newCode);
-      // If code is cleared, ensure we don't lock out immediately but next refresh will be unlocked
+      // If code is cleared, allow entry
       if (newCode === '') setIsLocked(false);
   };
 

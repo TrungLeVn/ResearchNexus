@@ -1,9 +1,8 @@
 
 import React, { useState } from 'react';
-import { Project, MeetingNote, AcademicYearDoc, Reminder } from '../types';
+import { Project, AcademicYearDoc, Reminder } from '../types';
 import { ProjectManager } from './ProjectManager';
-import { MOCK_MEETINGS } from '../constants';
-import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, Calendar, Tag, FolderPlus, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
 
 interface AdminModuleProps {
@@ -27,19 +26,16 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     onAddProject,
     onAddReminder
 }) => {
-    const [adminSubTab, setAdminSubTab] = useState<'meetings' | 'projects' | 'docs'>('meetings');
+    // Only two tabs now: 'projects' or 'docs' (which includes meetings)
+    const [adminSubTab, setAdminSubTab] = useState<'projects' | 'docs'>('docs');
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-    // Meeting State
-    const [meetings, setMeetings] = useState<MeetingNote[]>(MOCK_MEETINGS);
-    const [searchMeetingQuery, setSearchMeetingQuery] = useState('');
-    const [isAddingMeeting, setIsAddingMeeting] = useState(false);
-    const [newMeetingData, setNewMeetingData] = useState({ title: '', date: new Date().toISOString().split('T')[0], url: '', tags: '' });
-
-    // Document State
+    // Document State (Includes Meetings now)
     const [docs, setDocs] = useState<AcademicYearDoc[]>([
         { id: '1', name: 'Faculty Handbook', year: '2023-2024', type: 'pdf', url: 'https://drive.google.com', category: 'Regulation' },
-        { id: '2', name: 'Research Grant Forms', year: '2023-2024', type: 'doc', url: 'https://drive.google.com', category: 'Form' }
+        { id: '2', name: 'Research Grant Forms', year: '2023-2024', type: 'doc', url: 'https://drive.google.com', category: 'Form' },
+        { id: '3', name: 'Department Monthly Sync', year: '2023-2024', type: 'doc', url: '#', category: 'Meeting' },
+        { id: '4', name: 'Curriculum Committee', year: '2023-2024', type: 'doc', url: '#', category: 'Meeting' }
     ]);
     const [availableYears, setAvailableYears] = useState<string[]>(['2023-2024', '2022-2023']);
     const [searchDocQuery, setSearchDocQuery] = useState('');
@@ -75,36 +71,13 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     const handleDeleteFolder = (year: string) => {
         if (window.confirm(`Are you sure you want to delete the folder "${year}"? This will hide documents associated with this year.`)) {
             setAvailableYears(availableYears.filter(y => y !== year));
-            // Optional: Remove docs. For now we keep them in state but they won't show unless year exists
-            // Or cleaner: delete docs too
             setDocs(docs.filter(d => d.year !== year));
         }
     };
 
     const handleDeleteDoc = (id: string) => {
-        if (window.confirm("Are you sure you want to remove this document link?")) {
+        if (window.confirm("Are you sure you want to remove this document/meeting link?")) {
             setDocs(docs.filter(d => d.id !== id));
-        }
-    };
-
-    const handleAddMeeting = () => {
-        if (!newMeetingData.title) return;
-        const newMeeting: MeetingNote = {
-            id: Date.now().toString(),
-            title: newMeetingData.title,
-            date: newMeetingData.date,
-            attendees: [], 
-            content: newMeetingData.url, 
-            tags: newMeetingData.tags.split(',').map(t => t.trim()).filter(Boolean)
-        };
-        setMeetings([newMeeting, ...meetings]);
-        setIsAddingMeeting(false);
-        setNewMeetingData({ title: '', date: new Date().toISOString().split('T')[0], url: '', tags: '' });
-    };
-
-    const handleDeleteMeeting = (id: string) => {
-        if (window.confirm("Are you sure you want to delete this meeting note?")) {
-            setMeetings(meetings.filter(m => m.id !== id));
         }
     };
 
@@ -147,12 +120,6 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
         );
     }
 
-    // Filter meetings
-    const filteredMeetings = meetings.filter(m => 
-        m.title.toLowerCase().includes(searchMeetingQuery.toLowerCase()) ||
-        m.tags.some(t => t.toLowerCase().includes(searchMeetingQuery.toLowerCase()))
-    );
-
     // Get years including empty ones created manually
     const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
 
@@ -178,22 +145,16 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 
             <div className="flex gap-4 mb-6 border-b border-slate-200 pb-2">
                 <button 
-                    onClick={() => setAdminSubTab('meetings')}
-                    className={`pb-2 text-sm font-medium transition-colors ${adminSubTab === 'meetings' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
+                    onClick={() => setAdminSubTab('docs')}
+                    className={`pb-2 text-sm font-medium transition-colors ${adminSubTab === 'docs' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
                 >
-                    Meeting Notes
+                    Academic Docs & Meetings
                 </button>
                 <button 
                     onClick={() => setAdminSubTab('projects')}
                     className={`pb-2 text-sm font-medium transition-colors ${adminSubTab === 'projects' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
                 >
                     Admin Projects
-                </button>
-                <button 
-                    onClick={() => setAdminSubTab('docs')}
-                    className={`pb-2 text-sm font-medium transition-colors ${adminSubTab === 'docs' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                    Academic Docs
                 </button>
             </div>
 
@@ -211,130 +172,6 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                     />
                 )}
 
-                {adminSubTab === 'meetings' && (
-                    <div className="space-y-6">
-                        {/* Meeting Search & Add */}
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="relative w-full md:w-64">
-                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                                <input 
-                                    type="text" 
-                                    placeholder="Search meetings..." 
-                                    className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    value={searchMeetingQuery}
-                                    onChange={(e) => setSearchMeetingQuery(e.target.value)}
-                                />
-                            </div>
-                            <button 
-                                onClick={() => setIsAddingMeeting(!isAddingMeeting)}
-                                className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-                            >
-                                <Plus className="w-4 h-4" /> Log Meeting
-                            </button>
-                        </div>
-
-                         {/* Add Meeting Form */}
-                         {isAddingMeeting && (
-                            <div className="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm animate-in fade-in slide-in-from-top-2">
-                                <h4 className="text-sm font-semibold text-slate-700 mb-4">Log New Meeting</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Meeting Title</label>
-                                        <input 
-                                            className="w-full px-3 py-2 text-sm border rounded-lg"
-                                            value={newMeetingData.title}
-                                            onChange={e => setNewMeetingData({...newMeetingData, title: e.target.value})}
-                                            placeholder="e.g. Department Sync"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
-                                        <input 
-                                            type="date"
-                                            className="w-full px-3 py-2 text-sm border rounded-lg"
-                                            value={newMeetingData.date}
-                                            onChange={e => setNewMeetingData({...newMeetingData, date: e.target.value})}
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Google Docs Link</label>
-                                        <input 
-                                            className="w-full px-3 py-2 text-sm border rounded-lg"
-                                            value={newMeetingData.url}
-                                            onChange={e => setNewMeetingData({...newMeetingData, url: e.target.value})}
-                                            placeholder="https://docs.google.com/..."
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Tags (comma separated)</label>
-                                        <input 
-                                            className="w-full px-3 py-2 text-sm border rounded-lg"
-                                            value={newMeetingData.tags}
-                                            onChange={e => setNewMeetingData({...newMeetingData, tags: e.target.value})}
-                                            placeholder="HR, Budget, Planning"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 justify-end">
-                                    <button onClick={() => setIsAddingMeeting(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm">Cancel</button>
-                                    <button onClick={handleAddMeeting} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">Save Log</button>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {filteredMeetings.map(meeting => (
-                                <div 
-                                    key={meeting.id} 
-                                    className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group relative"
-                                >
-                                    <button 
-                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteMeeting(meeting.id); }}
-                                        className="absolute top-2 right-2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
-                                        title="Delete Meeting"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                    
-                                    <a 
-                                        href={meeting.content.startsWith('http') ? meeting.content : '#'}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="block h-full"
-                                    >
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 transition-colors">
-                                                <FileText className="w-5 h-5" />
-                                            </div>
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded">
-                                                <Calendar className="w-3 h-3" />
-                                                {meeting.date}
-                                            </div>
-                                        </div>
-                                        <h3 className="font-bold text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1 pr-6">{meeting.title}</h3>
-                                        
-                                        <div className="flex flex-wrap gap-2 mt-auto">
-                                            {meeting.tags.map(t => (
-                                                <span key={t} className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] uppercase font-bold tracking-wider rounded-md border border-slate-200">
-                                                    {t}
-                                                </span>
-                                            ))}
-                                        </div>
-                                        <div className="mt-4 flex items-center gap-1 text-xs text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                                            Open in Google Docs <ExternalLink className="w-3 h-3" />
-                                        </div>
-                                    </a>
-                                </div>
-                            ))}
-                             {filteredMeetings.length === 0 && (
-                                <div className="col-span-full text-center py-12 text-slate-400">
-                                    <p>No meeting notes found.</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
                 {adminSubTab === 'docs' && (
                     <div className="space-y-6">
                         {/* Search and Add Header */}
@@ -343,7 +180,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                                 <input 
                                     type="text" 
-                                    placeholder="Search documents..." 
+                                    placeholder="Search docs & meetings..." 
                                     className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                     value={searchDocQuery}
                                     onChange={(e) => setSearchDocQuery(e.target.value)}
@@ -360,7 +197,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                     onClick={() => setIsAddingDoc(!isAddingDoc)}
                                     className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
                                 >
-                                    <Plus className="w-4 h-4" /> Add Document
+                                    <Plus className="w-4 h-4" /> Add Item
                                 </button>
                             </div>
                         </div>
@@ -382,19 +219,19 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                             </div>
                          )}
 
-                        {/* Add Doc Form */}
+                        {/* Add Doc/Meeting Form */}
                         {isAddingDoc && (
                             <div className="bg-slate-50 p-4 rounded-xl border border-indigo-200 animate-in fade-in slide-in-from-top-2">
-                                <h4 className="text-sm font-semibold text-slate-700 mb-3">Add New Document Link</h4>
+                                <h4 className="text-sm font-semibold text-slate-700 mb-3">Add New Item</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                     <input 
-                                        placeholder="Document Name"
+                                        placeholder="Item Name / Meeting Title"
                                         className="w-full px-3 py-2 text-sm border rounded-lg"
                                         value={newDocData.name}
                                         onChange={e => setNewDocData({...newDocData, name: e.target.value})}
                                     />
                                     <input 
-                                        placeholder="URL (Drive Link)"
+                                        placeholder="URL (Drive Link, Google Doc)"
                                         className="w-full px-3 py-2 text-sm border rounded-lg"
                                         value={newDocData.url}
                                         onChange={e => setNewDocData({...newDocData, url: e.target.value})}
@@ -413,13 +250,14 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                         value={newDocData.category}
                                         onChange={e => setNewDocData({...newDocData, category: e.target.value})}
                                     >
+                                        <option value="Meeting">Meeting Note</option>
                                         <option value="Report">Report</option>
                                         <option value="Regulation">Regulation</option>
                                         <option value="Form">Form</option>
                                     </select>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={handleAddDoc} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save Link</button>
+                                    <button onClick={handleAddDoc} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
                                     <button onClick={() => setIsAddingDoc(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm">Cancel</button>
                                 </div>
                             </div>
@@ -450,7 +288,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100">
                                         {yearDocs.length === 0 ? (
                                             <div className="p-6 text-center">
-                                                <p className="text-xs text-slate-400 italic mb-2">No documents in this folder.</p>
+                                                <p className="text-xs text-slate-400 italic mb-2">No items in this folder.</p>
                                                 <button 
                                                     onClick={() => {
                                                         setNewDocData({...newDocData, year: year});
@@ -470,12 +308,18 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                     className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors"
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-slate-100 group-hover/doc:bg-white rounded text-slate-500 group-hover/doc:text-indigo-600 transition-colors">
+                                                        <div className={`p-2 rounded transition-colors ${
+                                                            doc.category === 'Meeting' 
+                                                                ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
+                                                                : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white group-hover/doc:text-indigo-600'
+                                                        }`}>
                                                             <FileText className="w-4 h-4" />
                                                         </div>
                                                         <div>
                                                             <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
-                                                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 group-hover/doc:bg-white rounded text-slate-500 uppercase">{doc.category}</span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                                                                doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
+                                                            }`}>{doc.category}</span>
                                                         </div>
                                                     </div>
                                                     <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
@@ -485,7 +329,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                 <button 
                                                     onClick={(e) => { e.preventDefault(); handleDeleteDoc(doc.id); }}
                                                     className="absolute top-3 right-10 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/doc:opacity-100 transition-opacity"
-                                                    title="Delete Document"
+                                                    title="Delete Item"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
