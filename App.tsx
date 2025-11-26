@@ -10,22 +10,8 @@ import { LoginScreen } from './components/LoginScreen';
 import { SettingsPage } from './components/SettingsPage';
 import { JournalModule } from './components/JournalModule';
 import { TeachingModule } from './components/TeachingModule';
+import { AdminModule } from './components/AdminModule';
 import { PersonalModule } from './components/PersonalModule';
-import { 
-    LayoutDashboard, 
-    FolderKanban, 
-    Lightbulb, 
-    MessageSquareText, 
-    Beaker, 
-    Settings, 
-    LogOut, 
-    CloudOff, 
-    BookOpen, 
-    Calendar, 
-    Target, 
-    GraduationCap,
-    Menu
-} from 'lucide-react';
 import { 
   getDb, 
   subscribeToProjects, 
@@ -38,6 +24,17 @@ import {
   saveReminder, 
   deleteReminder 
 } from './services/firebase';
+import { 
+  GraduationCap, 
+  CloudOff, 
+  Beaker, 
+  BookOpen, 
+  Target, 
+  Calendar, 
+  Settings, 
+  LogOut,
+  Briefcase 
+} from 'lucide-react';
 
 const App: React.FC = () => {
   const params = new URLSearchParams(window.location.search);
@@ -63,7 +60,6 @@ const App: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(initialPid);
 
-  // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
     if (!getDb()) {
       setDbConnected(false);
@@ -126,6 +122,10 @@ const App: React.FC = () => {
       ? projects.filter(p => p.id === inviteProjectId) 
       : projects;
 
+  // Separate Research Projects (default) from Admin Projects
+  const researchProjects = visibleProjects.filter(p => p.category === 'research' || !p.category);
+  const adminProjects = visibleProjects.filter(p => p.category === 'admin');
+
   const visibleReminders = reminders.filter(reminder => {
     if (reminder.projectId) {
       return visibleProjects.some(p => p.id === reminder.projectId);
@@ -171,7 +171,7 @@ const App: React.FC = () => {
           case ViewState.DASHBOARD:
               return (
                   <Dashboard 
-                      projects={visibleProjects} 
+                      projects={researchProjects} 
                       reminders={visibleReminders}
                       onAddReminder={handleAddReminder}
                       onToggleReminder={handleToggleReminder}
@@ -181,7 +181,7 @@ const App: React.FC = () => {
           case ViewState.PROJECTS:
               return (
                   <ProjectManager 
-                      projects={visibleProjects} 
+                      projects={researchProjects} 
                       selectedProject={selectedProject}
                       currentUser={currentUser}
                       onSelectProject={setSelectedProject}
@@ -220,7 +220,23 @@ const App: React.FC = () => {
           case AppModule.RESEARCH:
               return renderResearchModule();
           case AppModule.TEACHING:
-              return <TeachingModule />;
+              return (
+                  <TeachingModule 
+                    currentUser={currentUser}
+                  />
+              );
+          case AppModule.ADMIN:
+              return (
+                  <AdminModule 
+                      adminProjects={adminProjects}
+                      currentUser={currentUser}
+                      onUpdateProject={handleUpdateProject}
+                      onSelectProject={setSelectedProject}
+                      selectedProject={selectedProject}
+                      onDeleteProject={handleDeleteProject}
+                      onAddProject={handleAddProject}
+                  />
+              );
           case AppModule.PERSONAL:
               return <PersonalModule />;
           case AppModule.JOURNAL:
@@ -246,14 +262,13 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
-      {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-20">
         <div className="p-6 flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
             <GraduationCap className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-slate-900">AcademicOS</h1>
+            <h1 className="text-lg font-bold tracking-tight text-slate-900">TrungLe's Corner</h1>
             <p className="text-xs text-slate-400 font-medium">Life Management</p>
           </div>
         </div>
@@ -289,89 +304,45 @@ const App: React.FC = () => {
                     onClick={() => { setActiveModule(AppModule.TEACHING); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }} 
                 />
                 <SidebarItem 
+                    active={activeModule === AppModule.ADMIN && currentResearchView !== ViewState.SETTINGS} 
+                    icon={Briefcase} 
+                    label="Admin" 
+                    onClick={() => { setActiveModule(AppModule.ADMIN); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }} 
+                />
+                <SidebarItem 
                     active={activeModule === AppModule.PERSONAL && currentResearchView !== ViewState.SETTINGS} 
                     icon={Target} 
                     label="Personal Growth" 
-                    onClick={() => { setActiveModule(AppModule.PERSONAL); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }} 
+                    onClick={() => { setActiveModule(AppModule.PERSONAL); setCurrentResearchView(ViewState.DASHBOARD); }} 
                 />
                 <SidebarItem 
                     active={activeModule === AppModule.JOURNAL && currentResearchView !== ViewState.SETTINGS} 
                     icon={Calendar} 
-                    label="Journal" 
-                    onClick={() => { setActiveModule(AppModule.JOURNAL); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }} 
+                    label="Daily Journal" 
+                    onClick={() => { setActiveModule(AppModule.JOURNAL); setCurrentResearchView(ViewState.DASHBOARD); }} 
                 />
             </div>
-            
-            {activeModule === AppModule.RESEARCH && currentResearchView !== ViewState.SETTINGS && (
-                <div className="border-t border-slate-100 pt-4 animate-in fade-in slide-in-from-left-4 duration-300">
-                    <h3 className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Research Tools</h3>
-                    <div className="space-y-1">
-                        <button 
-                            onClick={() => setCurrentResearchView(ViewState.DASHBOARD)}
-                            className={`w-full text-left px-4 py-2 text-sm rounded-lg ${currentResearchView === ViewState.DASHBOARD ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                            Overview
-                        </button>
-                        <button 
-                            onClick={() => { setCurrentResearchView(ViewState.PROJECTS); setSelectedProject(null); }}
-                            className={`w-full text-left px-4 py-2 text-sm rounded-lg ${currentResearchView === ViewState.PROJECTS ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                            Projects
-                        </button>
-                        <button 
-                            onClick={() => setCurrentResearchView(ViewState.IDEAS)}
-                            className={`w-full text-left px-4 py-2 text-sm rounded-lg ${currentResearchView === ViewState.IDEAS ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                            Idea Lab
-                        </button>
-                        <button 
-                            onClick={() => setCurrentResearchView(ViewState.CHAT)}
-                            className={`w-full text-left px-4 py-2 text-sm rounded-lg ${currentResearchView === ViewState.CHAT ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                            AI Assistant
-                        </button>
-                    </div>
-                </div>
-            )}
-        </nav>
 
-        <div className="p-4 border-t border-slate-100 space-y-2 relative">
-            <button 
-                onClick={() => {
-                    setCurrentResearchView(ViewState.SETTINGS);
-                    setSelectedProject(null);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${currentResearchView === ViewState.SETTINGS ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-            >
-                <Settings className="w-5 h-5" />
-                <span className="text-sm font-medium">Settings</span>
-            </button>
-            
-            <div className="pt-2 border-t border-slate-50 mt-2">
-                <div className="flex items-center gap-3 px-3 py-2 mb-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                        currentUser.role === 'Guest' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
-                    }`}>
-                        {currentUser.initials}
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                        <p className="text-sm font-medium text-slate-900 truncate">{currentUser.name}</p>
-                        <p className="text-xs text-slate-400 truncate">{currentUser.role === 'Guest' ? 'Guest Access' : currentUser.email}</p>
-                    </div>
-                </div>
-                <button 
+            <div>
+                 <h3 className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">System</h3>
+                 <SidebarItem 
+                    active={currentResearchView === ViewState.SETTINGS} 
+                    icon={Settings} 
+                    label="Settings" 
+                    onClick={() => { setCurrentResearchView(ViewState.SETTINGS); }} 
+                />
+                 <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-red-50 hover:text-red-600"
                 >
                     <LogOut className="w-5 h-5" />
-                    <span className="text-sm font-medium">{currentUser.role === 'Guest' ? 'Exit Guest Mode' : 'Refresh App'}</span>
+                    <span className="font-medium">Sign Out</span>
                 </button>
             </div>
-        </div>
+        </nav>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50 h-full overflow-hidden relative">
+      <main className="flex-1 overflow-hidden relative">
         {renderMainContent()}
       </main>
     </div>

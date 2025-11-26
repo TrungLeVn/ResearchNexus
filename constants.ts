@@ -1,5 +1,6 @@
 
-import { Project, ProjectStatus, Idea, Reminder, Collaborator } from './types';
+
+import { Project, ProjectStatus, Idea, Reminder, Collaborator, Course, MeetingNote } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
     { id: 'c1', name: 'Assoc.Prof. Trung Le', email: 'trung.le@university.edu', role: 'Owner', initials: 'TL' }
@@ -14,6 +15,7 @@ export const MOCK_PROJECTS: Project[] = [
     progress: 65,
     tags: ['AI', 'Optimization', 'Deep Learning'],
     notes: 'Focusing on MobileNet variants.',
+    category: 'research',
     collaborators: [
         MOCK_USERS[0] // Only Owner
     ],
@@ -84,6 +86,7 @@ export const MOCK_PROJECTS: Project[] = [
     status: ProjectStatus.PLANNING,
     progress: 15,
     tags: ['Climate', 'Agriculture', 'Statistics'],
+    category: 'research',
     notes: '',
     collaborators: [
         MOCK_USERS[0]
@@ -99,32 +102,95 @@ export const MOCK_PROJECTS: Project[] = [
     ]
   },
   {
-    id: '3',
-    title: 'Quantum Entanglement Protocols',
-    description: 'Developing new verification protocols for multipartite entanglement in noisy quantum channels.',
-    status: ProjectStatus.REVIEW,
-    progress: 90,
-    tags: ['Quantum Physics', 'Cryptography'],
-    notes: '',
-    collaborators: [
-        MOCK_USERS[0]
+    id: 'admin1',
+    title: 'International AI Conference 2024 Organization',
+    description: 'Organizing committee tasks for the upcoming department conference.',
+    status: ProjectStatus.ACTIVE,
+    progress: 40,
+    tags: ['Conference', 'Admin', 'Event'],
+    category: 'admin',
+    notes: 'Venue booking pending.',
+    collaborators: [MOCK_USERS[0]],
+    tasks: [
+        { id: 'at1', title: 'Book Keynote Speaker', status: 'done', priority: 'high', dueDate: '2024-05-01', assigneeId: 'c1' },
+        { id: 'at2', title: 'Finalize Catering Menu', status: 'in_progress', priority: 'medium', dueDate: '2024-06-01', assigneeId: 'c1' },
+        { id: 'at3', title: 'Send Call for Papers', status: 'todo', priority: 'high', dueDate: '2024-06-15', assigneeId: 'c1' }
     ],
-    tasks: [],
     files: [],
-    papers: [
-        {
-            id: 'p3',
-            title: 'Quantum Teleportation',
-            authors: 'Bennett et al.',
-            year: 1993,
-            status: 'Annotated',
-            url: '#'
-        }
-    ],
-    activity: [
-        { id: 'a5', message: 'Submitted for peer review', time: '3 days ago' }
-    ]
+    papers: [],
+    activity: []
   }
+];
+
+export const MOCK_COURSES: Course[] = [
+    { 
+        id: '1', 
+        code: 'CS101', 
+        name: 'Intro to Computer Science', 
+        semester: 'Fall 2024', 
+        studentsCount: 120, 
+        scheduleDay: 'Mon',
+        scheduleTime: '10:00',
+        durationMins: 90,
+        room: 'Lecture Hall A',
+        isArchived: false,
+        resources: {
+            syllabus: 'https://drive.google.com/syllabus',
+            grades: 'https://drive.google.com/grades',
+            slides: 'https://drive.google.com/slides',
+            exercises: 'https://drive.google.com/exercises'
+        }
+    },
+    { 
+        id: '2', 
+        code: 'AI302', 
+        name: 'Advanced Machine Learning', 
+        semester: 'Fall 2024', 
+        studentsCount: 45, 
+        scheduleDay: 'Wed',
+        scheduleTime: '14:00',
+        durationMins: 120,
+        room: 'Lab 304',
+        isArchived: false,
+        resources: {
+            syllabus: 'https://drive.google.com/syllabus',
+            slides: 'https://drive.google.com/slides',
+            readings: 'https://drive.google.com/readings',
+            testbank: 'https://drive.google.com/tests'
+        }
+    },
+    { 
+        id: '3', 
+        code: 'CS201', 
+        name: 'Data Structures', 
+        semester: 'Spring 2023', 
+        studentsCount: 90, 
+        scheduleDay: 'Tue',
+        scheduleTime: '09:00',
+        durationMins: 90,
+        room: 'Room 101',
+        isArchived: true,
+        resources: {}
+    }
+];
+
+export const MOCK_MEETINGS: MeetingNote[] = [
+    {
+        id: 'm1',
+        title: 'Department Monthly Sync',
+        date: '2024-05-01',
+        attendees: ['Dean', 'All Faculty'],
+        content: '# Minutes\n- Discussed budget cuts.\n- Approved new AI curriculum.',
+        tags: ['Department', 'General']
+    },
+    {
+        id: 'm2',
+        title: 'Curriculum Committee',
+        date: '2024-05-15',
+        attendees: ['Dr. Le', 'Dr. Smith'],
+        content: '# CS101 Revamp\n- Switching from Java to Python.',
+        tags: ['Curriculum', 'CS101']
+    }
 ];
 
 export const MOCK_IDEAS: Idea[] = [

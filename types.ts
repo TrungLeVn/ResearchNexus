@@ -11,6 +11,7 @@ export enum ProjectStatus {
 export enum AppModule {
   RESEARCH = 'research',
   TEACHING = 'teaching',
+  ADMIN = 'admin',
   PERSONAL = 'personal',
   JOURNAL = 'journal'
 }
@@ -68,6 +69,7 @@ export interface Task {
   priority: TaskPriority;
   dueDate: string; // ISO Date string
   assigneeId?: string;
+  dependencies?: string[]; // Array of Task IDs that must be completed before this task
 }
 
 export interface ProjectActivity {
@@ -90,6 +92,7 @@ export interface Project {
   collaborators: Collaborator[];
   tasks: Task[];
   activity?: ProjectActivity[];
+  category?: 'research' | 'admin'; // Differentiate between Research and Admin projects
 }
 
 export interface Idea {
@@ -136,14 +139,31 @@ export interface JournalEntry {
     links: LinkResource[];
 }
 
+export interface CourseResources {
+    syllabus?: string;
+    grades?: string;
+    slides?: string;
+    classlist?: string;
+    testbank?: string;
+    exercises?: string;
+    readings?: string;
+    others?: string;
+}
+
 export interface Course {
     id: string;
     code: string;
     name: string;
     semester: string;
     studentsCount: number;
-    schedule: string;
-    driveLink?: string;
+    // Schedule details for Calendar View
+    scheduleDay: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri';
+    scheduleTime: string; // e.g., "10:00"
+    durationMins: number; 
+    room: string;
+    resources: CourseResources;
+    isArchived: boolean;
+    imageUrl?: string; // AI Generated Cover
 }
 
 export interface AdminTask {
@@ -160,4 +180,22 @@ export interface PersonalGoal {
     category: 'Fitness' | 'Learning' | 'Hobby';
     progress: number;
     target: string;
+}
+
+export interface MeetingNote {
+    id: string;
+    title: string;
+    date: string;
+    attendees: string[];
+    content: string; // Markdown
+    tags: string[];
+}
+
+export interface AcademicYearDoc {
+    id: string;
+    name: string;
+    type: 'pdf' | 'doc' | 'sheet';
+    year: string; // e.g. "2023-2024"
+    url: string;
+    category: 'Report' | 'Regulation' | 'Form';
 }

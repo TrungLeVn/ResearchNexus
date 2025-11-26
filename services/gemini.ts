@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Chat } from "@google/genai";
 import { Project } from "../types";
 
@@ -205,5 +206,40 @@ export const generateProjectDetails = async (title: string, description: string)
             tasks: [{ title: "Initial Literature Review", priority: "high", daysFromNow: 3 }], 
             questions: ["What is the primary impact of this research?"] 
         };
+    }
+}
+
+/**
+ * Generates a representative cover image for a course based on its title and content.
+ * Uses gemini-2.5-flash-image for general image generation.
+ */
+export const generateCourseImage = async (courseName: string): Promise<string | null> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `Create a flat, modern, minimalist academic illustration for a university course titled "${courseName}". 
+        Use a clean vector art style with soothing colors suitable for a dashboard. Do not include text in the image.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [{ text: prompt }]
+            },
+            config: {
+                 imageConfig: { aspectRatio: "16:9" }
+            }
+        });
+
+        // Iterate through parts to find the image
+        if (response.candidates && response.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                }
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error("Gemini Image Gen Error:", error);
+        return null;
     }
 }

@@ -1,67 +1,56 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Project, Paper, ProjectFile, Task, Collaborator, TaskStatus, ProjectActivity, ProjectStatus, TaskPriority, NotebookAsset } from '../types';
-import { Folder, FileCode, FileText, Database, Sparkles, MoreVertical, Plus, ChevronLeft, BookOpen, Clock, HardDrive, ExternalLink, Kanban, Calendar as CalendarIcon, ListTodo, Users, Share2, GripVertical, CheckCircle2, Circle, LayoutDashboard, TrendingUp, AlertTriangle, Activity, MessageSquare, Link as LinkIcon, Copy, X, Archive, Trash2, Save, AlignLeft, Filter, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Headphones, Presentation, BrainCircuit, Search } from 'lucide-react';
+import { Folder, FileCode, FileText, Database, Sparkles, MoreVertical, Plus, ChevronLeft, BookOpen, Clock, HardDrive, ExternalLink, Kanban, Calendar as CalendarIcon, ListTodo, Users, Share2, GripVertical, CheckCircle2, Circle, LayoutDashboard, TrendingUp, AlertTriangle, Activity, MessageSquare, Link as LinkIcon, Copy, X, Archive, Trash2, Save, AlignLeft, Filter, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Headphones, Presentation, BrainCircuit, Search, Edit2, Link2, AlertCircle } from 'lucide-react';
 import { summarizeText, generateProjectDetails } from '../services/gemini';
 import { removeCollaboratorFromProject } from '../services/firebase';
-import ReactMarkdown from 'react-markdown';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
 import { AIChat } from './AIChat';
-import { MOCK_USERS } from '../constants';
-
-// --- EXTRACTED COMPONENTS ---
+import ReactMarkdown from 'react-markdown';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface TaskEditModalProps {
     task: Task;
     collaborators: Collaborator[];
+    allTasks: Task[];
     onClose: () => void;
     onSave: (task: Task) => void;
     onDelete: (id: string) => void;
 }
 
-const TaskEditModal: React.FC<TaskEditModalProps> = ({ task, collaborators, onClose, onSave, onDelete }) => {
-    const [formData, setFormData] = useState<Task>(task);
+const TaskEditModal: React.FC<TaskEditModalProps> = ({ task, collaborators, allTasks, onClose, onSave, onDelete }) => {
+    const [editedTask, setEditedTask] = useState<Task>({ ...task });
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <ListTodo className="w-5 h-5 text-indigo-600" /> 
-                        Edit Task
-                    </h3>
-                    <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
-                        <X className="w-5 h-5" />
-                    </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800">Edit Task</h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
-                
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4 overflow-y-auto">
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Title</label>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Title</label>
                         <input 
-                            value={formData.title}
-                            onChange={e => setFormData({...formData, title: e.target.value})}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium"
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            value={editedTask.title} 
+                            onChange={e => setEditedTask({...editedTask, title: e.target.value})} 
                         />
                     </div>
-
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</label>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Description</label>
                         <textarea 
-                            value={formData.description || ''}
-                            onChange={e => setFormData({...formData, description: e.target.value})}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-24 text-sm"
-                            placeholder="Add details about this task..."
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            rows={3}
+                            value={editedTask.description || ''} 
+                            onChange={e => setEditedTask({...editedTask, description: e.target.value})} 
                         />
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
                             <select 
-                                value={formData.status}
-                                onChange={e => setFormData({...formData, status: e.target.value as TaskStatus})}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                value={editedTask.status}
+                                onChange={e => setEditedTask({...editedTask, status: e.target.value as TaskStatus})}
                             >
                                 <option value="todo">To Do</option>
                                 <option value="in_progress">In Progress</option>
@@ -69,11 +58,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({ task, collaborators, onCl
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Priority</label>
                             <select 
-                                value={formData.priority}
-                                onChange={e => setFormData({...formData, priority: e.target.value as TaskPriority})}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                value={editedTask.priority}
+                                onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})}
                             >
                                 <option value="low">Low</option>
                                 <option value="medium">Medium</option>
@@ -81,53 +70,34 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({ task, collaborators, onCl
                             </select>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Due Date</label>
                             <input 
                                 type="date"
-                                value={formData.dueDate}
-                                onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                value={editedTask.dueDate}
+                                onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})}
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Assignee</label>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Assignee</label>
                             <select 
-                                value={formData.assigneeId || ''}
-                                onChange={e => setFormData({...formData, assigneeId: e.target.value})}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                value={editedTask.assigneeId || ''}
+                                onChange={e => setEditedTask({...editedTask, assigneeId: e.target.value})}
                             >
-                                {collaborators.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
+                                {collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                     </div>
                 </div>
-
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between">
-                    <button 
-                        onClick={() => onDelete(formData.id)}
-                        className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
-                    >
-                        <Trash2 className="w-4 h-4" /> Delete
-                    </button>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={onClose}
-                            className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={() => onSave(formData)}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
-                        >
-                            <Save className="w-4 h-4" /> Save Changes
-                        </button>
-                    </div>
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between">
+                     <button onClick={() => onDelete(editedTask.id)} className="text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm font-medium">Delete</button>
+                     <div className="flex gap-2">
+                        <button onClick={onClose} className="text-slate-600 hover:bg-slate-200 px-3 py-2 rounded-lg text-sm font-medium">Cancel</button>
+                        <button onClick={() => onSave(editedTask)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Save Changes</button>
+                     </div>
                 </div>
             </div>
         </div>
@@ -137,94 +107,146 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({ task, collaborators, onCl
 interface NewProjectModalProps {
     isOpen: boolean;
     onClose: () => void;
-    data: { title: string; description: string; tags: string };
-    setData: (data: { title: string; description: string; tags: string }) => void;
+    data: { title: string, description: string, tags: string };
+    setData: (data: { title: string, description: string, tags: string }) => void;
     onCreate: () => void;
     isGenerating: boolean;
 }
 
 const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClose, data, setData, onCreate, isGenerating }) => {
     if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-                    <div className="flex items-center gap-2">
-                        <div className="p-2 bg-indigo-100 rounded-lg">
-                            <Sparkles className="w-5 h-5 text-indigo-600" />
-                        </div>
-                        <h3 className="font-bold text-slate-800">New Research Project</h3>
-                    </div>
-                    <button onClick={onClose} className="p-1 hover:bg-indigo-100 rounded-full text-slate-500">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-                
-                <div className="p-6 space-y-4">
-                    <p className="text-sm text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                        Gemini will analyze your project description to suggest milestones, research questions, and an initial timeline.
-                    </p>
-
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+             <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-4">Create New Project</h3>
+                <div className="space-y-4">
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Project Title</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Project Title</label>
                         <input 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
                             value={data.title}
                             onChange={e => setData({...data, title: e.target.value})}
-                            placeholder="e.g. Quantum Error Correction in..."
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 font-medium"
+                            placeholder="e.g. Quantum Computing Survey"
                         />
                     </div>
-
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description & Goals</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
                         <textarea 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            rows={3}
                             value={data.description}
                             onChange={e => setData({...data, description: e.target.value})}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-32 text-sm"
-                            placeholder="Describe the research objective, methodology, and scope..."
+                            placeholder="Brief overview of research goals..."
                         />
                     </div>
-
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Tags (comma separated)</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Tags (comma separated)</label>
                         <input 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
                             value={data.tags}
                             onChange={e => setData({...data, tags: e.target.value})}
-                            placeholder="AI, Physics, Biology..."
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                            placeholder="AI, Physics, Survey"
                         />
                     </div>
                 </div>
-
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                <div className="mt-6 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-600 text-sm hover:bg-slate-100 rounded-lg">Cancel</button>
                     <button 
-                        onClick={onClose}
-                        className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={onCreate}
+                        onClick={onCreate} 
                         disabled={!data.title || isGenerating}
-                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50"
+                        className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
                     >
-                        {isGenerating ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" /> Generating Plan...
-                            </>
-                        ) : (
-                            <>
-                                <Sparkles className="w-4 h-4" /> Create with AI
-                            </>
-                        )}
+                        {isGenerating && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {isGenerating ? 'Generating Outline...' : 'Create Project'}
                     </button>
                 </div>
-            </div>
+             </div>
         </div>
     );
 };
 
+interface ProjectEditModalProps {
+    project: Project;
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (project: Project) => void;
+}
+
+const ProjectEditModal: React.FC<ProjectEditModalProps> = ({ project, isOpen, onClose, onSave }) => {
+    const [data, setData] = useState({ ...project, tags: project.tags.join(', ') });
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Project Details</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Project Title</label>
+                        <input 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            value={data.title}
+                            onChange={e => setData({...data, title: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                        <textarea 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            rows={3}
+                            value={data.description}
+                            onChange={e => setData({...data, description: e.target.value})}
+                        />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            value={data.status}
+                            onChange={e => setData({...data, status: e.target.value as ProjectStatus})}
+                        >
+                            {Object.values(ProjectStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Progress (%)</label>
+                        <input 
+                            type="number"
+                            min="0" max="100"
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            value={data.progress}
+                            onChange={e => setData({...data, progress: parseInt(e.target.value) || 0})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Tags</label>
+                        <input 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                            value={data.tags as any}
+                            onChange={e => setData({...data, tags: e.target.value as any})}
+                        />
+                    </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-600 text-sm hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button 
+                        onClick={() => {
+                            const updated = {
+                                ...data,
+                                tags: typeof data.tags === 'string' ? (data.tags as string).split(',').map(t => t.trim()).filter(Boolean) : data.tags
+                            };
+                            onSave(updated);
+                        }} 
+                        className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
+                    >
+                        Save Changes
+                    </button>
+                </div>
+             </div>
+        </div>
+    );
+};
 
 // --- MAIN COMPONENT ---
 
@@ -237,9 +259,10 @@ interface ProjectManagerProps {
   onDeleteProject?: (id: string) => void;
   onArchiveProject?: (id: string) => void;
   onAddProject?: (p: Project) => void;
+  title?: string; // NEW PROP
 }
 
-export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, currentUser, onUpdateProject, selectedProject, onSelectProject, onDeleteProject, onArchiveProject, onAddProject }) => {
+export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, currentUser, onUpdateProject, selectedProject, onSelectProject, onDeleteProject, onArchiveProject, onAddProject, title }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'timeline' | 'calendar' | 'papers' | 'drafts' | 'data' | 'code' | 'assistant' | 'notebook'>('dashboard');
   const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
 
@@ -257,6 +280,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
 
   // Task Editing State
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  // Project Editing State
+  const [editingProjectDetails, setEditingProjectDetails] = useState<Project | null>(null);
 
   // Share Modal State
   const [showShareModal, setShowShareModal] = useState(false);
@@ -323,7 +349,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
   // Filter projects based on search query
   const filteredProjects = projects.filter(p => 
     p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+    p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleGenerateSummary = async (paper: Paper) => {
@@ -487,7 +514,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
               status: 'todo',
               priority: (t.priority as TaskPriority) || 'medium',
               dueDate: new Date(Date.now() + t.daysFromNow * 86400000).toISOString().split('T')[0],
-              assigneeId: MOCK_USERS[0].id // Assign to owner by default
+              assigneeId: projects[0]?.collaborators[0]?.id || currentUser.id // Fallback
           }));
 
           const researchQuestions = details.questions.length > 0 
@@ -547,72 +574,447 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
     setDraggedTaskId(null);
   };
 
-  // --- RENDER FUNCTIONS (Instead of components to avoid focus loss and recreation) ---
-
-  const renderTaskToolbar = () => {
-      if (!selectedProject) return null;
-      return (
-          <div className="flex flex-wrap items-center gap-3 mb-4 bg-white p-2 rounded-lg border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-2">
-             <div className="flex items-center gap-2 px-2 text-slate-500">
-                <Filter className="w-4 h-4" />
-                <span className="text-xs font-semibold uppercase tracking-wider">Filter:</span>
-             </div>
-             
-             <select 
-                value={filterAssignee}
-                onChange={(e) => setFilterAssignee(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-             >
-                 <option value="all">All Assignees</option>
-                 {selectedProject.collaborators.map(c => (
-                     <option key={c.id} value={c.id}>{c.name}</option>
-                 ))}
-             </select>
-
-             <select
-                value={filterPriority}
-                onChange={(e) => setFilterPriority(e.target.value as any)}
-                className="bg-slate-50 border border-slate-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-             >
-                 <option value="all">All Priorities</option>
-                 <option value="high">High</option>
-                 <option value="medium">Medium</option>
-                 <option value="low">Low</option>
-             </select>
-
-             <div className="h-4 w-px bg-slate-200 mx-1"></div>
-
-             <div className="flex items-center gap-2 px-2 text-slate-500">
-                <ArrowUpDown className="w-4 h-4" />
-                <span className="text-xs font-semibold uppercase tracking-wider">Sort:</span>
-             </div>
-
-             <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-slate-50 border border-slate-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-             >
-                 <option value="dueDate">Due Date</option>
-                 <option value="priority">Priority</option>
-             </select>
-
-             <button
-                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="p-1.5 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
-                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-             >
-                 {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-             </button>
-             
-             <div className="flex-1 text-right text-[10px] text-slate-400">
-                 {processedTasks.length} tasks shown
-             </div>
-          </div>
-      )
+  // --- HELPER to check blocked tasks ---
+  const isTaskBlocked = (task: Task): boolean => {
+      if (!task.dependencies || task.dependencies.length === 0) return false;
+      const blockers = selectedProject?.tasks.filter(t => task.dependencies?.includes(t.id));
+      // If any blocker is not 'done', the task is blocked
+      return blockers ? blockers.some(b => b.status !== 'done') : false;
+  };
+  
+  const getBlockerNames = (task: Task): string => {
+      if (!task.dependencies) return '';
+      const blockers = selectedProject?.tasks.filter(t => task.dependencies?.includes(t.id) && t.status !== 'done');
+      return blockers?.map(b => b.title).join(', ') || '';
   };
 
-  const renderProjectDashboard = () => {
-      if(!selectedProject) return null;
+  const renderTaskToolbar = () => {
+    if (!selectedProject) return null;
+    return (
+        <div className="flex flex-wrap items-center gap-3 mb-4 bg-white p-2 rounded-lg border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-2">
+           <div className="flex items-center gap-2 px-2 text-slate-500">
+              <Filter className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Filter:</span>
+           </div>
+           
+           <select 
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+           >
+               <option value="all">All Assignees</option>
+               {selectedProject.collaborators.map(c => (
+                   <option key={c.id} value={c.id}>{c.name}</option>
+               ))}
+           </select>
+
+           <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value as any)}
+              className="bg-slate-50 border border-slate-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+           >
+               <option value="all">All Priorities</option>
+               <option value="high">High</option>
+               <option value="medium">Medium</option>
+               <option value="low">Low</option>
+           </select>
+
+           <div className="h-4 w-px bg-slate-200 mx-1"></div>
+
+           <div className="flex items-center gap-2 px-2 text-slate-500">
+              <ArrowUpDown className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Sort:</span>
+           </div>
+
+           <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-slate-50 border border-slate-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+           >
+               <option value="dueDate">Due Date</option>
+               <option value="priority">Priority</option>
+           </select>
+
+           <button
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="p-1.5 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
+              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+           >
+               {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+           </button>
+           
+           <div className="flex-1 text-right text-[10px] text-slate-400">
+               {processedTasks.length} tasks shown
+           </div>
+        </div>
+    )
+};
+
+const renderKanbanBoard = () => {
+    if(!selectedProject) return null;
+    
+    const columns: {id: TaskStatus, label: string, color: string}[] = [
+        { id: 'todo', label: 'To Do', color: 'bg-slate-100' },
+        { id: 'in_progress', label: 'In Progress', color: 'bg-blue-50' },
+        { id: 'done', label: 'Done', color: 'bg-emerald-50' }
+    ];
+
+    return (
+        <div className="flex flex-col h-full">
+          {renderTaskToolbar()}
+          <div className="flex gap-6 h-full overflow-x-auto pb-4">
+            {columns.map(col => (
+                <div 
+                  key={col.id} 
+                  className={`flex-1 min-w-[300px] rounded-xl ${col.color} p-4 flex flex-col transition-colors ${draggedTaskId ? 'border-2 border-dashed border-indigo-300' : ''}`}
+                  onDragOver={onDragOver}
+                  onDrop={(e) => onDrop(e, col.id)}
+                >
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-slate-700">{col.label}</h3>
+                        <span className="bg-white/50 px-2 py-0.5 rounded text-xs text-slate-500 font-medium">
+                            {processedTasks.filter(t => t.status === col.id).length}
+                        </span>
+                    </div>
+                    
+                    <div className="space-y-3 flex-1 overflow-y-auto min-h-[100px]">
+                        {processedTasks.filter(t => t.status === col.id).map(task => {
+                            const assignee = selectedProject.collaborators.find(c => c.id === task.assigneeId);
+                            const isDragging = draggedTaskId === task.id;
+                            const isBlocked = isTaskBlocked(task);
+                            const blockerNames = getBlockerNames(task);
+                            
+                            return (
+                                <div 
+                                  key={task.id} 
+                                  draggable
+                                  onDragStart={(e) => onDragStart(e, task.id)}
+                                  onClick={() => setEditingTask(task)}
+                                  className={`bg-white p-3 rounded-lg shadow-sm border ${isBlocked ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-200'} group hover:shadow-md transition-all cursor-grab active:cursor-grabbing hover:border-indigo-300 ${isDragging ? 'opacity-40 scale-95' : 'opacity-100'}`}
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <p className="text-sm font-medium text-slate-800 leading-tight">{task.title}</p>
+                                        {/* Kept quick actions as fallback for non-drag interactions */}
+                                        <div className="opacity-0 group-hover:opacity-100 flex gap-1">
+                                            {col.id !== 'todo' && (
+                                                <button 
+                                                  onClick={(e) => { e.stopPropagation(); handleUpdateTaskStatus(task.id, 'todo'); }} 
+                                                  className="p-1 hover:bg-slate-100 rounded" 
+                                                  title="Move to To Do"
+                                                >
+                                                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                                                </button>
+                                            )}
+                                            {col.id !== 'in_progress' && (
+                                                <button 
+                                                  onClick={(e) => { e.stopPropagation(); handleUpdateTaskStatus(task.id, 'in_progress'); }} 
+                                                  className="p-1 hover:bg-slate-100 rounded" 
+                                                  title="Move to In Progress"
+                                                >
+                                                    <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                                                </button>
+                                            )}
+                                            {col.id !== 'done' && (
+                                                <button 
+                                                  onClick={(e) => { e.stopPropagation(); handleUpdateTaskStatus(task.id, 'done'); }} 
+                                                  className="p-1 hover:bg-slate-100 rounded" 
+                                                  title="Move to Done"
+                                                >
+                                                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    {isBlocked && (
+                                       <div className="mb-2 flex items-center gap-1 text-red-500 bg-red-50 px-2 py-1 rounded-md text-[10px] font-medium" title={`Blocked by: ${blockerNames}`}>
+                                           <AlertCircle className="w-3 h-3" />
+                                           <span className="truncate">Blocked by {blockerNames.split(',')[0]}{blockerNames.split(',').length > 1 ? ` +${blockerNames.split(',').length - 1}` : ''}</span>
+                                       </div>
+                                    )}
+
+                                    {task.description && (
+                                        <div className="mb-2 flex items-center gap-1 text-slate-400">
+                                            <AlignLeft className="w-3 h-3" />
+                                            <span className="text-[10px] line-clamp-1">{task.description}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center justify-between mt-3">
+                                        <div className="flex items-center gap-2">
+                                            {assignee && (
+                                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] text-indigo-700 font-bold" title={assignee.name}>
+                                                    {assignee.initials}
+                                                </div>
+                                            )}
+                                            <button 
+                                              onClick={(e) => handleCyclePriority(e, task)}
+                                              className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold hover:brightness-95 transition-all ${
+                                                task.priority === 'high' ? 'bg-red-50 text-red-600' : 
+                                                task.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
+                                              }`}
+                                              title="Click to cycle priority"
+                                            >
+                                                {task.priority}
+                                            </button>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400">{task.dueDate.substring(5)}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        
+                        {isAddingTask && col.id === 'todo' ? (
+                             <div className="bg-white p-3 rounded-lg border border-indigo-200 shadow-sm">
+                                 <input 
+                                    autoFocus
+                                    className="w-full text-sm outline-none mb-2" 
+                                    placeholder="Task title..."
+                                    value={newTaskTitle}
+                                    onChange={e => setNewTaskTitle(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddTask()}
+                                 />
+                                 <div className="flex justify-end gap-2">
+                                     <button onClick={() => setIsAddingTask(false)} className="text-xs text-slate-500">Cancel</button>
+                                     <button onClick={() => handleAddTask()} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded">Add</button>
+                                 </div>
+                             </div>
+                        ) : col.id === 'todo' && (
+                            <button 
+                                onClick={() => setIsAddingTask(true)}
+                                className="w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg border border-dashed border-slate-300 transition-colors"
+                            >
+                                <Plus className="w-4 h-4" /> Add Task
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ))}
+          </div>
+        </div>
+    );
+};
+
+const renderTimelineView = () => {
+    if(!selectedProject) return null;
+      
+    // Use processedTasks (filtered/sorted) instead of raw sorting
+    const tasksToDisplay = processedTasks;
+
+    return (
+        <div className="max-w-3xl mx-auto flex flex-col gap-4">
+            {renderTaskToolbar()}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between">
+                  <span>Project Timeline</span>
+                  <span className="text-xs font-normal text-slate-500 bg-white px-2 py-1 rounded border">
+                      Sorted by {sortBy === 'dueDate' ? 'Date' : 'Priority'} ({sortOrder})
+                  </span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                  {tasksToDisplay.map(task => {
+                      const assignee = selectedProject.collaborators.find(c => c.id === task.assigneeId);
+                      const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'done';
+                      const isBlocked = isTaskBlocked(task);
+                      const blockerNames = getBlockerNames(task);
+                      
+                      return (
+                          <div 
+                              key={task.id} 
+                              onClick={() => setEditingTask(task)}
+                              className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer group"
+                          >
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                  task.status === 'done' ? 'bg-emerald-500' :
+                                  task.status === 'in_progress' ? 'bg-blue-500' : 'bg-slate-300'
+                              }`} />
+                              <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <span className={`text-sm font-medium ${task.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                          {task.title}
+                                      </span>
+                                      {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 rounded font-bold">LATE</span>}
+                                      {isBlocked && (
+                                          <div className="text-[10px] bg-red-50 text-red-600 px-1.5 rounded font-bold flex items-center gap-1" title={`Blocked by: ${blockerNames}`}>
+                                              <LinkIcon className="w-3 h-3" />
+                                              Blocked
+                                          </div>
+                                      )}
+                                  </div>
+                                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                                      <span className="flex items-center gap-1">
+                                          <Clock className="w-3 h-3" /> Due: {task.dueDate}
+                                      </span>
+                                      {assignee && (
+                                          <span className="flex items-center gap-1">
+                                              <Users className="w-3 h-3" /> {assignee.name}
+                                          </span>
+                                      )}
+                                      {task.dependencies && task.dependencies.length > 0 && (
+                                          <span className="flex items-center gap-1 text-slate-400">
+                                              <Link2 className="w-3 h-3" /> Links: {task.dependencies.length}
+                                          </span>
+                                      )}
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                   <button 
+                                      onClick={(e) => handleCyclePriority(e, task)}
+                                      className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold hover:brightness-95 transition-all ${
+                                          task.priority === 'high' ? 'bg-red-50 text-red-600' : 
+                                          task.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
+                                      }`}
+                                      title="Click to cycle priority"
+                                  >
+                                      {task.priority}
+                                  </button>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${
+                                      task.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
+                                      task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                  }`}>
+                                      {task.status.replace('_', ' ')}
+                                  </span>
+                              </div>
+                          </div>
+                      );
+                  })}
+                  {tasksToDisplay.length === 0 && (
+                      <div className="p-8 text-center text-slate-400">No tasks match current filters.</div>
+                  )}
+              </div>
+            </div>
+        </div>
+    );
+};
+
+const renderCalendarView = () => {
+    // Simplified Month View
+      const days = Array.from({length: 35}, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - d.getDay() + i);
+          return d;
+      });
+
+      return (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-[600px] flex flex-col">
+              <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                      <div key={d} className="py-2 text-center text-xs font-semibold text-slate-500 uppercase">{d}</div>
+                  ))}
+              </div>
+              <div className="grid grid-cols-7 flex-1 auto-rows-fr">
+                  {days.map((date, i) => {
+                      const dateStr = date.toISOString().split('T')[0];
+                      const dayTasks = selectedProject?.tasks.filter(t => t.dueDate === dateStr) || [];
+                      const isToday = new Date().toDateString() === date.toDateString();
+                      
+                      return (
+                          <div key={i} className={`border-b border-r border-slate-100 p-2 min-h-[80px] ${i % 7 === 6 ? 'border-r-0' : ''}`}>
+                              <div className={`text-xs font-medium mb-1 ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                  {date.getDate()} {isToday && '(Today)'}
+                              </div>
+                              <div className="space-y-1">
+                                  {dayTasks.map(task => (
+                                      <div key={task.id} className={`text-[10px] truncate px-1.5 py-0.5 rounded cursor-pointer ${
+                                          task.status === 'done' ? 'bg-emerald-100 text-emerald-700 line-through opacity-70' :
+                                          task.priority === 'high' ? 'bg-red-50 text-red-700 border border-red-100' : 
+                                          'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                      }`}>
+                                          {task.title}
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          </div>
+      );
+};
+
+const renderFileList = (type: 'draft' | 'data' | 'code') => {
+    if (!selectedProject) return null;
+      const files = selectedProject.files.filter(f => f.type === type);
+
+      return (
+          <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold text-slate-800 capitalize">{type}s Repository</h2>
+                  <button 
+                    onClick={() => setIsAddingFile(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition-colors"
+                  >
+                      <Plus className="w-4 h-4" /> Link {type}
+                  </button>
+              </div>
+
+              {isAddingFile && (
+                  <div className="bg-slate-50 p-4 rounded-xl border border-indigo-200 animate-in fade-in slide-in-from-top-2">
+                      <h4 className="text-sm font-semibold text-slate-700 mb-3">Add Google Drive Link</h4>
+                      <div className="grid grid-cols-1 gap-3 mb-3">
+                          <input 
+                              placeholder="File Name"
+                              className="w-full px-3 py-2 text-sm border rounded-lg"
+                              value={newFile.name}
+                              onChange={e => setNewFile({...newFile, name: e.target.value})}
+                          />
+                          <input 
+                              placeholder="Google Drive URL"
+                              className="w-full px-3 py-2 text-sm border rounded-lg"
+                              value={newFile.url}
+                              onChange={e => setNewFile({...newFile, url: e.target.value})}
+                          />
+                      </div>
+                      <div className="flex gap-2">
+                          <button onClick={handleAddFile} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save Link</button>
+                          <button onClick={() => setIsAddingFile(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm">Cancel</button>
+                      </div>
+                  </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-3">
+                  {files.map(file => (
+                      <div key={file.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                          <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                                  {type === 'code' ? <FileCode className="w-5 h-5" /> : 
+                                   type === 'data' ? <Database className="w-5 h-5" /> :
+                                   <FileText className="w-5 h-5" />}
+                              </div>
+                              <div>
+                                  <h3 className="font-semibold text-slate-800">{file.name}</h3>
+                                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                                      <span>Modified: {file.lastModified}</span>
+                                      {file.url && file.url.includes('drive.google.com') && (
+                                          <span className="flex items-center gap-1 text-green-600 font-medium">
+                                              <HardDrive className="w-3 h-3" /> Google Drive
+                                          </span>
+                                      )}
+                                  </div>
+                              </div>
+                          </div>
+                          <a 
+                            href={file.url} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
+                          >
+                              <ExternalLink className="w-5 h-5" />
+                          </a>
+                      </div>
+                  ))}
+                  {files.length === 0 && !isAddingFile && (
+                      <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400">
+                          <Folder className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                          <p>No {type} files linked yet.</p>
+                      </div>
+                  )}
+              </div>
+          </div>
+      );
+};
+
+const renderProjectDashboard = () => {
+    if(!selectedProject) return null;
 
       const tasks = selectedProject.tasks;
       const completed = tasks.filter(t => t.status === 'done').length;
@@ -757,9 +1159,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
               </div>
           </div>
       );
-  };
+};
 
-  const renderNotebookTab = () => {
+const renderNotebookTab = () => {
     if (!selectedProject) return null;
     const assets = selectedProject.notebookAssets || [];
 
@@ -869,362 +1271,22 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
             </div>
         </div>
     );
-  };
-
-  const renderKanbanBoard = () => {
-      if(!selectedProject) return null;
-      
-      const columns: {id: TaskStatus, label: string, color: string}[] = [
-          { id: 'todo', label: 'To Do', color: 'bg-slate-100' },
-          { id: 'in_progress', label: 'In Progress', color: 'bg-blue-50' },
-          { id: 'done', label: 'Done', color: 'bg-emerald-50' }
-      ];
-
-      return (
-          <div className="flex flex-col h-full">
-            {renderTaskToolbar()}
-            <div className="flex gap-6 h-full overflow-x-auto pb-4">
-              {columns.map(col => (
-                  <div 
-                    key={col.id} 
-                    className={`flex-1 min-w-[300px] rounded-xl ${col.color} p-4 flex flex-col transition-colors ${draggedTaskId ? 'border-2 border-dashed border-indigo-300' : ''}`}
-                    onDragOver={onDragOver}
-                    onDrop={(e) => onDrop(e, col.id)}
-                  >
-                      <div className="flex justify-between items-center mb-4">
-                          <h3 className="font-semibold text-slate-700">{col.label}</h3>
-                          <span className="bg-white/50 px-2 py-0.5 rounded text-xs text-slate-500 font-medium">
-                              {processedTasks.filter(t => t.status === col.id).length}
-                          </span>
-                      </div>
-                      
-                      <div className="space-y-3 flex-1 overflow-y-auto min-h-[100px]">
-                          {processedTasks.filter(t => t.status === col.id).map(task => {
-                              const assignee = selectedProject.collaborators.find(c => c.id === task.assigneeId);
-                              const isDragging = draggedTaskId === task.id;
-                              
-                              return (
-                                  <div 
-                                    key={task.id} 
-                                    draggable
-                                    onDragStart={(e) => onDragStart(e, task.id)}
-                                    onClick={() => setEditingTask(task)}
-                                    className={`bg-white p-3 rounded-lg shadow-sm border border-slate-200 group hover:shadow-md transition-all cursor-grab active:cursor-grabbing hover:border-indigo-300 ${isDragging ? 'opacity-40 scale-95' : 'opacity-100'}`}
-                                  >
-                                      <div className="flex justify-between items-start mb-2">
-                                          <p className="text-sm font-medium text-slate-800 leading-tight">{task.title}</p>
-                                          {/* Kept quick actions as fallback for non-drag interactions */}
-                                          <div className="opacity-0 group-hover:opacity-100 flex gap-1">
-                                              {col.id !== 'todo' && (
-                                                  <button 
-                                                    onClick={(e) => { e.stopPropagation(); handleUpdateTaskStatus(task.id, 'todo'); }} 
-                                                    className="p-1 hover:bg-slate-100 rounded" 
-                                                    title="Move to To Do"
-                                                  >
-                                                      <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                                                  </button>
-                                              )}
-                                              {col.id !== 'in_progress' && (
-                                                  <button 
-                                                    onClick={(e) => { e.stopPropagation(); handleUpdateTaskStatus(task.id, 'in_progress'); }} 
-                                                    className="p-1 hover:bg-slate-100 rounded" 
-                                                    title="Move to In Progress"
-                                                  >
-                                                      <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                                                  </button>
-                                              )}
-                                              {col.id !== 'done' && (
-                                                  <button 
-                                                    onClick={(e) => { e.stopPropagation(); handleUpdateTaskStatus(task.id, 'done'); }} 
-                                                    className="p-1 hover:bg-slate-100 rounded" 
-                                                    title="Move to Done"
-                                                  >
-                                                      <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                                                  </button>
-                                              )}
-                                          </div>
-                                      </div>
-                                      {task.description && (
-                                          <div className="mb-2 flex items-center gap-1 text-slate-400">
-                                              <AlignLeft className="w-3 h-3" />
-                                              <span className="text-[10px] line-clamp-1">{task.description}</span>
-                                          </div>
-                                      )}
-                                      <div className="flex items-center justify-between mt-3">
-                                          <div className="flex items-center gap-2">
-                                              {assignee && (
-                                                  <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] text-indigo-700 font-bold" title={assignee.name}>
-                                                      {assignee.initials}
-                                                  </div>
-                                              )}
-                                              <button 
-                                                onClick={(e) => handleCyclePriority(e, task)}
-                                                className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold hover:brightness-95 transition-all ${
-                                                  task.priority === 'high' ? 'bg-red-50 text-red-600' : 
-                                                  task.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
-                                                }`}
-                                                title="Click to cycle priority"
-                                              >
-                                                  {task.priority}
-                                              </button>
-                                          </div>
-                                          <span className="text-[10px] text-slate-400">{task.dueDate.substring(5)}</span>
-                                      </div>
-                                  </div>
-                              );
-                          })}
-                          
-                          {isAddingTask && col.id === 'todo' ? (
-                               <div className="bg-white p-3 rounded-lg border border-indigo-200 shadow-sm">
-                                   <input 
-                                      autoFocus
-                                      className="w-full text-sm outline-none mb-2" 
-                                      placeholder="Task title..."
-                                      value={newTaskTitle}
-                                      onChange={e => setNewTaskTitle(e.target.value)}
-                                      onKeyDown={e => e.key === 'Enter' && handleAddTask()}
-                                   />
-                                   <div className="flex justify-end gap-2">
-                                       <button onClick={() => setIsAddingTask(false)} className="text-xs text-slate-500">Cancel</button>
-                                       <button onClick={() => handleAddTask()} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded">Add</button>
-                                   </div>
-                               </div>
-                          ) : col.id === 'todo' && (
-                              <button 
-                                  onClick={() => setIsAddingTask(true)}
-                                  className="w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg border border-dashed border-slate-300 transition-colors"
-                              >
-                                  <Plus className="w-4 h-4" /> Add Task
-                              </button>
-                          )}
-                      </div>
-                  </div>
-              ))}
-            </div>
-          </div>
-      );
-  };
-
-  const renderTimelineView = () => {
-      if(!selectedProject) return null;
-      
-      // Use processedTasks (filtered/sorted) instead of raw sorting
-      const tasksToDisplay = processedTasks;
-
-      return (
-          <div className="max-w-3xl mx-auto flex flex-col gap-4">
-              {renderTaskToolbar()}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between">
-                    <span>Project Timeline</span>
-                    <span className="text-xs font-normal text-slate-500 bg-white px-2 py-1 rounded border">
-                        Sorted by {sortBy === 'dueDate' ? 'Date' : 'Priority'} ({sortOrder})
-                    </span>
-                </div>
-                <div className="divide-y divide-slate-100">
-                    {tasksToDisplay.map(task => {
-                        const assignee = selectedProject.collaborators.find(c => c.id === task.assigneeId);
-                        const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'done';
-                        return (
-                            <div 
-                                key={task.id} 
-                                onClick={() => setEditingTask(task)}
-                                className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer group"
-                            >
-                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                    task.status === 'done' ? 'bg-emerald-500' :
-                                    task.status === 'in_progress' ? 'bg-blue-500' : 'bg-slate-300'
-                                }`} />
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className={`text-sm font-medium ${task.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                                            {task.title}
-                                        </span>
-                                        {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 rounded font-bold">LATE</span>}
-                                    </div>
-                                    <div className="flex items-center gap-4 text-xs text-slate-500">
-                                        <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3" /> Due: {task.dueDate}
-                                        </span>
-                                        {assignee && (
-                                            <span className="flex items-center gap-1">
-                                                <Users className="w-3 h-3" /> {assignee.name}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                     <button 
-                                        onClick={(e) => handleCyclePriority(e, task)}
-                                        className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold hover:brightness-95 transition-all ${
-                                            task.priority === 'high' ? 'bg-red-50 text-red-600' : 
-                                            task.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
-                                        }`}
-                                        title="Click to cycle priority"
-                                    >
-                                        {task.priority}
-                                    </button>
-                                    <span className={`text-xs px-2 py-1 rounded-full ${
-                                        task.status === 'done' ? 'bg-emerald-100 text-emerald-700' :
-                                        task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                                    }`}>
-                                        {task.status.replace('_', ' ')}
-                                    </span>
-                                </div>
-                            </div>
-                        );
-                    })}
-                    {tasksToDisplay.length === 0 && (
-                        <div className="p-8 text-center text-slate-400">No tasks match current filters.</div>
-                    )}
-                </div>
-              </div>
-          </div>
-      );
-  };
-
-  const renderCalendarView = () => {
-      // Simplified Month View
-      const days = Array.from({length: 35}, (_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - d.getDay() + i);
-          return d;
-      });
-
-      return (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-[600px] flex flex-col">
-              <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                      <div key={d} className="py-2 text-center text-xs font-semibold text-slate-500 uppercase">{d}</div>
-                  ))}
-              </div>
-              <div className="grid grid-cols-7 flex-1 auto-rows-fr">
-                  {days.map((date, i) => {
-                      const dateStr = date.toISOString().split('T')[0];
-                      const dayTasks = selectedProject?.tasks.filter(t => t.dueDate === dateStr) || [];
-                      const isToday = new Date().toDateString() === date.toDateString();
-                      
-                      return (
-                          <div key={i} className={`border-b border-r border-slate-100 p-2 min-h-[80px] ${i % 7 === 6 ? 'border-r-0' : ''}`}>
-                              <div className={`text-xs font-medium mb-1 ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
-                                  {date.getDate()} {isToday && '(Today)'}
-                              </div>
-                              <div className="space-y-1">
-                                  {dayTasks.map(task => (
-                                      <div key={task.id} className={`text-[10px] truncate px-1.5 py-0.5 rounded cursor-pointer ${
-                                          task.status === 'done' ? 'bg-emerald-100 text-emerald-700 line-through opacity-70' :
-                                          task.priority === 'high' ? 'bg-red-50 text-red-700 border border-red-100' : 
-                                          'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                      }`}>
-                                          {task.title}
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      );
-                  })}
-              </div>
-          </div>
-      );
-  };
-
-  const renderFileList = (type: 'draft' | 'data' | 'code') => {
-      if (!selectedProject) return null;
-      const files = selectedProject.files.filter(f => f.type === type);
-
-      return (
-          <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                  <h2 className="text-lg font-semibold text-slate-800 capitalize">{type}s Repository</h2>
-                  <button 
-                    onClick={() => setIsAddingFile(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition-colors"
-                  >
-                      <Plus className="w-4 h-4" /> Link {type}
-                  </button>
-              </div>
-
-              {isAddingFile && (
-                  <div className="bg-slate-50 p-4 rounded-xl border border-indigo-200 animate-in fade-in slide-in-from-top-2">
-                      <h4 className="text-sm font-semibold text-slate-700 mb-3">Add Google Drive Link</h4>
-                      <div className="grid grid-cols-1 gap-3 mb-3">
-                          <input 
-                              placeholder="File Name"
-                              className="w-full px-3 py-2 text-sm border rounded-lg"
-                              value={newFile.name}
-                              onChange={e => setNewFile({...newFile, name: e.target.value})}
-                          />
-                          <input 
-                              placeholder="Google Drive URL"
-                              className="w-full px-3 py-2 text-sm border rounded-lg"
-                              value={newFile.url}
-                              onChange={e => setNewFile({...newFile, url: e.target.value})}
-                          />
-                      </div>
-                      <div className="flex gap-2">
-                          <button onClick={handleAddFile} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save Link</button>
-                          <button onClick={() => setIsAddingFile(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm">Cancel</button>
-                      </div>
-                  </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-3">
-                  {files.map(file => (
-                      <div key={file.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-                          <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                                  {type === 'code' ? <FileCode className="w-5 h-5" /> : 
-                                   type === 'data' ? <Database className="w-5 h-5" /> :
-                                   <FileText className="w-5 h-5" />}
-                              </div>
-                              <div>
-                                  <h3 className="font-semibold text-slate-800">{file.name}</h3>
-                                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                                      <span>Modified: {file.lastModified}</span>
-                                      {file.url && file.url.includes('drive.google.com') && (
-                                          <span className="flex items-center gap-1 text-green-600 font-medium">
-                                              <HardDrive className="w-3 h-3" /> Google Drive
-                                          </span>
-                                      )}
-                                  </div>
-                              </div>
-                          </div>
-                          <a 
-                            href={file.url} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
-                          >
-                              <ExternalLink className="w-5 h-5" />
-                          </a>
-                      </div>
-                  ))}
-                  {files.length === 0 && !isAddingFile && (
-                      <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400">
-                          <Folder className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                          <p>No {type} files linked yet.</p>
-                      </div>
-                  )}
-              </div>
-          </div>
-      );
-  };
+};
 
   if (selectedProject) {
     return (
       <div className="h-full flex flex-col bg-slate-50 relative">
-        {/* Task Edit Modal */}
         {editingTask && (
             <TaskEditModal 
                 task={editingTask}
                 collaborators={selectedProject.collaborators}
+                allTasks={selectedProject.tasks}
                 onClose={() => setEditingTask(null)}
                 onSave={handleSaveTask}
                 onDelete={handleDeleteTask}
             />
         )}
 
-        {/* Share Modal */}
         {showShareModal && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in fade-in zoom-in duration-200">
@@ -1256,7 +1318,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
             </div>
         )}
 
-        {/* Project Header */}
         <div className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
@@ -1264,7 +1325,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
                 <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div>
-                <h1 className="text-xl font-bold text-slate-800">{selectedProject.title}</h1>
+                <h1 className="text-xl font-bold text-slate-800">{title ? selectedProject.title : (selectedProject.title)}</h1>
                 <div className="flex items-center gap-3 mt-1">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700`}>
                     {selectedProject.status}
@@ -1275,7 +1336,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
             </div>
             
             <div className="flex items-center gap-4">
-                {/* Collaborators List */}
                 <div className="flex items-center -space-x-2">
                     {selectedProject.collaborators.map(c => (
                         <div key={c.id} className="relative group/avatar">
@@ -1314,9 +1374,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
           </div>
         </div>
 
-        {/* Project Content */}
         <div className="flex-1 overflow-hidden flex">
-            {/* Folder Sidebar */}
             <div className="w-64 bg-white border-r border-slate-200 p-4 flex flex-col gap-1 overflow-y-auto">
                 <div className="mb-6">
                     <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3">Management</h3>
@@ -1391,7 +1449,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
                 </div>
             </div>
 
-            {/* Main Content Area */}
             <div className="flex-1 p-6 overflow-y-auto bg-slate-50">
                 {activeTab === 'dashboard' && renderProjectDashboard()}
                 {activeTab === 'board' && renderKanbanBoard()}
@@ -1471,10 +1528,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
     );
   }
 
-  // List View
   return (
     <div className="p-6 max-w-7xl mx-auto animate-in fade-in duration-500" onClick={() => setMenuOpenId(null)}>
-        {/* New Project Modal */}
         <NewProjectModal 
             isOpen={isCreatingProject}
             onClose={() => setIsCreatingProject(false)}
@@ -1484,10 +1539,22 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
             isGenerating={isGeneratingProject}
         />
 
+        {editingProjectDetails && (
+            <ProjectEditModal
+                project={editingProjectDetails}
+                isOpen={true}
+                onClose={() => setEditingProjectDetails(null)}
+                onSave={(updated) => {
+                    onUpdateProject(updated);
+                    setEditingProjectDetails(null);
+                }}
+            />
+        )}
+
         <header className="flex justify-between items-center mb-8">
             <div>
-                <h1 className="text-2xl font-bold text-slate-800">Projects</h1>
-                <p className="text-slate-500">Manage your ongoing research efforts.</p>
+                <h1 className="text-2xl font-bold text-slate-800">{title || "Projects"}</h1>
+                <p className="text-slate-500">Manage your ongoing {title ? "efforts" : "research efforts"}.</p>
             </div>
             <div className="flex gap-3">
                 <div className="relative">
@@ -1528,6 +1595,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, curren
                         
                         {menuOpenId === project.id && (
                             <div className="absolute right-0 top-8 bg-white rounded-lg shadow-xl border border-slate-100 py-1 z-20 w-40 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setEditingProjectDetails(project); setMenuOpenId(null); }}
+                                    className="w-full text-left px-4 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                    <Edit2 className="w-3.5 h-3.5" /> Edit Details
+                                </button>
                                 {project.status !== ProjectStatus.ARCHIVED && onArchiveProject && (
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); onArchiveProject(project.id); setMenuOpenId(null); }}
