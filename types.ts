@@ -13,7 +13,8 @@ export enum AppModule {
   TEACHING = 'teaching',
   ADMIN = 'admin',
   PERSONAL = 'personal',
-  JOURNAL = 'journal'
+  JOURNAL = 'journal',
+  AI_GLOBAL = 'ai_global' // New Global AI Module
 }
 
 export interface Paper {

@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, CheckSquare, Link as LinkIcon, Save, Plus, Trash2, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { Calendar, CheckSquare, Link as LinkIcon, Save, Plus, Trash2, ChevronLeft, ChevronRight, ExternalLink, Sparkles, Loader2 } from 'lucide-react';
 import { JournalEntry, LinkResource } from '../types';
+import { suggestJournalPlan } from '../services/gemini';
 
 export const JournalModule: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -12,6 +13,7 @@ export const JournalModule: React.FC = () => {
         tasks: [],
         links: []
     });
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
     // Mock Loading/Saving (Replace with Firebase in real impl)
     useEffect(() => {
@@ -54,6 +56,29 @@ export const JournalModule: React.FC = () => {
                 ...entry,
                 tasks: [...entry.tasks, { id: Date.now().toString(), text, done: false }]
             });
+        }
+    };
+
+    const handleSmartPlan = async () => {
+        setIsGeneratingPlan(true);
+        try {
+            const dateStr = selectedDate.toDateString();
+            const suggestions = await suggestJournalPlan(dateStr);
+            
+            const newTasks = suggestions.map(s => ({
+                id: Date.now().toString() + Math.random(),
+                text: s.text,
+                done: false
+            }));
+
+            setEntry({
+                ...entry,
+                tasks: [...entry.tasks, ...newTasks]
+            });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsGeneratingPlan(false);
         }
     };
 
@@ -113,9 +138,19 @@ export const JournalModule: React.FC = () => {
                     {/* Daily Checklist */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col flex-1 overflow-hidden">
                         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                                <CheckSquare className="w-4 h-4" /> Daily Goals
-                            </h3>
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                                    <CheckSquare className="w-4 h-4" /> Daily Goals
+                                </h3>
+                                <button 
+                                    onClick={handleSmartPlan}
+                                    disabled={isGeneratingPlan}
+                                    className="p-1 hover:bg-purple-100 rounded text-purple-600 transition-colors"
+                                    title="Generate Daily Checklist with AI"
+                                >
+                                    {isGeneratingPlan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
                             <button onClick={addTask} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4" /></button>
                         </div>
                         <div className="p-4 overflow-y-auto space-y-3 flex-1">

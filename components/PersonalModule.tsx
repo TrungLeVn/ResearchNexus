@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle } from 'lucide-react';
+import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
 import { PersonalGoal } from '../types';
+import { suggestPersonalPlan } from '../services/gemini';
 
 export const PersonalModule: React.FC = () => {
     const [goals, setGoals] = useState<PersonalGoal[]>([
@@ -9,6 +10,23 @@ export const PersonalModule: React.FC = () => {
         { id: '2', title: 'Marathon Training', category: 'Fitness', progress: 60, target: '42km' },
         { id: '3', title: 'Learn Spanish', category: 'Hobby', progress: 10, target: 'B1 Level' }
     ]);
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+
+    const handleSmartPlan = async () => {
+        setIsGeneratingPlan(true);
+        try {
+            const goalTitles = goals.map(g => g.title);
+            const suggestions = await suggestPersonalPlan(goalTitles);
+            
+            // In a real app, we would add these to a "Task List" for personal growth
+            // For now, we'll just alert them or log them as we don't have a personal task view
+            alert(`Gemini Suggests:\n\n${suggestions.map(s => `- ${s.title}`).join('\n')}`);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsGeneratingPlan(false);
+        }
+    };
 
     return (
         <div className="h-full overflow-y-auto p-8 animate-in fade-in duration-500">
@@ -20,6 +38,14 @@ export const PersonalModule: React.FC = () => {
                     </h1>
                     <p className="text-slate-500">Track habits, fitness, and self-improvement goals.</p>
                 </div>
+                <button 
+                    onClick={handleSmartPlan}
+                    disabled={isGeneratingPlan}
+                    className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-lg text-sm hover:opacity-90 transition-opacity shadow-sm"
+                >
+                    {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    <span>Gemini Smart Plan</span>
+                </button>
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

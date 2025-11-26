@@ -1,14 +1,16 @@
 
 import React, { useState, useRef } from 'react';
 import { Collaborator } from '../types';
-import { User, Bell, Download, Upload, Shield, Sparkles, Building, Mail, Save, AlertTriangle, Tag, Plus, X } from 'lucide-react';
+import { User, Bell, Download, Upload, Shield, Sparkles, Building, Mail, Save, AlertTriangle, Key } from 'lucide-react';
 
 interface SettingsPageProps {
   currentUser: Collaborator;
   onUpdateUser?: (user: Collaborator) => void;
+  currentAdminCode?: string;
+  onUpdateAdminCode?: (code: string) => void;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdateUser }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdateUser, currentAdminCode = '141089', onUpdateAdminCode }) => {
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
   const [affiliation, setAffiliation] = useState('University of Technology'); // Mock default
@@ -19,9 +21,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
   });
   const [isSaved, setIsSaved] = useState(false);
   
-  // Tag Management State
-  const [globalTags, setGlobalTags] = useState<string[]>(['AI', 'Research', 'Admin', 'Urgent', 'Conference']);
-  const [newTag, setNewTag] = useState('');
+  // Admin Code State
+  const [newCodeInput, setNewCodeInput] = useState(currentAdminCode);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,18 +33,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
       if (onUpdateUser) {
           onUpdateUser({ ...currentUser, name, email });
       }
-  };
-
-  const handleAddTag = () => {
-      if(newTag && !globalTags.includes(newTag)) {
-          setGlobalTags([...globalTags, newTag]);
-          setNewTag('');
-      }
-  };
-
-  const handleDeleteTag = (tag: string) => {
-      if(window.confirm(`Delete tag "${tag}"?`)) {
-          setGlobalTags(globalTags.filter(t => t !== tag));
+      if (onUpdateAdminCode && newCodeInput !== currentAdminCode) {
+          onUpdateAdminCode(newCodeInput);
       }
   };
 
@@ -180,39 +171,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
             </div>
         </div>
 
-        {/* Tag Management */}
+        {/* Security / Admin Code */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                <Tag className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-semibold text-slate-800">Tag Management</h3>
+                <Shield className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-semibold text-slate-800">Security Access</h3>
             </div>
             <div className="p-6">
-                <p className="text-sm text-slate-600 mb-4">Manage common tags used across projects and meetings.</p>
-                <div className="flex gap-2 mb-4">
-                    <input 
-                        type="text" 
-                        value={newTag} 
-                        onChange={(e) => setNewTag(e.target.value)}
-                        placeholder="Add new tag..."
-                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                    />
-                    <button 
-                        onClick={handleAddTag}
-                        className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
-                    >
-                        <Plus className="w-4 h-4" />
-                    </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    {globalTags.map(tag => (
-                        <span key={tag} className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full flex items-center gap-2">
-                            {tag}
-                            <button onClick={() => handleDeleteTag(tag)} className="text-slate-400 hover:text-red-500">
-                                <X className="w-3 h-3" />
-                            </button>
-                        </span>
-                    ))}
+                <p className="text-sm text-slate-600 mb-4">Set the Admin Code required to unlock this application.</p>
+                <div className="max-w-xs">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Admin Unlock Code</label>
+                    <div className="relative">
+                        <Key className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                        <input 
+                            type="text" 
+                            value={newCodeInput} 
+                            onChange={e => setNewCodeInput(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                        />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">Default: 141089. Click "Save Changes" above to update.</p>
                 </div>
             </div>
         </div>

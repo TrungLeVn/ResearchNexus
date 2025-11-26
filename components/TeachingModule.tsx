@@ -1,17 +1,19 @@
 
 import React, { useState } from 'react';
-import { BookOpen, Users, Plus, Calendar, FileText, Archive, HardDrive, MapPin, Presentation, FileCheck, FileBarChart, Layers, Users2, Sparkles, Loader2, Image as ImageIcon, Search } from 'lucide-react';
-import { Course } from '../types';
+import { BookOpen, Users, Plus, Calendar, FileText, Archive, HardDrive, MapPin, Presentation, FileCheck, FileBarChart, Layers, Users2, Sparkles, Loader2, Image as ImageIcon, Search, Clock } from 'lucide-react';
+import { Course, Reminder } from '../types';
 import { MOCK_COURSES } from '../constants';
-import { generateCourseImage } from '../services/gemini';
+import { generateCourseImage, suggestTeachingPlan } from '../services/gemini';
 
 interface TeachingModuleProps {
     currentUser?: any;
+    onAddReminder?: (reminder: Reminder) => void;
 }
 
-export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser }) => {
+export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser, onAddReminder }) => {
     const [activeTab, setActiveTab] = useState<'current' | 'archived' | 'calendar'>('current');
     const [searchQuery, setSearchQuery] = useState('');
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     
     // In real app, these would come from props/firebase
     // Local state for courses to allow updating images
@@ -26,6 +28,31 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser }) =
 
     const currentCourses = filteredCourses.filter(c => !c.isArchived);
     const archivedCourses = filteredCourses.filter(c => c.isArchived);
+
+    const handleSmartPlan = async () => {
+        if (!onAddReminder) return;
+        setIsGeneratingPlan(true);
+        try {
+            const courseNames = currentCourses.map(c => c.name);
+            const suggestions = await suggestTeachingPlan(courseNames);
+            
+            suggestions.forEach((s, index) => {
+                const reminder: Reminder = {
+                    id: `teach-ai-${Date.now()}-${index}`,
+                    title: `Teaching: ${s.title}`,
+                    date: new Date(Date.now() + s.daysFromNow * 86400000),
+                    type: 'task',
+                    completed: false
+                };
+                onAddReminder(reminder);
+            });
+            alert(`Added ${suggestions.length} teaching tasks to your global reminders.`);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsGeneratingPlan(false);
+        }
+    };
 
     const handleGenerateImage = async (courseId: string, courseName: string) => {
         setGeneratingImageFor(courseId);
@@ -208,6 +235,16 @@ export const TeachingModule: React.FC<TeachingModuleProps> = ({ currentUser }) =
                     <p className="text-slate-500">Manage courses, schedules, and student resources.</p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                    {/* Smart Plan Button */}
+                    <button 
+                        onClick={handleSmartPlan}
+                        disabled={isGeneratingPlan}
+                        className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg text-sm hover:opacity-90 transition-opacity shadow-sm"
+                    >
+                        {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        <span>Gemini Smart Plan</span>
+                    </button>
+
                     {/* Search Bar */}
                     <div className="relative w-full sm:w-64">
                         <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />

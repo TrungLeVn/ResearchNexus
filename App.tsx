@@ -33,12 +33,22 @@ import {
   Calendar, 
   Settings, 
   LogOut,
-  Briefcase 
+  Briefcase,
+  Lock,
+  KeyRound,
+  ArrowRight,
+  Bot
 } from 'lucide-react';
 
 const App: React.FC = () => {
   const params = new URLSearchParams(window.location.search);
   const initialPid = params.get('pid');
+
+  // --- SECURITY LOCK STATE ---
+  const [isLocked, setIsLocked] = useState(true);
+  const [inputCode, setInputCode] = useState('');
+  const [unlockError, setUnlockError] = useState(false);
+  const [adminCode, setAdminCode] = useState(() => localStorage.getItem('rn_admin_code') || '141089');
 
   // User Session
   const [currentUser, setCurrentUser] = useState<Collaborator | null>(() => {
@@ -96,6 +106,22 @@ const App: React.FC = () => {
       }
   }, [initialPid]);
 
+  const handleUnlock = (e?: React.FormEvent) => {
+      e?.preventDefault();
+      if (inputCode === adminCode) {
+          setIsLocked(false);
+          setUnlockError(false);
+      } else {
+          setUnlockError(true);
+          setInputCode('');
+      }
+  };
+
+  const handleUpdateAdminCode = (newCode: string) => {
+      setAdminCode(newCode);
+      localStorage.setItem('rn_admin_code', newCode);
+  };
+
   const handleLogin = (user: Collaborator) => {
       setCurrentUser(user);
       if (inviteProjectId && user.role === 'Guest') {
@@ -112,6 +138,43 @@ const App: React.FC = () => {
       localStorage.removeItem('rn_user');
       window.location.href = window.location.origin;
   };
+
+  // --- RENDER LOCK SCREEN ---
+  if (isLocked) {
+      return (
+          <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-6 font-sans">
+              <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden p-8 text-center animate-in fade-in zoom-in duration-500">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Lock className="w-8 h-8 text-slate-700" />
+                  </div>
+                  <h1 className="text-xl font-bold text-slate-800 mb-2">Restricted Access</h1>
+                  <p className="text-sm text-slate-500 mb-6">Please enter the Admin Code to access TrungLe's Corner.</p>
+                  
+                  <form onSubmit={handleUnlock} className="space-y-4">
+                      <div className="relative">
+                          <KeyRound className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+                          <input 
+                              type="password"
+                              autoFocus
+                              className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none focus:ring-2 transition-all text-center tracking-widest text-lg ${unlockError ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-300 focus:ring-indigo-500'}`}
+                              placeholder="Enter Code"
+                              value={inputCode}
+                              onChange={(e) => { setInputCode(e.target.value); setUnlockError(false); }}
+                          />
+                      </div>
+                      {unlockError && <p className="text-xs text-red-600 font-medium">Incorrect code. Please try again.</p>}
+                      <button 
+                          type="submit"
+                          className="w-full bg-slate-900 text-white font-medium py-3 rounded-xl hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                      >
+                          Unlock App <ArrowRight className="w-4 h-4" />
+                      </button>
+                  </form>
+              </div>
+              <p className="mt-8 text-slate-500 text-xs">Protected System • Authorized Personnel Only</p>
+          </div>
+      );
+  }
 
   if (!currentUser) {
       return <LoginScreen onLogin={handleLogin} inviteProjectId={inviteProjectId} />;
@@ -213,7 +276,12 @@ const App: React.FC = () => {
 
   const renderMainContent = () => {
       if (currentResearchView === ViewState.SETTINGS) {
-           return <SettingsPage currentUser={currentUser} onUpdateUser={handleUpdateUser} />;
+           return <SettingsPage 
+                    currentUser={currentUser} 
+                    onUpdateUser={handleUpdateUser}
+                    currentAdminCode={adminCode}
+                    onUpdateAdminCode={handleUpdateAdminCode}
+                  />;
       }
 
       switch (activeModule) {
@@ -223,6 +291,7 @@ const App: React.FC = () => {
               return (
                   <TeachingModule 
                     currentUser={currentUser}
+                    onAddReminder={handleAddReminder}
                   />
               );
           case AppModule.ADMIN:
@@ -235,12 +304,25 @@ const App: React.FC = () => {
                       selectedProject={selectedProject}
                       onDeleteProject={handleDeleteProject}
                       onAddProject={handleAddProject}
+                      onAddReminder={handleAddReminder}
                   />
               );
           case AppModule.PERSONAL:
               return <PersonalModule />;
           case AppModule.JOURNAL:
               return <JournalModule />;
+          case AppModule.AI_GLOBAL:
+              return (
+                  <div className="p-6 h-full flex flex-col justify-center">
+                      <AIChat 
+                          globalContext={{
+                              projects: projects,
+                              ideas: ideas,
+                              reminders: reminders
+                          }}
+                      />
+                  </div>
+              );
           default:
               return <div>Module Under Construction</div>;
       }
@@ -290,13 +372,72 @@ const App: React.FC = () => {
 
         <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
             <div className="mb-6">
+                 {/* GLOBAL AI ASSISTANT BUTTON */}
+                 <button
+                    onClick={() => { setActiveModule(AppModule.AI_GLOBAL); setCurrentResearchView(ViewState.DASHBOARD); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 mb-6 border border-slate-100 ${
+                        activeModule === AppModule.AI_GLOBAL && currentResearchView !== ViewState.SETTINGS
+                            ? 'bg-slate-900 text-white shadow-lg'
+                            : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-indigo-600 hover:shadow-sm'
+                    }`}
+                >
+                    <Bot className={`w-5 h-5 ${activeModule === AppModule.AI_GLOBAL ? 'text-amber-400' : 'text-indigo-600'}`} />
+                    <span className="font-bold">AI Assistant</span>
+                </button>
+
                 <h3 className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Modules</h3>
-                <SidebarItem 
-                    active={activeModule === AppModule.RESEARCH && currentResearchView !== ViewState.SETTINGS} 
-                    icon={Beaker} 
-                    label="Research" 
-                    onClick={() => { setActiveModule(AppModule.RESEARCH); setCurrentResearchView(ViewState.DASHBOARD); }} 
-                />
+                
+                {/* RESEARCH MODULE + SUB-TABS */}
+                <button
+                    onClick={() => { setActiveModule(AppModule.RESEARCH); setCurrentResearchView(ViewState.DASHBOARD); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 mb-1 ${
+                        activeModule === AppModule.RESEARCH && currentResearchView !== ViewState.SETTINGS
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                >
+                    <Beaker className="w-5 h-5" />
+                    <span className="font-medium">Research</span>
+                </button>
+
+                {/* Sub-tabs for Research */}
+                {activeModule === AppModule.RESEARCH && currentResearchView !== ViewState.SETTINGS && (
+                    <div className="ml-4 pl-4 border-l-2 border-slate-100 space-y-1 mb-4 animate-in slide-in-from-left-2 duration-200">
+                        <button
+                            onClick={() => setCurrentResearchView(ViewState.DASHBOARD)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                currentResearchView === ViewState.DASHBOARD ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> Dashboard
+                        </button>
+                        <button
+                            onClick={() => setCurrentResearchView(ViewState.PROJECTS)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                currentResearchView === ViewState.PROJECTS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Projects
+                        </button>
+                        <button
+                            onClick={() => setCurrentResearchView(ViewState.IDEAS)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                currentResearchView === ViewState.IDEAS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Idea Lab
+                        </button>
+                         <button
+                            onClick={() => setCurrentResearchView(ViewState.CHAT)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                currentResearchView === ViewState.CHAT ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Project Chat
+                        </button>
+                    </div>
+                )}
+
                 <SidebarItem 
                     active={activeModule === AppModule.TEACHING && currentResearchView !== ViewState.SETTINGS} 
                     icon={BookOpen} 

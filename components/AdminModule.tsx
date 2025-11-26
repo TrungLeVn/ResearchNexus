@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { Project, MeetingNote, AcademicYearDoc } from '../types';
+import { Project, MeetingNote, AcademicYearDoc, Reminder } from '../types';
 import { ProjectManager } from './ProjectManager';
 import { MOCK_MEETINGS } from '../constants';
-import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, Calendar, Tag, FolderPlus } from 'lucide-react';
+import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, Calendar, Tag, FolderPlus, Sparkles, Loader2 } from 'lucide-react';
+import { suggestAdminPlan } from '../services/gemini';
 
 interface AdminModuleProps {
     adminProjects: Project[];
@@ -13,6 +14,7 @@ interface AdminModuleProps {
     selectedProject: Project | null;
     onDeleteProject?: (id: string) => void;
     onAddProject?: (p: Project) => void;
+    onAddReminder?: (reminder: Reminder) => void;
 }
 
 export const AdminModule: React.FC<AdminModuleProps> = ({
@@ -22,10 +24,12 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     onSelectProject,
     selectedProject,
     onDeleteProject,
-    onAddProject
+    onAddProject,
+    onAddReminder
 }) => {
     const [adminSubTab, setAdminSubTab] = useState<'meetings' | 'projects' | 'docs'>('meetings');
-    
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+
     // Meeting State
     const [meetings, setMeetings] = useState<MeetingNote[]>(MOCK_MEETINGS);
     const [searchMeetingQuery, setSearchMeetingQuery] = useState('');
@@ -74,20 +78,36 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             id: Date.now().toString(),
             title: newMeetingData.title,
             date: newMeetingData.date,
-            attendees: [], // Removed as requested
-            // We use content field to store the URL if needed, or we can add a url field to MeetingNote type.
-            // For now, assuming we put the link in content or rely on a new field. 
-            // Since MOCK_MEETINGS is defined in constants, let's treat 'content' as description or just empty for now 
-            // and assume the click action uses the URL provided. 
-            // *Correction*: The prompt asks to click to go to Google Docs. 
-            // I'll append the URL to the content markdown or handled via a dedicated field if I could change types.
-            // To stick to existing types without breaking, I'll put URL in content.
+            attendees: [], 
             content: newMeetingData.url, 
             tags: newMeetingData.tags.split(',').map(t => t.trim()).filter(Boolean)
         };
         setMeetings([newMeeting, ...meetings]);
         setIsAddingMeeting(false);
         setNewMeetingData({ title: '', date: new Date().toISOString().split('T')[0], url: '', tags: '' });
+    };
+
+    const handleSmartPlan = async () => {
+        if (!onAddReminder) return;
+        setIsGeneratingPlan(true);
+        try {
+            const suggestions = await suggestAdminPlan();
+            suggestions.forEach((s, index) => {
+                const reminder: Reminder = {
+                    id: `admin-ai-${Date.now()}-${index}`,
+                    title: `Admin: ${s.title}`,
+                    date: new Date(Date.now() + s.daysFromNow * 86400000),
+                    type: 'task',
+                    completed: false
+                };
+                onAddReminder(reminder);
+            });
+            alert(`Added ${suggestions.length} admin tasks to your global reminders.`);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsGeneratingPlan(false);
+        }
     };
 
     // If an admin project is selected and we are in projects tab, show the project manager view
@@ -125,6 +145,14 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                     </h1>
                     <p className="text-slate-500">Manage department projects, meetings, and official documents.</p>
                 </div>
+                <button 
+                    onClick={handleSmartPlan}
+                    disabled={isGeneratingPlan}
+                    className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm hover:opacity-90 transition-opacity shadow-sm"
+                >
+                    {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    <span>Gemini Smart Plan</span>
+                </button>
             </header>
 
             <div className="flex gap-4 mb-6 border-b border-slate-200 pb-2">
@@ -370,7 +398,6 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                 d.name.toLowerCase().includes(searchDocQuery.toLowerCase())
                             );
                             
-                            // If searching, hide empty folders. If not searching, show all folders even empty ones.
                             if (searchDocQuery && yearDocs.length === 0) return null;
 
                             return (

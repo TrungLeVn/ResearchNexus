@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Chat } from "@google/genai";
-import { Project } from "../types";
+import { Project, Idea, Reminder } from "../types";
 
 // Singleton instance variable
 let aiInstance: GoogleGenAI | null = null;
@@ -8,10 +8,10 @@ let aiInstance: GoogleGenAI | null = null;
 // Lazy initialization function
 const getGenAI = (): GoogleGenAI => {
   if (!aiInstance) {
+    // Access process.env directly as polyfilled by vite.config.ts
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
       console.error("API_KEY is missing. Please set it in Vercel Environment Variables.");
-      // We assume the user might set it later or we handle the error gracefully in the UI
       throw new Error("API Key is missing in environment variables");
     }
     aiInstance = new GoogleGenAI({ apiKey });
@@ -51,21 +51,63 @@ const generateSystemInstruction = (project?: Project) => {
     You have access to the metadata of the project above. Use it to answer questions about deadlines, resources, and progress specific to this project.`;
 };
 
+// NEW: Global System Instruction
+export const generateGlobalSystemInstruction = (
+    projects: Project[],
+    ideas: Idea[],
+    reminders: Reminder[]
+) => {
+    const researchProjects = projects.filter(p => !p.category || p.category === 'research');
+    const adminProjects = projects.filter(p => p.category === 'admin');
+
+    return `You are "TrungLe's Corner AI", the central intelligence for Assoc.Prof. Trung Le's entire academic life.
+    You have access to ALL data across Research, Teaching, Admin, and Personal Growth.
+    
+    OVERVIEW OF DATA:
+    
+    1. RESEARCH PROJECTS:
+    ${researchProjects.map(p => `- ${p.title} (${p.status}, ${p.progress}%)`).join('\n')}
+    
+    2. ADMIN PROJECTS:
+    ${adminProjects.map(p => `- ${p.title} (${p.status})`).join('\n')}
+    
+    3. IDEA LAB:
+    ${ideas.map(i => `- ${i.title}`).join('\n')}
+    
+    4. UPCOMING REMINDERS:
+    ${reminders.slice(0, 10).map(r => `- ${r.title} (${r.date.toDateString()})`).join('\n')}
+    
+    ROLE:
+    - Act as a Chief of Staff.
+    - Connect dots between research, teaching, and admin duties.
+    - If asked "What should I do today?", analyze deadlines from all categories.
+    - Be proactive, encouraging, but highly organized.
+    `;
+};
+
 /**
  * Sends a message to the Gemini chatbot.
- * Uses gemini-3-pro-preview for complex reasoning and conversation.
  */
 export const sendChatMessage = async (
   history: { role: 'user' | 'model'; text: string }[],
   newMessage: string,
-  project?: Project
+  project?: Project,
+  globalContext?: { projects: Project[], ideas: Idea[], reminders: Reminder[] }
 ): Promise<string> => {
   try {
     const ai = getGenAI();
+    
+    let systemInstruction = "";
+    if (globalContext) {
+        systemInstruction = generateGlobalSystemInstruction(globalContext.projects, globalContext.ideas, globalContext.reminders);
+    } else {
+        systemInstruction = generateSystemInstruction(project);
+    }
+
     const chat: Chat = ai.chats.create({
       model: 'gemini-3-pro-preview',
       config: {
-        systemInstruction: generateSystemInstruction(project),
+        systemInstruction: systemInstruction,
       },
       history: history.map(h => ({ role: h.role, parts: [{ text: h.text }] })),
     });
@@ -80,7 +122,6 @@ export const sendChatMessage = async (
 
 /**
  * Expands a research idea into a structured proposal or set of questions.
- * Uses gemini-2.5-flash for speed.
  */
 export const expandResearchIdea = async (ideaTitle: string, currentContent: string): Promise<string> => {
   try {
@@ -112,7 +153,6 @@ export const expandResearchIdea = async (ideaTitle: string, currentContent: stri
 
 /**
  * Summarizes a scientific abstract or text snippet.
- * Uses gemini-2.5-flash.
  */
 export const summarizeText = async (text: string): Promise<string> => {
   try {
@@ -129,9 +169,10 @@ export const summarizeText = async (text: string): Promise<string> => {
   }
 };
 
+// --- SMART PLAN FUNCTIONS ---
+
 /**
- * Suggests a schedule/reminders for a project.
- * Uses gemini-3-pro-preview for reasoning.
+ * Suggests a schedule/reminders for a PROJECT.
  */
 export const suggestProjectSchedule = async (projectTitle: string, status: string): Promise<{ title: string; daysFromNow: number; type: 'task' | 'deadline' }[]> => {
     try {
@@ -164,8 +205,100 @@ export const suggestProjectSchedule = async (projectTitle: string, status: strin
 }
 
 /**
- * Generates a detailed project outline including milestones and research questions.
- * Uses gemini-3-pro-preview.
+ * Suggests tasks for TEACHING.
+ */
+export const suggestTeachingPlan = async (currentCourses: string[]): Promise<{ title: string; daysFromNow: number; type: 'task' | 'deadline' }[]> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        I am a professor teaching these courses: ${currentCourses.join(', ')}.
+        It is currently the middle of the semester.
+        Suggest 3 administrative or teaching tasks I should not forget (e.g. grading, preparing next lecture, office hours).
+        
+        Return STRICTLY as JSON array:
+        [{ "title": "string", "daysFromNow": number, "type": "task" }]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '[]');
+    } catch (error) { return []; }
+}
+
+/**
+ * Suggests tasks for ADMIN work.
+ */
+export const suggestAdminPlan = async (): Promise<{ title: string; daysFromNow: number; type: 'task' | 'deadline' }[]> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        I have administrative duties as an Associate Professor.
+        Suggest 3 generic but critical admin tasks (e.g. check department emails, sign forms, review committee notes).
+        
+        Return STRICTLY as JSON array:
+        [{ "title": "string", "daysFromNow": number, "type": "task" }]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '[]');
+    } catch (error) { return []; }
+}
+
+/**
+ * Suggests tasks for PERSONAL GROWTH.
+ */
+export const suggestPersonalPlan = async (goals: string[]): Promise<{ title: string; daysFromNow: number; type: 'task' | 'deadline' }[]> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        My personal goals are: ${goals.join(', ')}.
+        Suggest 3 small, actionable steps I can take this week to make progress.
+        
+        Return STRICTLY as JSON array:
+        [{ "title": "string", "daysFromNow": number, "type": "task" }]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '[]');
+    } catch (error) { return []; }
+}
+
+/**
+ * Suggests tasks for DAILY JOURNAL.
+ */
+export const suggestJournalPlan = async (date: string): Promise<{ text: string, done: boolean }[]> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        It is ${date}. Generate a productive daily checklist for an academic.
+        Include 1 research task, 1 teaching task, 1 health task.
+        
+        Return STRICTLY as JSON array:
+        [{ "text": "string", "done": false }]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '[]');
+    } catch (error) { return []; }
+}
+
+/**
+ * Generates a detailed project outline.
  */
 export const generateProjectDetails = async (title: string, description: string): Promise<{ tasks: {title: string, priority: string, daysFromNow: number}[], questions: string[] }> => {
     try {
@@ -201,7 +334,6 @@ export const generateProjectDetails = async (title: string, description: string)
         return JSON.parse(text);
     } catch (error) {
         console.error("Gemini Project Gen Error:", error);
-        // Fallback
         return { 
             tasks: [{ title: "Initial Literature Review", priority: "high", daysFromNow: 3 }], 
             questions: ["What is the primary impact of this research?"] 
@@ -210,8 +342,7 @@ export const generateProjectDetails = async (title: string, description: string)
 }
 
 /**
- * Generates a representative cover image for a course based on its title and content.
- * Uses gemini-2.5-flash-image for general image generation.
+ * Generates a representative cover image for a course.
  */
 export const generateCourseImage = async (courseName: string): Promise<string | null> => {
     try {
@@ -229,7 +360,6 @@ export const generateCourseImage = async (courseName: string): Promise<string | 
             }
         });
 
-        // Iterate through parts to find the image
         if (response.candidates && response.candidates[0].content.parts) {
             for (const part of response.candidates[0].content.parts) {
                 if (part.inlineData) {
