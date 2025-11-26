@@ -409,6 +409,32 @@ export const suggestJournalPlan = async (date: string): Promise<{ text: string, 
 }
 
 /**
+ * Generates tasks from a user description for DAILY JOURNAL.
+ */
+export const generateDailyTasksFromDescription = async (description: string, date: string): Promise<{ text: string, done: boolean }[]> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        It is ${date}. The user has described their daily focus as: "${description}".
+        
+        Break this down into 3-6 specific, actionable checklist items (checkpoints).
+        Return STRICTLY as a JSON array of objects:
+        [{ "text": "string", "done": false }]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '[]');
+    } catch (error) { 
+        console.error("Gemini Daily Task Gen Error:", error);
+        return []; 
+    }
+}
+
+/**
  * Generates a detailed project outline.
  */
 export const generateProjectDetails = async (title: string, description: string): Promise<{ tasks: {title: string, priority: string, daysFromNow: number}[], questions: string[] }> => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, CheckSquare, Link as LinkIcon, Save, Plus, Trash2, ChevronLeft, ChevronRight, ExternalLink, Sparkles, Loader2, Bot, X, StickyNote as NoteIcon, ArrowRight, Briefcase, Lightbulb } from 'lucide-react';
-import { JournalEntry, LinkResource, StickyNote, Idea, AcademicYearDoc } from '../types';
-import { suggestJournalPlan } from '../services/gemini';
+import { Calendar, CheckSquare, Save, Plus, Trash2, ChevronLeft, ChevronRight, Sparkles, Loader2, Bot, X, StickyNote as NoteIcon, Briefcase, Lightbulb, PenTool, Maximize2, MoreHorizontal } from 'lucide-react';
+import { JournalEntry, StickyNote, Idea, AcademicYearDoc } from '../types';
+import { generateDailyTasksFromDescription } from '../services/gemini';
 import { subscribeToJournal, saveJournalEntry, saveIdea, saveAdminDoc } from '../services/firebase';
 import { AIChat } from './AIChat';
 
@@ -17,11 +17,15 @@ export const JournalModule: React.FC = () => {
         links: []
     });
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
     const [showChat, setShowChat] = useState(false);
+    
+    // Daily Goal Input State
+    const [dailyGoalDescription, setDailyGoalDescription] = useState('');
 
     // Sticky Note State
     const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+    const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+    const [showTemplates, setShowTemplates] = useState(false);
 
     // Subscribe to Firebase Journal Entries
     useEffect(() => {
@@ -59,14 +63,11 @@ export const JournalModule: React.FC = () => {
     }, [selectedDate, allEntries]);
 
     const handleSave = async (updatedEntry = entry) => {
-        setIsSaving(true);
         try {
             await saveJournalEntry(updatedEntry);
         } catch (error) {
             console.error(error);
             alert("Failed to save entry.");
-        } finally {
-            setIsSaving(false);
         }
     };
 
@@ -75,6 +76,8 @@ export const JournalModule: React.FC = () => {
         newDate.setDate(selectedDate.getDate() + days);
         setSelectedDate(newDate);
         setActiveNoteId(null);
+        setExpandedNoteId(null);
+        setDailyGoalDescription('');
     };
 
     const toggleTask = (taskId: string) => {
@@ -96,11 +99,12 @@ export const JournalModule: React.FC = () => {
         }
     };
 
-    const handleSmartPlan = async () => {
+    const handleGenerateDailyTasks = async () => {
+        if (!dailyGoalDescription.trim()) return;
         setIsGeneratingPlan(true);
         try {
             const dateStr = selectedDate.toDateString();
-            const suggestions = await suggestJournalPlan(dateStr);
+            const suggestions = await generateDailyTasksFromDescription(dailyGoalDescription, dateStr);
             
             const newTasks = suggestions.map(s => ({
                 id: Date.now().toString() + Math.random(),
@@ -114,21 +118,11 @@ export const JournalModule: React.FC = () => {
             };
             setEntry(updatedEntry);
             handleSave(updatedEntry);
+            setDailyGoalDescription('');
         } catch (e) {
             console.error(e);
         } finally {
             setIsGeneratingPlan(false);
-        }
-    };
-
-    const addLink = () => {
-        const title = prompt("Link Title:");
-        const url = prompt("URL:");
-        if (title && url) {
-            const newLink: LinkResource = { id: Date.now().toString(), title, url, type: 'web' };
-            const updatedEntry = { ...entry, links: [...entry.links, newLink] };
-            setEntry(updatedEntry);
-            handleSave(updatedEntry);
         }
     };
 
@@ -138,24 +132,32 @@ export const JournalModule: React.FC = () => {
         handleSave(updatedEntry);
     };
 
-    const handleDeleteLink = (linkId: string) => {
-        const updatedEntry = {...entry, links: entry.links.filter(l => l.id !== linkId)};
-        setEntry(updatedEntry);
-        handleSave(updatedEntry);
-    };
-
     // --- STICKY NOTE LOGIC ---
 
-    const addStickyNote = () => {
+    const addStickyNote = (templateType: 'blank' | 'meeting' | 'research' = 'blank') => {
         const now = new Date();
         const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateString = now.toLocaleDateString();
         
+        let title = `${dateString} - ${timeString}`;
+        let content = '';
+        let color: StickyNote['color'] = 'yellow';
+
+        if (templateType === 'meeting') {
+            title = 'Meeting Note';
+            content = `**Attendees:**\n- \n\n**Agenda:**\n1. \n\n**Notes:**\n\n**Action Items:**\n- [ ] `;
+            color = 'blue';
+        } else if (templateType === 'research') {
+            title = 'Research Idea';
+            content = `**Concept:**\n\n**Hypothesis:**\n\n**References/Links:**\n- `;
+            color = 'purple';
+        }
+
         const newNote: StickyNote = {
             id: `note-${Date.now()}`,
-            title: `${dateString} - ${timeString}`,
-            content: '',
-            color: 'yellow',
+            title,
+            content,
+            color,
             createdAt: now.toISOString()
         };
 
@@ -166,6 +168,12 @@ export const JournalModule: React.FC = () => {
         setEntry(updatedEntry);
         handleSave(updatedEntry);
         setActiveNoteId(newNote.id);
+        setShowTemplates(false);
+        
+        // Auto-expand new notes if not blank for easier typing
+        if (templateType !== 'blank') {
+            setExpandedNoteId(newNote.id);
+        }
     };
 
     const updateStickyNote = (id: string, updates: Partial<StickyNote>) => {
@@ -183,6 +191,7 @@ export const JournalModule: React.FC = () => {
         setEntry(updatedEntry);
         handleSave(updatedEntry);
         if (activeNoteId === id) setActiveNoteId(null);
+        if (expandedNoteId === id) setExpandedNoteId(null);
     };
 
     const convertToIdea = (note: StickyNote) => {
@@ -218,6 +227,81 @@ export const JournalModule: React.FC = () => {
         alert("Note converted to Admin Meeting Note!");
     };
 
+    const renderExpandedNoteModal = () => {
+        if (!expandedNoteId) return null;
+        const note = entry.notes?.find(n => n.id === expandedNoteId);
+        if (!note) return null;
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className={`w-full max-w-4xl h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden transition-colors ${
+                     note.color === 'yellow' ? 'bg-amber-50' :
+                     note.color === 'blue' ? 'bg-blue-50' :
+                     note.color === 'rose' ? 'bg-rose-50' :
+                     note.color === 'green' ? 'bg-emerald-50' : 'bg-purple-50'
+                }`}>
+                    <div className="p-4 border-b border-black/5 flex justify-between items-center bg-white/50 backdrop-blur-sm">
+                        <input 
+                            className="bg-transparent text-xl font-bold text-slate-800 outline-none w-full mr-4"
+                            value={note.title}
+                            onChange={(e) => updateStickyNote(note.id, { title: e.target.value })}
+                            placeholder="Note Title"
+                        />
+                        <div className="flex gap-2">
+                             <button 
+                                onClick={() => deleteStickyNote(note.id)}
+                                className="p-2 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
+                                title="Delete Note"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                            <button onClick={() => { handleSave(); setExpandedNoteId(null); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                    </div>
+                    <textarea 
+                        className="flex-1 w-full p-8 bg-transparent resize-none outline-none text-lg text-slate-700 leading-relaxed font-medium"
+                        value={note.content}
+                        onChange={(e) => updateStickyNote(note.id, { content: e.target.value })}
+                        placeholder="Write your detailed thoughts here..."
+                        autoFocus
+                    />
+                     <div className="p-4 border-t border-black/5 flex justify-between items-center bg-white/50 backdrop-blur-sm">
+                        <div className="flex gap-2">
+                            {['yellow', 'blue', 'rose', 'green', 'purple'].map((color) => (
+                                <button
+                                    key={color}
+                                    onClick={() => updateStickyNote(note.id, { color: color as any })}
+                                    className={`w-6 h-6 rounded-full border-2 border-white shadow-sm ${
+                                        color === 'yellow' ? 'bg-amber-300' :
+                                        color === 'blue' ? 'bg-blue-300' :
+                                        color === 'rose' ? 'bg-rose-300' :
+                                        color === 'green' ? 'bg-emerald-300' : 'bg-purple-300'
+                                    } hover:scale-110 transition-transform`}
+                                />
+                            ))}
+                        </div>
+                        <div className="flex gap-3">
+                             <button 
+                                onClick={() => convertToIdea(note)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:text-indigo-600 hover:border-indigo-300" 
+                            >
+                                <Lightbulb className="w-4 h-4" /> To Research
+                            </button>
+                            <button 
+                                onClick={() => convertToAdmin(note)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:text-indigo-600 hover:border-indigo-300"
+                            >
+                                <Briefcase className="w-4 h-4" /> To Admin
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const renderStickyBoard = () => {
         const notes = entry.notes || [];
 
@@ -227,12 +311,28 @@ export const JournalModule: React.FC = () => {
                     <h3 className="font-semibold text-slate-700 flex items-center gap-2">
                         <NoteIcon className="w-4 h-4 text-amber-500" /> Sticky Board
                     </h3>
-                    <button 
-                        onClick={addStickyNote}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-700 transition-colors shadow-sm"
-                    >
-                        <Plus className="w-4 h-4" /> Add Note
-                    </button>
+                    
+                    <div className="relative">
+                        <button 
+                            onClick={() => setShowTemplates(!showTemplates)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-700 transition-colors shadow-sm"
+                        >
+                            <Plus className="w-4 h-4" /> New Note
+                        </button>
+                        {showTemplates && (
+                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-20 animate-in fade-in zoom-in-95">
+                                <button onClick={() => addStickyNote('blank')} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-amber-300"></div> Blank Note
+                                </button>
+                                <button onClick={() => addStickyNote('meeting')} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-blue-300"></div> Meeting Minute
+                                </button>
+                                <button onClick={() => addStickyNote('research')} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-purple-300"></div> Research Spark
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto bg-slate-100/50 rounded-xl border border-slate-200 p-4">
@@ -240,7 +340,7 @@ export const JournalModule: React.FC = () => {
                         {notes.map(note => (
                             <div 
                                 key={note.id}
-                                className={`group relative p-4 rounded-lg shadow-sm hover:shadow-md transition-all flex flex-col min-h-[180px] border ${
+                                className={`group relative p-4 rounded-lg shadow-sm hover:shadow-md transition-all flex flex-col min-h-[200px] border cursor-pointer ${
                                     note.color === 'yellow' ? 'bg-amber-50 border-amber-100' :
                                     note.color === 'blue' ? 'bg-blue-50 border-blue-100' :
                                     note.color === 'rose' ? 'bg-rose-50 border-rose-100' :
@@ -257,25 +357,33 @@ export const JournalModule: React.FC = () => {
                                         onChange={(e) => updateStickyNote(note.id, { title: e.target.value })}
                                         placeholder="Note Title"
                                         onBlur={() => handleSave()}
+                                        onClick={(e) => e.stopPropagation()}
                                     />
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button 
+                                            onClick={(e) => { e.stopPropagation(); setExpandedNoteId(note.id); }}
+                                            className="p-1 hover:bg-white/50 rounded text-slate-400 hover:text-indigo-500"
+                                            title="Expand / Edit"
+                                        >
+                                            <Maximize2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button 
                                             onClick={(e) => { e.stopPropagation(); deleteStickyNote(note.id); }}
                                             className="p-1 hover:bg-white/50 rounded text-slate-400 hover:text-red-500"
+                                            title="Delete"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* Content */}
-                                <textarea 
-                                    className="flex-1 w-full bg-transparent resize-none outline-none text-sm text-slate-600 leading-relaxed font-medium"
-                                    placeholder="Write your thought..."
-                                    value={note.content}
-                                    onChange={(e) => updateStickyNote(note.id, { content: e.target.value })}
-                                    onBlur={() => handleSave()}
-                                />
+                                {/* Content Preview */}
+                                <div 
+                                    className="flex-1 w-full text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap overflow-hidden mask-linear-fade"
+                                    onClick={() => setExpandedNoteId(note.id)}
+                                >
+                                    {note.content || <span className="text-slate-400 italic">Empty note... Click to write.</span>}
+                                </div>
 
                                 {/* Footer Actions */}
                                 <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-2 opacity-50 group-hover:opacity-100 transition-opacity">
@@ -293,21 +401,8 @@ export const JournalModule: React.FC = () => {
                                             />
                                         ))}
                                     </div>
-                                    <div className="flex gap-1">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); convertToIdea(note); }}
-                                            className="p-1 hover:bg-white/50 rounded text-slate-500" 
-                                            title="Convert to Research Idea"
-                                        >
-                                            <Lightbulb className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); convertToAdmin(note); }}
-                                            className="p-1 hover:bg-white/50 rounded text-slate-500"
-                                            title="Convert to Admin Doc/Note"
-                                        >
-                                            <Briefcase className="w-3.5 h-3.5" />
-                                        </button>
+                                    <div className="text-[10px] text-slate-400">
+                                        Click to Expand
                                     </div>
                                 </div>
                             </div>
@@ -315,8 +410,8 @@ export const JournalModule: React.FC = () => {
                         
                         {/* Empty State / Quick Add */}
                         <button 
-                            onClick={addStickyNote}
-                            className="border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all min-h-[180px]"
+                            onClick={() => addStickyNote('blank')}
+                            className="border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all min-h-[200px]"
                         >
                             <Plus className="w-6 h-6 mb-1" />
                             <span className="text-xs font-medium">New Sticky Note</span>
@@ -329,6 +424,8 @@ export const JournalModule: React.FC = () => {
 
     return (
         <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
+            {renderExpandedNoteModal()}
+
             <header className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -369,26 +466,41 @@ export const JournalModule: React.FC = () => {
                     {renderStickyBoard()}
                 </div>
 
-                {/* Sidebar: Tasks & Links */}
+                {/* Sidebar: Tasks (Description Driven) */}
                 <div className="flex flex-col gap-6 overflow-hidden">
-                    {/* Daily Checklist */}
+                    {/* Daily Goals / Checkpoints */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col flex-1 overflow-hidden">
                         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                                    <CheckSquare className="w-4 h-4" /> Daily Goals
-                                </h3>
+                            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                                <CheckSquare className="w-4 h-4" /> Daily Goals
+                            </h3>
+                            <button onClick={addTask} className="p-1 hover:bg-slate-200 rounded text-slate-500" title="Add manual checklist item">
+                                <Plus className="w-4 h-4" />
+                            </button>
+                        </div>
+                        
+                        {/* AI Input Area */}
+                        <div className="p-4 bg-slate-50/50 border-b border-slate-100">
+                            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">What's your main focus today?</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    placeholder="e.g. Finish the grant proposal and email the dean..."
+                                    value={dailyGoalDescription}
+                                    onChange={(e) => setDailyGoalDescription(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleGenerateDailyTasks()}
+                                />
                                 <button 
-                                    onClick={handleSmartPlan}
-                                    disabled={isGeneratingPlan}
-                                    className="p-1 hover:bg-purple-100 rounded text-purple-600 transition-colors"
-                                    title="Generate Daily Checklist with AI"
+                                    onClick={handleGenerateDailyTasks}
+                                    disabled={isGeneratingPlan || !dailyGoalDescription}
+                                    className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                    title="Generate Checklist with AI"
                                 >
-                                    {isGeneratingPlan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                    {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                                 </button>
                             </div>
-                            <button onClick={addTask} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4" /></button>
                         </div>
+
                         <div className="p-4 overflow-y-auto space-y-3 flex-1">
                             {entry.tasks.map(task => (
                                 <div key={task.id} className="flex items-center gap-3 group">
@@ -409,34 +521,7 @@ export const JournalModule: React.FC = () => {
                                     </button>
                                 </div>
                             ))}
-                            {entry.tasks.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">No tasks set for today.</p>}
-                        </div>
-                    </div>
-
-                    {/* Quick Links */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-1/3 overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                                <LinkIcon className="w-4 h-4" /> Resources
-                            </h3>
-                            <button onClick={addLink} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4" /></button>
-                        </div>
-                        <div className="p-4 overflow-y-auto space-y-2">
-                             {entry.links.map(link => (
-                                 <div key={link.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100 hover:border-indigo-200 group">
-                                     <a href={link.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs font-medium text-indigo-600 truncate flex-1">
-                                         <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                                         <span className="truncate">{link.title}</span>
-                                     </a>
-                                     <button 
-                                        onClick={() => handleDeleteLink(link.id)}
-                                        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 ml-2"
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-                                 </div>
-                             ))}
-                             {entry.links.length === 0 && <p className="text-xs text-slate-400 italic text-center">No links attached.</p>}
+                            {entry.tasks.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">Describe your day above to auto-generate tasks.</p>}
                         </div>
                     </div>
                 </div>
