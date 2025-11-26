@@ -190,6 +190,7 @@ const App: React.FC = () => {
           <ProjectManager 
             projects={visibleProjects} 
             selectedProject={selectedProject}
+            currentUser={currentUser}
             onSelectProject={setSelectedProject}
             onUpdateProject={handleUpdateProject}
             onDeleteProject={handleDeleteProject}

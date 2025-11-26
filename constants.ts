@@ -45,6 +45,32 @@ export const MOCK_PROJECTS: Project[] = [
         url: '#'
       }
     ],
+    notebookAssets: [
+        { 
+            id: 'n1', 
+            title: 'NAS Optimization - NotebookLM Source', 
+            type: 'source', 
+            url: 'https://notebooklm.google.com/', 
+            addedBy: 'TL', 
+            addedAt: '2024-05-15' 
+        },
+        { 
+            id: 'n2', 
+            title: 'Audio Overview: Evolution Strategies', 
+            type: 'audio', 
+            url: '#', 
+            addedBy: 'TL', 
+            addedAt: '2024-05-16' 
+        },
+        { 
+            id: 'n3', 
+            title: 'Deep Research Report: Methodology', 
+            type: 'report', 
+            url: '#', 
+            addedBy: 'TL', 
+            addedAt: '2024-05-18' 
+        }
+    ],
     activity: [
         { id: 'a1', message: 'Project initialized', time: '1 month ago' },
         { id: 'a2', message: 'Experiment logs uploaded', time: '2 weeks ago' },

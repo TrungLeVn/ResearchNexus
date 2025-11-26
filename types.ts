@@ -33,6 +33,15 @@ export interface ProjectFile {
   url?: string; // Google Drive Link
 }
 
+export interface NotebookAsset {
+  id: string;
+  title: string;
+  type: 'audio' | 'report' | 'slides' | 'source';
+  url: string;
+  addedBy: string;
+  addedAt: string;
+}
+
 export interface Collaborator {
   id: string;
   name: string;
@@ -69,6 +78,7 @@ export interface Project {
   tags: string[];
   papers: Paper[];
   files: ProjectFile[];
+  notebookAssets?: NotebookAsset[]; // New field for NotebookLM integration
   notes: string;
   collaborators: Collaborator[];
   tasks: Task[];

@@ -147,3 +147,27 @@ export const addCollaboratorToProject = async (projectId: string, user: Collabor
     console.error("Error adding collaborator:", error);
   }
 };
+
+export const removeCollaboratorFromProject = async (projectId: string, collaboratorId: string) => {
+  if (!db) return;
+
+  const projectRef = doc(db, "projects", projectId);
+  
+  try {
+    const projectSnap = await getDoc(projectRef);
+    if (projectSnap.exists()) {
+      const projectData = projectSnap.data() as Project;
+      const collaborators = projectData.collaborators || [];
+      
+      const updatedCollaborators = collaborators.filter(c => c.id !== collaboratorId);
+      
+      await updateDoc(projectRef, {
+        collaborators: updatedCollaborators
+      });
+      console.log("Collaborator removed from project");
+    }
+  } catch (error) {
+    console.error("Error removing collaborator:", error);
+    throw error;
+  }
+};

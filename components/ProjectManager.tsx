@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Project, Paper, ProjectFile, Task, Collaborator, TaskStatus, ProjectActivity, ProjectStatus, TaskPriority } from '../types';
-import { Folder, FileCode, FileText, Database, Sparkles, MoreVertical, Plus, ChevronLeft, BookOpen, Clock, HardDrive, ExternalLink, Kanban, Calendar as CalendarIcon, ListTodo, Users, Share2, GripVertical, CheckCircle2, Circle, LayoutDashboard, TrendingUp, AlertTriangle, Activity, MessageSquare, Link as LinkIcon, Copy, X, Archive, Trash2, Save, AlignLeft, Filter, ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
+import { Project, Paper, ProjectFile, Task, Collaborator, TaskStatus, ProjectActivity, ProjectStatus, TaskPriority, NotebookAsset } from '../types';
+import { Folder, FileCode, FileText, Database, Sparkles, MoreVertical, Plus, ChevronLeft, BookOpen, Clock, HardDrive, ExternalLink, Kanban, Calendar as CalendarIcon, ListTodo, Users, Share2, GripVertical, CheckCircle2, Circle, LayoutDashboard, TrendingUp, AlertTriangle, Activity, MessageSquare, Link as LinkIcon, Copy, X, Archive, Trash2, Save, AlignLeft, Filter, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Headphones, Presentation, BrainCircuit, Search } from 'lucide-react';
 import { summarizeText, generateProjectDetails } from '../services/gemini';
+import { removeCollaboratorFromProject } from '../services/firebase';
 import ReactMarkdown from 'react-markdown';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
 import { AIChat } from './AIChat';
@@ -229,6 +230,7 @@ const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClose, data
 
 interface ProjectManagerProps {
   projects: Project[];
+  currentUser: Collaborator;
   onUpdateProject: (p: Project) => void;
   onSelectProject: (p: Project | null) => void;
   selectedProject: Project | null;
@@ -237,13 +239,17 @@ interface ProjectManagerProps {
   onAddProject?: (p: Project) => void;
 }
 
-export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpdateProject, selectedProject, onSelectProject, onDeleteProject, onArchiveProject, onAddProject }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'timeline' | 'calendar' | 'papers' | 'drafts' | 'data' | 'code' | 'assistant'>('dashboard');
+export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, currentUser, onUpdateProject, selectedProject, onSelectProject, onDeleteProject, onArchiveProject, onAddProject }) => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'timeline' | 'calendar' | 'papers' | 'drafts' | 'data' | 'code' | 'assistant' | 'notebook'>('dashboard');
   const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
 
   // File adding state
   const [isAddingFile, setIsAddingFile] = useState(false);
   const [newFile, setNewFile] = useState<{name: string, url: string}>({name: '', url: ''});
+
+  // Notebook Asset adding state
+  const [isAddingNotebookAsset, setIsAddingNotebookAsset] = useState(false);
+  const [newNotebookAsset, setNewNotebookAsset] = useState<{title: string, url: string, type: 'audio' | 'report' | 'slides' | 'source'}>({title: '', url: '', type: 'report'});
 
   // Task adding state
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -272,6 +278,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [newProjectData, setNewProjectData] = useState({ title: '', description: '', tags: '' });
   const [isGeneratingProject, setIsGeneratingProject] = useState(false);
+
+  // --- SEARCH STATE ---
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Helper to process tasks based on filters/sorts
   const getProcessedTasks = () => {
@@ -310,6 +319,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
   };
 
   const processedTasks = getProcessedTasks();
+  
+  // Filter projects based on search query
+  const filteredProjects = projects.filter(p => 
+    p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleGenerateSummary = async (paper: Paper) => {
     setSummaryLoading(paper.id);
@@ -346,6 +361,32 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
       onUpdateProject({ ...selectedProject, files: updatedFiles });
       setNewFile({name: '', url: ''});
       setIsAddingFile(false);
+  };
+
+  const handleAddNotebookAsset = () => {
+      if(!selectedProject || !newNotebookAsset.title || !newNotebookAsset.url) return;
+      
+      const asset: NotebookAsset = {
+          id: `nb-${Date.now()}`,
+          title: newNotebookAsset.title,
+          url: newNotebookAsset.url,
+          type: newNotebookAsset.type,
+          addedBy: currentUser.initials,
+          addedAt: new Date().toISOString().split('T')[0]
+      };
+
+      const currentAssets = selectedProject.notebookAssets || [];
+      onUpdateProject({ ...selectedProject, notebookAssets: [...currentAssets, asset] });
+      setNewNotebookAsset({title: '', url: '', type: 'report'});
+      setIsAddingNotebookAsset(false);
+  };
+
+  const handleDeleteNotebookAsset = (assetId: string) => {
+      if(!selectedProject || !window.confirm("Remove this NotebookLM asset?")) return;
+      
+      const currentAssets = selectedProject.notebookAssets || [];
+      const updatedAssets = currentAssets.filter(a => a.id !== assetId);
+      onUpdateProject({ ...selectedProject, notebookAssets: updatedAssets });
   };
 
   const handleAddTask = (status: TaskStatus = 'todo') => {
@@ -417,6 +458,19 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
       setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const handleRemoveCollaborator = async (collaboratorId: string, collaboratorName: string) => {
+    if (!selectedProject) return;
+    if (window.confirm(`Are you sure you want to remove ${collaboratorName} from this project?`)) {
+        try {
+            await removeCollaboratorFromProject(selectedProject.id, collaboratorId);
+            // No need to update state manually, subscription in App.tsx will handle it
+        } catch (error) {
+            console.error("Failed to remove collaborator", error);
+            alert("Failed to remove collaborator.");
+        }
+    }
+  };
+
   // --- NEW PROJECT HANDLER ---
   const handleCreateProject = async () => {
       if (!newProjectData.title || !onAddProject) return;
@@ -448,9 +502,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
               progress: 0,
               tags: newProjectData.tags.split(',').map(t => t.trim()).filter(Boolean),
               notes: `Project Initialized via Gemini AI.${researchQuestions}`,
-              collaborators: [MOCK_USERS[0]], // Owner
+              collaborators: [currentUser], // Owner is the creator
               files: [],
               papers: [],
+              notebookAssets: [],
               tasks: newTasks,
               activity: [{ id: `a-${Date.now()}`, message: 'Project created with AI outline', time: 'Just now' }]
           };
@@ -702,6 +757,118 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
               </div>
           </div>
       );
+  };
+
+  const renderNotebookTab = () => {
+    if (!selectedProject) return null;
+    const assets = selectedProject.notebookAssets || [];
+
+    const getIcon = (type: string) => {
+        switch (type) {
+            case 'audio': return <Headphones className="w-5 h-5 text-purple-600" />;
+            case 'slides': return <Presentation className="w-5 h-5 text-amber-500" />;
+            case 'source': return <BrainCircuit className="w-5 h-5 text-blue-600" />;
+            default: return <FileText className="w-5 h-5 text-slate-600" />;
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-800">NotebookLM Integration</h2>
+                    <p className="text-sm text-slate-500">Centralize your deep research. Link your NotebookLM sources, Audio Overviews, and generated reports.</p>
+                </div>
+                <button 
+                  onClick={() => setIsAddingNotebookAsset(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-sm hover:opacity-90 transition-colors"
+                >
+                    <Plus className="w-4 h-4" /> Add Asset
+                </button>
+            </div>
+
+            {isAddingNotebookAsset && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-indigo-200 animate-in fade-in slide-in-from-top-2">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Link NotebookLM Content</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <input 
+                            placeholder="Asset Title (e.g. 'Deep Research Report')"
+                            className="w-full px-3 py-2 text-sm border rounded-lg"
+                            value={newNotebookAsset.title}
+                            onChange={e => setNewNotebookAsset({...newNotebookAsset, title: e.target.value})}
+                        />
+                        <select 
+                            className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                            value={newNotebookAsset.type}
+                            onChange={e => setNewNotebookAsset({...newNotebookAsset, type: e.target.value as any})}
+                        >
+                            <option value="report">Deep Research Report</option>
+                            <option value="audio">Audio Overview</option>
+                            <option value="slides">Slide Deck</option>
+                            <option value="source">Notebook Source Link</option>
+                        </select>
+                        <input 
+                            placeholder="URL (Drive Link, Share Link, or File URL)"
+                            className="w-full px-3 py-2 text-sm border rounded-lg md:col-span-2"
+                            value={newNotebookAsset.url}
+                            onChange={e => setNewNotebookAsset({...newNotebookAsset, url: e.target.value})}
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={handleAddNotebookAsset} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save Asset</button>
+                        <button onClick={() => setIsAddingNotebookAsset(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm">Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3">
+                {assets.map(asset => (
+                    <div key={asset.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow group">
+                        <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                                asset.type === 'audio' ? 'bg-purple-50' :
+                                asset.type === 'slides' ? 'bg-amber-50' :
+                                asset.type === 'source' ? 'bg-blue-50' : 'bg-slate-100'
+                            }`}>
+                                {getIcon(asset.type)}
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-slate-800">{asset.title}</h3>
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    <span className="capitalize">{asset.type}</span>
+                                    <span>• Added by {asset.addedBy}</span>
+                                    <span>• {asset.addedAt}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <a 
+                              href={asset.url} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                                Open <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button 
+                                onClick={() => handleDeleteNotebookAsset(asset.id)}
+                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                {assets.length === 0 && !isAddingNotebookAsset && (
+                    <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400">
+                        <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                        <p>No NotebookLM assets linked yet.</p>
+                        <p className="text-xs mt-1">Generate reports or audio in NotebookLM and link them here.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
   };
 
   const renderKanbanBoard = () => {
@@ -1111,8 +1278,19 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                 {/* Collaborators List */}
                 <div className="flex items-center -space-x-2">
                     {selectedProject.collaborators.map(c => (
-                        <div key={c.id} className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700" title={`${c.name} (${c.role})`}>
-                            {c.initials}
+                        <div key={c.id} className="relative group/avatar">
+                            <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700" title={`${c.name} (${c.role})`}>
+                                {c.initials}
+                            </div>
+                            {currentUser.role === 'Owner' && c.role !== 'Owner' && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveCollaborator(c.id, c.name); }}
+                                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity hover:bg-red-600 shadow-sm"
+                                    title="Remove User"
+                                >
+                                    <X className="w-2.5 h-2.5" />
+                                </button>
+                            )}
                         </div>
                     ))}
                     <button 
@@ -1176,6 +1354,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                     >
                         <MessageSquare className="w-4 h-4" /> AI Assistant
                     </button>
+                    <button 
+                        onClick={() => setActiveTab('notebook')}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'notebook' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                        <Sparkles className="w-4 h-4" /> NotebookLM
+                    </button>
                 </div>
 
                 <div>
@@ -1218,6 +1402,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                         <AIChat project={selectedProject} />
                     </div>
                 )}
+                {activeTab === 'notebook' && renderNotebookTab()}
 
                 {activeTab === 'papers' && (
                     <div className="space-y-6">
@@ -1304,16 +1489,28 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                 <h1 className="text-2xl font-bold text-slate-800">Projects</h1>
                 <p className="text-slate-500">Manage your ongoing research efforts.</p>
             </div>
-            <button 
-                onClick={() => setIsCreatingProject(true)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
-            >
-                <Plus className="w-4 h-4" /> New Project
-            </button>
+            <div className="flex gap-3">
+                <div className="relative">
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input 
+                        type="text" 
+                        placeholder="Search projects..." 
+                        className="pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <button 
+                    onClick={() => setIsCreatingProject(true)}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                    <Plus className="w-4 h-4" /> New Project
+                </button>
+            </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map(project => (
+            {filteredProjects.map(project => (
                 <div 
                     key={project.id} 
                     onClick={() => onSelectProject(project)}
@@ -1391,6 +1588,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                 </div>
             ))}
         </div>
+        {filteredProjects.length === 0 && (
+             <div className="text-center py-12 text-slate-400">
+                 <p>No projects match your search.</p>
+             </div>
+        )}
     </div>
   );
 };
