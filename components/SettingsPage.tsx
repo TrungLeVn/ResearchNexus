@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Collaborator } from '../types';
-import { User, Bell, Download, Upload, Shield, Sparkles, Building, Mail, Save, AlertTriangle } from 'lucide-react';
+import { User, Bell, Download, Upload, Shield, Sparkles, Building, Mail, Save, AlertTriangle, Tag, Plus, X } from 'lucide-react';
 
 interface SettingsPageProps {
   currentUser: Collaborator;
@@ -18,6 +18,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
       weeklyReport: false
   });
   const [isSaved, setIsSaved] = useState(false);
+  
+  // Tag Management State
+  const [globalTags, setGlobalTags] = useState<string[]>(['AI', 'Research', 'Admin', 'Urgent', 'Conference']);
+  const [newTag, setNewTag] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
@@ -26,6 +31,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
       setTimeout(() => setIsSaved(false), 2000);
       if (onUpdateUser) {
           onUpdateUser({ ...currentUser, name, email });
+      }
+  };
+
+  const handleAddTag = () => {
+      if(newTag && !globalTags.includes(newTag)) {
+          setGlobalTags([...globalTags, newTag]);
+          setNewTag('');
+      }
+  };
+
+  const handleDeleteTag = (tag: string) => {
+      if(window.confirm(`Delete tag "${tag}"?`)) {
+          setGlobalTags(globalTags.filter(t => t !== tag));
       }
   };
 
@@ -159,6 +177,43 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onUpdat
                 >
                     {isSaved ? <span className="flex items-center gap-1">Saved!</span> : <span className="flex items-center gap-1"><Save className="w-4 h-4" /> Save Changes</span>}
                 </button>
+            </div>
+        </div>
+
+        {/* Tag Management */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                <Tag className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-semibold text-slate-800">Tag Management</h3>
+            </div>
+            <div className="p-6">
+                <p className="text-sm text-slate-600 mb-4">Manage common tags used across projects and meetings.</p>
+                <div className="flex gap-2 mb-4">
+                    <input 
+                        type="text" 
+                        value={newTag} 
+                        onChange={(e) => setNewTag(e.target.value)}
+                        placeholder="Add new tag..."
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                    />
+                    <button 
+                        onClick={handleAddTag}
+                        className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {globalTags.map(tag => (
+                        <span key={tag} className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full flex items-center gap-2">
+                            {tag}
+                            <button onClick={() => handleDeleteTag(tag)} className="text-slate-400 hover:text-red-500">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                    ))}
+                </div>
             </div>
         </div>
 
