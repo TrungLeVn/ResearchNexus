@@ -4,7 +4,8 @@ export enum ProjectStatus {
   ACTIVE = 'Active',
   REVIEW = 'Review',
   COMPLETED = 'Completed',
-  PAUSED = 'Paused'
+  PAUSED = 'Paused',
+  ARCHIVED = 'Archived'
 }
 
 export interface Paper {
@@ -104,5 +105,6 @@ export enum ViewState {
   DASHBOARD = 'dashboard',
   PROJECTS = 'projects',
   IDEAS = 'ideas',
-  CHAT = 'chat'
+  CHAT = 'chat',
+  SETTINGS = 'settings'
 }

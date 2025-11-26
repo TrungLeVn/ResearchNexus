@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Project, Paper, ProjectFile, Task, Collaborator, TaskStatus, ProjectActivity } from '../types';
-import { Folder, FileCode, FileText, Database, Sparkles, MoreVertical, Plus, ChevronLeft, BookOpen, Clock, HardDrive, ExternalLink, Kanban, Calendar as CalendarIcon, ListTodo, Users, Share2, GripVertical, CheckCircle2, Circle, LayoutDashboard, TrendingUp, AlertTriangle, Activity, MessageSquare, Link as LinkIcon, Copy, X } from 'lucide-react';
+import { Project, Paper, ProjectFile, Task, Collaborator, TaskStatus, ProjectActivity, ProjectStatus } from '../types';
+import { Folder, FileCode, FileText, Database, Sparkles, MoreVertical, Plus, ChevronLeft, BookOpen, Clock, HardDrive, ExternalLink, Kanban, Calendar as CalendarIcon, ListTodo, Users, Share2, GripVertical, CheckCircle2, Circle, LayoutDashboard, TrendingUp, AlertTriangle, Activity, MessageSquare, Link as LinkIcon, Copy, X, Archive, Trash2 } from 'lucide-react';
 import { summarizeText } from '../services/gemini';
 import ReactMarkdown from 'react-markdown';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
@@ -12,9 +12,11 @@ interface ProjectManagerProps {
   onUpdateProject: (p: Project) => void;
   onSelectProject: (p: Project | null) => void;
   selectedProject: Project | null;
+  onDeleteProject?: (id: string) => void;
+  onArchiveProject?: (id: string) => void;
 }
 
-export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpdateProject, selectedProject, onSelectProject }) => {
+export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpdateProject, selectedProject, onSelectProject, onDeleteProject, onArchiveProject }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'timeline' | 'calendar' | 'papers' | 'drafts' | 'data' | 'code' | 'assistant'>('dashboard');
   const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
 
@@ -29,6 +31,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
   // Share Modal State
   const [showShareModal, setShowShareModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  
+  // Menu State
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const handleGenerateSummary = async (paper: Paper) => {
     setSummaryLoading(paper.id);
@@ -767,7 +772,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
 
   // List View
   return (
-    <div className="p-6 max-w-7xl mx-auto animate-in fade-in duration-500">
+    <div className="p-6 max-w-7xl mx-auto animate-in fade-in duration-500" onClick={() => setMenuOpenId(null)}>
         <header className="flex justify-between items-center mb-8">
             <div>
                 <h1 className="text-2xl font-bold text-slate-800">Projects</h1>
@@ -783,11 +788,40 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                 <div 
                     key={project.id} 
                     onClick={() => onSelectProject(project)}
-                    className="group bg-white rounded-xl border border-slate-200 p-6 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all relative"
+                    className={`group bg-white rounded-xl border p-6 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all relative ${
+                        project.status === ProjectStatus.ARCHIVED ? 'border-slate-100 opacity-75 grayscale-[0.5]' : 'border-slate-200'
+                    }`}
                 >
-                    <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreVertical className="w-5 h-5 text-slate-400" />
+                    <div className="absolute top-6 right-6">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === project.id ? null : project.id); }}
+                            className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                            <MoreVertical className="w-5 h-5" />
+                        </button>
+                        
+                        {menuOpenId === project.id && (
+                            <div className="absolute right-0 top-8 bg-white rounded-lg shadow-xl border border-slate-100 py-1 z-20 w-40 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                {project.status !== ProjectStatus.ARCHIVED && onArchiveProject && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onArchiveProject(project.id); setMenuOpenId(null); }}
+                                        className="w-full text-left px-4 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                                    >
+                                        <Archive className="w-3.5 h-3.5" /> Archive Project
+                                    </button>
+                                )}
+                                {onDeleteProject && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); setMenuOpenId(null); }}
+                                        className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" /> Delete Project
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
+
                     <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${
                         project.status === 'Active' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-600'
                     }`}>
@@ -820,7 +854,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, onUpda
                                 <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" /> {project.papers.length}</span>
                                 <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {project.collaborators.length}</span>
                             </div>
-                            <span>Updated 2d ago</span>
+                            <span>
+                                {project.status === ProjectStatus.ARCHIVED ? 'Archived' : 'Updated 2d ago'}
+                            </span>
                         </div>
                     </div>
                 </div>

@@ -1,9 +1,8 @@
+
 import { Project, ProjectStatus, Idea, Reminder, Collaborator } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
-    { id: 'c1', name: 'Dr. Researcher', email: 'me@lab.edu', role: 'Owner', initials: 'DR' },
-    { id: 'c2', name: 'Alice Smith', email: 'alice@lab.edu', role: 'Editor', initials: 'AS' },
-    { id: 'c3', name: 'Bob Jones', email: 'bob@lab.edu', role: 'Viewer', initials: 'BJ' }
+    { id: 'c1', name: 'Assoc.Prof. Trung Le', email: 'trung.le@university.edu', role: 'Owner', initials: 'TL' }
 ];
 
 export const MOCK_PROJECTS: Project[] = [
@@ -16,14 +15,12 @@ export const MOCK_PROJECTS: Project[] = [
     tags: ['AI', 'Optimization', 'Deep Learning'],
     notes: 'Focusing on MobileNet variants.',
     collaborators: [
-        MOCK_USERS[0], // Dr. Researcher
-        MOCK_USERS[1], // Alice
-        MOCK_USERS[2]  // Bob
+        MOCK_USERS[0] // Only Owner
     ],
     tasks: [
         { id: 't1', title: 'Run benchmarks on ImageNet', status: 'in_progress', priority: 'high', dueDate: '2024-06-15', assigneeId: 'c1' },
-        { id: 't2', title: 'Draft methodology section', status: 'done', priority: 'medium', dueDate: '2024-05-20', assigneeId: 'c2' },
-        { id: 't3', title: 'Clean up code repository', status: 'todo', priority: 'low', dueDate: '2024-06-20', assigneeId: 'c3' }
+        { id: 't2', title: 'Draft methodology section', status: 'done', priority: 'medium', dueDate: '2024-05-20', assigneeId: 'c1' },
+        { id: 't3', title: 'Clean up code repository', status: 'todo', priority: 'low', dueDate: '2024-06-20', assigneeId: 'c1' }
     ],
     files: [
         { id: 'f1', name: 'Experiment Logs v1', type: 'data', lastModified: '2024-05-10', url: 'https://drive.google.com/...' },
@@ -49,9 +46,9 @@ export const MOCK_PROJECTS: Project[] = [
       }
     ],
     activity: [
-        { id: 'a1', message: 'Alice Smith uploaded "Experiment Logs v1"', time: '2 hours ago' },
-        { id: 'a2', message: 'Dr. Researcher commented on "Methodology"', time: '5 hours ago' },
-        { id: 'a3', message: 'Bob Jones completed task "Review Code"', time: 'Yesterday' }
+        { id: 'a1', message: 'Project initialized', time: '1 month ago' },
+        { id: 'a2', message: 'Experiment logs uploaded', time: '2 weeks ago' },
+        { id: 'a3', message: 'Methodology draft completed', time: '1 week ago' }
     ]
   },
   {
@@ -63,7 +60,7 @@ export const MOCK_PROJECTS: Project[] = [
     tags: ['Climate', 'Agriculture', 'Statistics'],
     notes: '',
     collaborators: [
-        MOCK_USERS[0] // Only Dr. Researcher
+        MOCK_USERS[0]
     ],
     tasks: [
         { id: 't4', title: 'Literature review on wheat yields', status: 'in_progress', priority: 'medium', dueDate: '2024-07-01', assigneeId: 'c1' },
@@ -84,8 +81,7 @@ export const MOCK_PROJECTS: Project[] = [
     tags: ['Quantum Physics', 'Cryptography'],
     notes: '',
     collaborators: [
-        MOCK_USERS[0], // Dr. Researcher
-        { id: 'c4', name: 'Dr. Quantum', email: 'q@university.edu', role: 'Editor', initials: 'DQ' }
+        MOCK_USERS[0]
     ],
     tasks: [],
     files: [],

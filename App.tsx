@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewState, Project, Idea, Reminder, Collaborator } from './types';
+import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus } from './types';
 import { MOCK_PROJECTS, MOCK_IDEAS, MOCK_REMINDERS, MOCK_USERS } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { ProjectManager } from './components/ProjectManager';
 import { IdeaLab } from './components/IdeaLab';
 import { AIChat } from './components/AIChat';
 import { LoginScreen } from './components/LoginScreen';
+import { SettingsPage } from './components/SettingsPage';
 import { LayoutDashboard, FolderKanban, Lightbulb, MessageSquareText, Beaker, Settings, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -87,6 +88,19 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteProject = (projectId: string) => {
+      if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+          setProjects(prev => prev.filter(p => p.id !== projectId));
+          if (selectedProject?.id === projectId) setSelectedProject(null);
+      }
+  };
+
+  const handleArchiveProject = (projectId: string) => {
+      setProjects(prev => prev.map(p => 
+          p.id === projectId ? { ...p, status: ProjectStatus.ARCHIVED } : p
+      ));
+  };
+
   const handleUpdateIdea = (updatedIdea: Idea) => {
       setIdeas(prev => prev.map(i => i.id === updatedIdea.id ? updatedIdea : i));
   };
@@ -107,6 +121,11 @@ const App: React.FC = () => {
       setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
   };
 
+  // Callback to update local user state when changed in Settings
+  const handleUpdateUser = (updatedUser: Collaborator) => {
+      setCurrentUser(prev => prev ? ({ ...prev, ...updatedUser }) : null);
+  }
+
   const renderContent = () => {
     switch (currentView) {
       case ViewState.DASHBOARD:
@@ -125,6 +144,8 @@ const App: React.FC = () => {
             selectedProject={selectedProject}
             onSelectProject={setSelectedProject}
             onUpdateProject={handleUpdateProject}
+            onDeleteProject={handleDeleteProject}
+            onArchiveProject={handleArchiveProject}
           />
         );
       case ViewState.IDEAS:
@@ -141,6 +162,13 @@ const App: React.FC = () => {
             <div className="p-6 h-full flex flex-col justify-center">
                 <AIChat project={null} />
             </div>
+        );
+      case ViewState.SETTINGS:
+        return (
+            <SettingsPage 
+                currentUser={currentUser} 
+                onUpdateUser={handleUpdateUser} 
+            />
         );
       default:
         return (
@@ -193,7 +221,13 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-100 space-y-2 relative">
-            <button className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition-colors">
+            <button 
+                onClick={() => {
+                    setCurrentView(ViewState.SETTINGS);
+                    setSelectedProject(null);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${currentView === ViewState.SETTINGS ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            >
                 <Settings className="w-5 h-5" />
                 <span className="text-sm font-medium">Settings</span>
             </button>
