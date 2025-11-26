@@ -10,7 +10,7 @@ import {
   getDoc,
   updateDoc
 } from "firebase/firestore";
-import { Project, Idea, Reminder, Collaborator } from "../types";
+import { Project, Idea, Reminder, Collaborator, SystemSettings } from "../types";
 
 // Helper to check if env vars exist
 const isFirebaseConfigured = () => {
@@ -85,6 +85,19 @@ export const subscribeToReminders = (callback: (reminders: Reminder[]) => void) 
   return unsubscribe;
 };
 
+export const subscribeToSystemSettings = (callback: (settings: SystemSettings | null) => void) => {
+    if (!db) return () => {};
+    // We use a single document 'global_config' in a 'settings' collection
+    const unsubscribe = onSnapshot(doc(db, "settings", "global_config"), (docSnap) => {
+        if (docSnap.exists()) {
+            callback(docSnap.data() as SystemSettings);
+        } else {
+            callback(null);
+        }
+    });
+    return unsubscribe;
+};
+
 // --- WRITE FUNCTIONS ---
 
 export const saveProject = async (project: Project) => {
@@ -115,6 +128,11 @@ export const saveReminder = async (reminder: Reminder) => {
 export const deleteReminder = async (reminderId: string) => {
   if (!db) return;
   await deleteDoc(doc(db, "reminders", reminderId));
+};
+
+export const saveSystemSettings = async (settings: SystemSettings) => {
+    if (!db) return;
+    await setDoc(doc(db, "settings", "global_config"), settings);
 };
 
 // --- COLLABORATION ---

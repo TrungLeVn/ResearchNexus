@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppModule, AdminViewState } from './types';
+import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppModule, AdminViewState, SystemSettings } from './types';
 import { MOCK_USERS } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { ProjectManager } from './components/ProjectManager';
@@ -16,12 +16,14 @@ import {
   subscribeToProjects, 
   subscribeToIdeas, 
   subscribeToReminders, 
+  subscribeToSystemSettings,
   saveProject, 
   deleteProject, 
   saveIdea, 
   deleteIdea, 
   saveReminder, 
-  deleteReminder 
+  deleteReminder,
+  saveSystemSettings
 } from './services/firebase';
 import { 
   GraduationCap, 
@@ -43,31 +45,26 @@ const App: React.FC = () => {
   const params = new URLSearchParams(window.location.search);
   const initialPid = params.get('pid');
 
+  // --- GLOBAL SETTINGS STATE (Firebase) ---
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
+      id: 'global_config',
+      adminCode: '141089',
+      ownerProfile: MOCK_USERS[0]
+  });
+
   // --- SECURITY LOCK STATE ---
-  // Correctly initialize admin code and lock state
-  const [adminCode, setAdminCode] = useState(() => {
-      const stored = localStorage.getItem('rn_admin_code');
-      // If stored is null, it means first time visit -> Default Code
-      // If stored is empty string "" -> It means user cleared it -> Empty Code
-      return stored !== null ? stored : '141089';
-  });
-
-  const [isLocked, setIsLocked] = useState(() => {
-      const stored = localStorage.getItem('rn_admin_code');
-      // If explicit empty string, unlock.
-      if (stored === '') return false;
-      // Otherwise (default or custom code), lock.
-      return true;
-  });
-
+  // Default to Locked if code is not empty, but we wait for Firebase to confirm the code
+  const [isLocked, setIsLocked] = useState(true);
   const [inputCode, setInputCode] = useState('');
   const [unlockError, setUnlockError] = useState(false);
 
   // User Session
   const [currentUser, setCurrentUser] = useState<Collaborator | null>(() => {
+    // Only use localStorage for temporary session persistence during refresh, 
+    // but source of truth is Firebase for profile data
     if (initialPid) return null;
     const saved = localStorage.getItem('rn_user');
-    return saved ? JSON.parse(saved) : MOCK_USERS[0];
+    return saved ? JSON.parse(saved) : null; 
   });
   
   // Navigation State
@@ -100,13 +97,45 @@ const App: React.FC = () => {
 
     const unsubIdeas = subscribeToIdeas(setIdeas);
     const unsubReminders = subscribeToReminders(setReminders);
+    
+    // Subscribe to Global Settings (Admin Code & Owner Profile)
+    const unsubSettings = subscribeToSystemSettings((settings) => {
+        if (settings) {
+            setSystemSettings(settings);
+            
+            // If the current user is the Owner, keep their profile in sync with Firebase settings
+            if (currentUser && currentUser.role === 'Owner') {
+                // Only update if there are changes to avoid loop
+                if (currentUser.name !== settings.ownerProfile.name || 
+                    currentUser.email !== settings.ownerProfile.email) {
+                    const updatedOwner = { ...currentUser, ...settings.ownerProfile };
+                    setCurrentUser(updatedOwner);
+                    localStorage.setItem('rn_user', JSON.stringify(updatedOwner));
+                }
+            }
+            
+            // Auto-unlock if code is empty
+            if (settings.adminCode === '') {
+                setIsLocked(false);
+            }
+        } else {
+            // First time init? Create default settings in DB
+             const defaultSettings: SystemSettings = {
+                id: 'global_config',
+                adminCode: '141089',
+                ownerProfile: MOCK_USERS[0]
+            };
+            saveSystemSettings(defaultSettings);
+        }
+    });
 
     return () => {
       unsubProjects();
       unsubIdeas();
       unsubReminders();
+      unsubSettings();
     };
-  }, [selectedProject?.id]);
+  }, [selectedProject?.id]); // Note: removing currentUser dependency to avoid loop
 
   useEffect(() => {
     if (currentUser && currentUser.role !== 'Guest') {
@@ -117,19 +146,15 @@ const App: React.FC = () => {
   useEffect(() => {
       if (initialPid) {
           setInviteProjectId(initialPid);
+          // Invites bypass the main lock to let guests see the project
+          setIsLocked(false);
       }
   }, [initialPid]);
 
-  // Watch for admin code changes to update lock state immediately
-  useEffect(() => {
-      if (adminCode === '') {
-          setIsLocked(false);
-      }
-  }, [adminCode]);
-
   const handleUnlock = (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (inputCode === adminCode) {
+      // Compare against the code from Firebase
+      if (inputCode === systemSettings.adminCode) {
           setIsLocked(false);
           setUnlockError(false);
       } else {
@@ -139,14 +164,35 @@ const App: React.FC = () => {
   };
 
   const handleUpdateAdminCode = (newCode: string) => {
-      setAdminCode(newCode);
-      localStorage.setItem('rn_admin_code', newCode);
-      // If code is cleared, immediately unlock
+      // Save to Firebase
+      const newSettings = { ...systemSettings, adminCode: newCode };
+      setSystemSettings(newSettings); // Optimistic update
+      saveSystemSettings(newSettings);
+      
       if (newCode === '') setIsLocked(false);
   };
 
+  const handleUpdateUser = (updatedUser: Collaborator) => {
+      // If updating the Owner, sync to global settings in Firebase
+      if (updatedUser.role === 'Owner') {
+          const newSettings = { ...systemSettings, ownerProfile: updatedUser };
+          setSystemSettings(newSettings); // Optimistic
+          saveSystemSettings(newSettings);
+      }
+      
+      setCurrentUser(updatedUser);
+  };
+
   const handleLogin = (user: Collaborator) => {
-      setCurrentUser(user);
+      if (user.role === 'Owner') {
+          // When logging in as owner, prioritize the profile from Firebase settings
+          // This ensures if name/email changed on another device, it reflects here
+          const ownerFromDb = systemSettings.ownerProfile;
+          setCurrentUser(ownerFromDb);
+      } else {
+          setCurrentUser(user);
+      }
+
       if (inviteProjectId && user.role === 'Guest') {
           const invitedProject = projects.find(p => p.id === inviteProjectId);
           if (invitedProject) {
@@ -248,7 +294,6 @@ const App: React.FC = () => {
       if (r) saveReminder({ ...r, completed: !r.completed });
   };
   const handleDeleteReminder = (id: string) => deleteReminder(id);
-  const handleUpdateUser = (updatedUser: Collaborator) => setCurrentUser(prev => prev ? ({ ...prev, ...updatedUser }) : null);
 
   // --- RENDER LOGIC ---
 
@@ -302,7 +347,7 @@ const App: React.FC = () => {
            return <SettingsPage 
                     currentUser={currentUser} 
                     onUpdateUser={handleUpdateUser}
-                    currentAdminCode={adminCode}
+                    currentAdminCode={systemSettings.adminCode} // Pass code from Firebase
                     onUpdateAdminCode={handleUpdateAdminCode}
                   />;
       }

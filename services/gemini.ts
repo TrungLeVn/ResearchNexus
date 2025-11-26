@@ -1,4 +1,6 @@
 
+
+
 import { GoogleGenAI, Chat } from "@google/genai";
 import { Project, Idea, Reminder } from "../types";
 
@@ -272,6 +274,34 @@ export const suggestPersonalPlan = async (goals: string[]): Promise<{ title: str
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { return []; }
+}
+
+/**
+ * Generates specific milestones for a single personal goal.
+ */
+export const generateGoalMilestones = async (goal: string, target: string): Promise<string[]> => {
+    try {
+        const ai = getGenAI();
+        const prompt = `
+        I want to achieve the following personal goal: "${goal}".
+        My specific target/metric is: "${target}".
+        
+        Please generate 5-7 concrete, actionable milestones or steps to achieve this.
+        
+        Return STRICTLY as a JSON array of strings.
+        Example: ["Buy running shoes", "Run 5km without stopping", "Register for race"]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        return JSON.parse(response.text || '[]');
+    } catch (error) { 
+        console.error("Gemini Goal Plan Error:", error);
+        return ["Define start date", "Track first week progress", "Review mid-term results"]; 
+    }
 }
 
 /**

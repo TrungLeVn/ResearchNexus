@@ -1,4 +1,5 @@
 
+
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -181,12 +182,35 @@ export interface AdminTask {
     category: 'Department' | 'Paperwork' | 'Committee';
 }
 
+// --- PERSONAL GROWTH TYPES ---
+
+export interface GoalMilestone {
+    id: string;
+    title: string;
+    completed: boolean;
+}
+
+export interface GoalLog {
+    id: string;
+    date: string;
+    content: string;
+}
+
 export interface PersonalGoal {
     id: string;
     title: string;
     category: 'Fitness' | 'Learning' | 'Hobby';
     progress: number;
     target: string;
+    milestones: GoalMilestone[];
+    logs: GoalLog[];
+}
+
+export interface Habit {
+    id: string;
+    title: string;
+    streak: number;
+    history: string[]; // ISO Date Strings (YYYY-MM-DD) of completed days
 }
 
 export interface MeetingNote {
@@ -205,4 +229,11 @@ export interface AcademicYearDoc {
     year: string; // e.g. "2023-2024"
     url: string;
     category: 'Report' | 'Regulation' | 'Form' | 'Meeting';
+}
+
+// --- SYSTEM SETTINGS (Synced via Firebase) ---
+export interface SystemSettings {
+    id: string; // Fixed ID, e.g., 'global_config'
+    adminCode: string;
+    ownerProfile: Collaborator;
 }
