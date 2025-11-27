@@ -10,11 +10,13 @@ import {
   getDoc,
   updateDoc
 } from "firebase/firestore";
+// NEW: Import Firebase Functions SDK
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { Project, Idea, Reminder, Collaborator, SystemSettings, PersonalGoal, Habit, Course, JournalEntry, AcademicYearDoc } from "../types";
 
 // Helper to check if env vars exist
 const isFirebaseConfigured = () => {
-  // Check process.env which is polyfilled in vite.config.ts
+  // Check process.env which is polyfilled by vite.config.ts
   const hasKey = !!process.env.VITE_FIREBASE_API_KEY;
   if (!hasKey) {
       console.warn("Firebase Not Configured. Missing VITE_FIREBASE_API_KEY.");
@@ -37,10 +39,13 @@ const firebaseConfig = {
 
 // Initialize Firebase only if config is present
 let db: any = null;
+let functions: any = null; // NEW: Functions instance
+
 if (isFirebaseConfigured()) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    functions = getFunctions(app); // NEW: Initialize Functions
     console.log("Firebase initialized successfully");
   } catch (error) {
     console.error("Firebase Initialization Error:", error);
@@ -288,4 +293,31 @@ export const removeCollaboratorFromProject = async (projectId: string, collabora
     console.error("Error removing collaborator:", error);
     throw error;
   }
+};
+
+// --- EMAIL NOTIFICATIONS (via Cloud Function) ---
+
+interface EmailData {
+    toEmail: string;
+    toName: string;
+    taskTitle: string;
+    projectName: string;
+    assignedBy: string;
+}
+
+export const sendTaskNotificationEmail = async (data: EmailData) => {
+    if (!functions) {
+        console.error("Firebase Functions not initialized.");
+        return;
+    }
+
+    try {
+        const sendEmail = httpsCallable(functions, 'sendTaskNotificationEmail');
+        const result = await sendEmail(data);
+        console.log("Cloud Function called successfully:", result);
+        return result;
+    } catch (error) {
+        console.error("Error calling cloud function:", error);
+        throw error;
+    }
 };

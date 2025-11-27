@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile, ProjectActivity } from '../types';
 import { 
@@ -10,6 +9,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import { AIChat } from './AIChat';
 import { generateProjectBriefing } from '../services/gemini';
+import { sendTaskNotificationEmail } from '../services/firebase'; // Import the new email service
 
 interface ProjectDetailProps {
   project: Project;
@@ -492,11 +492,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [showShareModal, setShowShareModal] = useState(false);
     const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
     
-    // Task Modals State
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [addingTaskForStatus, setAddingTaskForStatus] = useState<TaskStatus | null>(null);
 
-    // State for new Files forms
     const [showAddDraft, setShowAddDraft] = useState(false);
     const [newDraft, setNewDraft] = useState({ name: '', url: '' });
     const [showAddCodeData, setShowAddCodeData] = useState(false);
@@ -504,12 +502,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [showAddOther, setShowAddOther] = useState(false);
     const [newOther, setNewOther] = useState({ name: '', url: '', type: 'slide' as 'slide' | 'document' | 'other' });
 
-    // State for Sticky Notes Board
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
     
-    // State for AI Briefing
     const [briefing, setBriefing] = useState<string>('');
     const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
+    
+    const [notification, setNotification] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+
+    const showNotification = (message: string) => {
+        setNotification({ message, visible: true });
+        setTimeout(() => {
+            setNotification({ message: '', visible: false });
+        }, 4000);
+    };
 
 
     // --- ACTIVITY LOGGING ---
@@ -552,6 +557,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         onUpdateProject(projectWithActivity);
     };
 
+    const triggerEmailNotification = (task: Task, addedAssigneeIds: string[]) => {
+        addedAssigneeIds.forEach(id => {
+            const assignee = project.collaborators.find(c => c.id === id);
+            if (assignee) {
+                sendTaskNotificationEmail({
+                    toEmail: assignee.email,
+                    toName: assignee.name,
+                    taskTitle: task.title,
+                    projectName: project.title,
+                    assignedBy: currentUser.name,
+                }).then(() => {
+                    showNotification(`An email notification was sent to ${assignee.name}.`);
+                }).catch(error => {
+                    console.error("Email send failed:", error);
+                    showNotification(`Failed to send email to ${assignee.name}.`);
+                });
+            }
+        });
+    };
+
     const handleUpdateSingleTask = (updatedTask: Task) => {
         const oldTask = project.tasks.find(t => t.id === updatedTask.id);
         let projectToUpdate = { ...project };
@@ -566,6 +591,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             projectToUpdate = logActivity(projectToUpdate, message);
         }
 
+        const oldAssignees = new Set(oldTask?.assigneeIds || []);
+        const addedAssigneeIds = (updatedTask.assigneeIds || []).filter(id => !oldAssignees.has(id));
+
+        if (addedAssigneeIds.length > 0) {
+            triggerEmailNotification(updatedTask, addedAssigneeIds);
+        }
+
         const updatedTasks = project.tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
         onUpdateProject({ ...projectToUpdate, tasks: updatedTasks });
     };
@@ -576,6 +608,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         const projectWithActivity = logActivity(projectWithNewTask, message);
         onUpdateProject(projectWithActivity);
         setAddingTaskForStatus(null);
+        
+        if (newTask.assigneeIds && newTask.assigneeIds.length > 0) {
+            triggerEmailNotification(newTask, newTask.assigneeIds);
+        }
     };
 
     const handleDeleteTask = (taskId: string) => {
@@ -1010,6 +1046,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
     return (
         <div className="h-full flex flex-col overflow-hidden animate-in fade-in duration-300 relative bg-slate-50">
+            {notification.visible && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-white shadow-lg rounded-full border border-slate-200 px-4 py-2 flex items-center gap-2 text-sm font-medium text-slate-700 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <Mail className="w-4 h-4 text-indigo-500" />
+                    <span>{notification.message}</span>
+                </div>
+            )}
             {showShareModal && <ShareModal project={project} currentUser={currentUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} />}
             {renderExpandedNoteModal()}
             {selectedTask && (
@@ -1045,7 +1087,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 >
                                     {project.status} <ChevronDown className="w-3 h-3"/>
                                 </button>
-                                {statusDropdownOpen && (
+                                {statusDropdownOpen && !isGuestView && (
                                     <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-20 w-32">
                                         {Object.values(ProjectStatus).map(s => (
                                             <button 
