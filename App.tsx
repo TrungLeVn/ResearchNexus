@@ -38,7 +38,8 @@ import {
   Lock,
   KeyRound,
   ArrowRight,
-  Bot
+  Bot,
+  Loader2
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -93,6 +94,13 @@ const App: React.FC = () => {
         const fresh = data.find(p => p.id === selectedProject.id);
         if (fresh) setSelectedProject(fresh);
       }
+      // If a guest has logged in via invite, find and set their project once it loads
+      if (inviteProjectId && currentUser?.role === 'Guest' && !selectedProject) {
+        const invitedProject = data.find(p => p.id === inviteProjectId);
+        if (invitedProject) {
+            setSelectedProject(invitedProject);
+        }
+      }
     });
 
     const unsubIdeas = subscribeToIdeas(setIdeas);
@@ -135,7 +143,7 @@ const App: React.FC = () => {
       unsubReminders();
       unsubSettings();
     };
-  }, [selectedProject?.id]); // Note: removing currentUser dependency to avoid loop
+  }, [selectedProject?.id, inviteProjectId, currentUser?.role]);
 
   useEffect(() => {
     if (currentUser && currentUser.role !== 'Guest') {
@@ -197,8 +205,6 @@ const App: React.FC = () => {
           const invitedProject = projects.find(p => p.id === inviteProjectId);
           if (invitedProject) {
               setSelectedProject(invitedProject);
-              setActiveModule(AppModule.RESEARCH);
-              setCurrentResearchView(ViewState.PROJECTS);
           }
       }
   };
@@ -207,6 +213,36 @@ const App: React.FC = () => {
       localStorage.removeItem('rn_user');
       window.location.href = window.location.origin;
   };
+
+  // --- CRUD HANDLERS ---
+  const handleUpdateProject = (updatedProject: Project) => {
+    saveProject(updatedProject);
+    if (selectedProject?.id === updatedProject.id) setSelectedProject(updatedProject);
+  };
+
+  const handleAddProject = (newProject: Project) => saveProject(newProject);
+  
+  const handleDeleteProject = (projectId: string) => {
+      if (window.confirm("Are you sure you want to delete this project?")) {
+          deleteProject(projectId);
+          if (selectedProject?.id === projectId) setSelectedProject(null);
+      }
+  };
+
+  const handleArchiveProject = (projectId: string) => {
+      const project = projects.find(p => p.id === projectId);
+      if (project) saveProject({ ...project, status: ProjectStatus.ARCHIVED });
+  };
+
+  const handleUpdateIdea = (updatedIdea: Idea) => saveIdea(updatedIdea);
+  const handleDeleteIdea = (id: string) => deleteIdea(id);
+  const handleAddIdea = (newIdea: Idea) => saveIdea(newIdea);
+  const handleAddReminder = (newReminder: Reminder) => saveReminder(newReminder);
+  const handleToggleReminder = (id: string) => {
+      const r = reminders.find(rem => rem.id === id);
+      if (r) saveReminder({ ...r, completed: !r.completed });
+  };
+  const handleDeleteReminder = (id: string) => deleteReminder(id);
 
   // --- RENDER LOCK SCREEN ---
   if (isLocked) {
@@ -248,52 +284,65 @@ const App: React.FC = () => {
   if (!currentUser) {
       return <LoginScreen onLogin={handleLogin} inviteProjectId={inviteProjectId} />;
   }
-
-  // Filter Data
-  const visibleProjects = currentUser.role === 'Guest' 
-      ? projects.filter(p => p.id === inviteProjectId) 
-      : projects;
-
-  // Separate Research Projects (default) from Admin Projects
-  const researchProjects = visibleProjects.filter(p => p.category === 'research' || !p.category);
-  const adminProjects = visibleProjects.filter(p => p.category === 'admin');
-
-  const visibleReminders = reminders.filter(reminder => {
-    if (reminder.projectId) {
-      return visibleProjects.some(p => p.id === reminder.projectId);
-    }
-    return currentUser.role === 'Owner'; 
-  });
-
-  // --- CRUD HANDLERS ---
-  const handleUpdateProject = (updatedProject: Project) => {
-    saveProject(updatedProject);
-    if (selectedProject?.id === updatedProject.id) setSelectedProject(updatedProject);
-  };
-
-  const handleAddProject = (newProject: Project) => saveProject(newProject);
   
-  const handleDeleteProject = (projectId: string) => {
-      if (window.confirm("Are you sure you want to delete this project?")) {
-          deleteProject(projectId);
-          if (selectedProject?.id === projectId) setSelectedProject(null);
-      }
-  };
+  // --- GUEST VIEW RENDER ---
+  if (currentUser.role === 'Guest') {
+    if (!selectedProject) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-6 font-sans">
+                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
+                <p className="text-slate-600">Loading project...</p>
+                <p className="text-xs text-slate-400 mt-2">If this takes too long, the project may not exist or you may not have access.</p>
+            </div>
+        );
+    }
 
-  const handleArchiveProject = (projectId: string) => {
-      const project = projects.find(p => p.id === projectId);
-      if (project) saveProject({ ...project, status: ProjectStatus.ARCHIVED });
-  };
+    return (
+        <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+            <header className="bg-white border-b border-slate-200 p-4 flex justify-between items-center flex-shrink-0 z-10 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                        <GraduationCap className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-bold tracking-tight text-slate-900">ResearchNexus</h1>
+                        <p className="text-xs text-slate-500 font-medium">Guest Collaboration</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="text-right">
+                        <p className="text-sm font-medium text-slate-800">{currentUser.name}</p>
+                        <p className="text-xs text-slate-500">Viewing: {selectedProject.title}</p>
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                    >
+                        <LogOut className="w-5 h-5" />
+                        <span className="font-medium">Sign Out</span>
+                    </button>
+                </div>
+            </header>
+            <main className="flex-1 overflow-hidden">
+                <ProjectManager
+                    isGuestView={true}
+                    projects={[selectedProject]}
+                    selectedProject={selectedProject}
+                    currentUser={currentUser}
+                    onSelectProject={() => {}} // Guests can't navigate away
+                    onUpdateProject={handleUpdateProject}
+                    onDeleteProject={() => alert("Guests do not have permission to delete projects.")}
+                    onArchiveProject={() => alert("Guests do not have permission to archive projects.")}
+                    onAddProject={() => alert("Guests do not have permission to add projects.")}
+                />
+            </main>
+        </div>
+    );
+  }
 
-  const handleUpdateIdea = (updatedIdea: Idea) => saveIdea(updatedIdea);
-  const handleDeleteIdea = (id: string) => deleteIdea(id);
-  const handleAddIdea = (newIdea: Idea) => saveIdea(newIdea);
-  const handleAddReminder = (newReminder: Reminder) => saveReminder(newReminder);
-  const handleToggleReminder = (id: string) => {
-      const r = reminders.find(rem => rem.id === id);
-      if (r) saveReminder({ ...r, completed: !r.completed });
-  };
-  const handleDeleteReminder = (id: string) => deleteReminder(id);
+  // Filter Data for Owner
+  const researchProjects = projects.filter(p => p.category === 'research' || !p.category);
+  const adminProjects = projects.filter(p => p.category === 'admin');
 
   // --- RENDER LOGIC ---
 
@@ -303,7 +352,7 @@ const App: React.FC = () => {
               return (
                   <Dashboard 
                       projects={researchProjects} 
-                      reminders={visibleReminders}
+                      reminders={reminders}
                       onAddReminder={handleAddReminder}
                       onToggleReminder={handleToggleReminder}
                       onDeleteReminder={handleDeleteReminder}
