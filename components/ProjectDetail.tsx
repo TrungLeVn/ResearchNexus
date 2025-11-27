@@ -702,19 +702,37 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             case 'team':
                  return (
                     <div className="p-6">
-                         <div className="flex justify-between items-center mb-6">
+                        <div className="flex justify-between items-center mb-6">
                             <h3 className="font-semibold text-slate-700 text-lg">Team Members</h3>
                             {!isGuestView && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
-                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                             {project.collaborators.map(c => (<div key={c.id} className="flex items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">{c.initials}</div>
-                                <div><p className="font-medium text-slate-800 truncate">{c.name}</p><p className="text-xs text-slate-500 truncate">{c.email}</p></div>
-                                <span className="ml-auto text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-600">{c.role}</span>
-                             </div>))}
-                         </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {project.collaborators.map(c => (
+                                <div key={c.id} className="relative group bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 shrink-0">{c.initials}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-slate-800 truncate">{c.name}</p>
+                                        <p className="text-xs text-slate-500 truncate">{c.email}</p>
+                                    </div>
+                                    <span className="ml-auto text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-600 shrink-0">{c.role}</span>
+                                    
+                                    {!isGuestView && currentUser.role === 'Owner' && c.role !== 'Owner' && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveCollaborator(c.id);
+                                            }}
+                                            className="absolute top-2 right-2 p-1.5 bg-white/70 backdrop-blur-sm rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                                            title="Remove Member"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                 );
+                );
             case 'ai':
                 return <div className="p-6 h-full overflow-hidden"><AIChat project={project} /></div>;
             default: return null;
