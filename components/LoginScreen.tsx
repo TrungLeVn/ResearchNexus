@@ -1,9 +1,7 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Collaborator } from '../types';
 import { MOCK_USERS } from '../constants';
-import { Beaker, Users, ArrowLeft, Mail, Loader2 } from 'lucide-react';
+import { Beaker, Users, ArrowLeft, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { addCollaboratorToProject } from '../services/firebase';
 
 interface LoginScreenProps {
@@ -15,6 +13,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [returningGuest, setReturningGuest] = useState<Collaborator | null>(null);
 
   useEffect(() => {
@@ -34,8 +33,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
     }
   }, [inviteProjectId]);
 
+  const validateEmail = (email: string) => {
+      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return re.test(email);
+  };
+
   const handleGuestJoin = async () => {
-      if (!guestName.trim() || !guestEmail.trim()) return;
+      setEmailError('');
+      
+      if (!guestName.trim()) return;
+      if (!guestEmail.trim()) {
+          setEmailError('Email is required');
+          return;
+      }
+      if (!validateEmail(guestEmail)) {
+          setEmailError('Please enter a valid email address (e.g., name@university.edu)');
+          return;
+      }
       
       setIsLoading(true);
 
@@ -70,6 +84,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
   const handleSwitchGuestAccount = () => {
       localStorage.removeItem('rn_guest_user');
       setReturningGuest(null);
+      setGuestName('');
+      setGuestEmail('');
   };
 
   const handleOwnerEntry = () => {
@@ -123,7 +139,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
                       <div>
                           <h3 className="text-sm font-semibold text-indigo-900">Join as Guest</h3>
                           <p className="text-xs text-indigo-700 mt-1">
-                              Enter your details to collaborate. Your name will appear in task assignments.
+                              Enter your details to collaborate. You will receive email notifications for assigned tasks.
                           </p>
                       </div>
                   </div>
@@ -143,12 +159,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
                     <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Email Address</label>
                     <input 
                         type="email"
-                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                        className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:border-transparent outline-none ${emailError ? 'border-red-300 ring-red-100 focus:ring-red-200' : 'border-slate-300 focus:ring-indigo-500'}`}
                         placeholder="name@university.edu"
                         value={guestEmail}
-                        onChange={e => setGuestEmail(e.target.value)}
+                        onChange={e => {
+                            setGuestEmail(e.target.value);
+                            if (emailError) setEmailError('');
+                        }}
                         onKeyDown={e => e.key === 'Enter' && handleGuestJoin()}
                     />
+                    {emailError && (
+                        <div className="flex items-center gap-1 text-red-500 text-xs mt-1 ml-1">
+                            <AlertCircle className="w-3 h-3" />
+                            <span>{emailError}</span>
+                        </div>
+                    )}
                   </div>
 
                   <button

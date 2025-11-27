@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
-import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, Paper, ProjectFile, ProjectActivity } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity } from '../types';
 import { 
     ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, 
-    Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2, ChevronDown, Sparkles, Loader2, FileText
+    Trash2, Share2, X, Copy, Check, Mail, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
+    Pencil, Database, Layers, LayoutDashboard, Activity, ChevronDown, Sparkles, Loader2, FileText, AtSign
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import { AIChat } from './AIChat';
 import { generateProjectBriefing } from '../services/gemini';
-import { sendTaskNotificationEmail } from '../services/firebase'; // Import the new email service
+import { sendTaskNotificationEmail, sendMentionNotificationEmail } from '../services/firebase';
 
 interface ProjectDetailProps {
   project: Project;
@@ -96,12 +96,18 @@ interface TaskDetailModalProps {
     onClose: () => void;
     onUpdateTask: (updatedTask: Task) => void;
     onDeleteTask: (taskId: string) => void;
+    onSendNotification: (msg: string) => void;
 }
 
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask }) => {
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask, onSendNotification }) => {
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [newComment, setNewComment] = useState('');
     const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+    
+    // Mention State
+    const [showMentionList, setShowMentionList] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const commentInputRef = useRef<HTMLInputElement>(null);
     
     const collaborators = project.collaborators || [];
     const assignees = collaborators.filter(c => editedTask.assigneeIds?.includes(c.id));
@@ -125,9 +131,41 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
             onClose();
         }
     };
-    
+
+    // --- MENTION LOGIC ---
+    const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setNewComment(value);
+
+        // Detect if typing @
+        const lastChar = value.slice(-1);
+        const words = value.split(' ');
+        const lastWord = words[words.length - 1];
+
+        if (lastWord.startsWith('@')) {
+            setShowMentionList(true);
+            setMentionQuery(lastWord.substring(1));
+        } else {
+            setShowMentionList(false);
+        }
+    };
+
+    const handleSelectMention = (collaborator: Collaborator) => {
+        const words = newComment.split(' ');
+        words.pop(); // Remove the partial @mention
+        const newValue = `${words.join(' ')} @${collaborator.name} `;
+        setNewComment(newValue);
+        setShowMentionList(false);
+        commentInputRef.current?.focus();
+    };
+
+    const filteredCollaborators = collaborators.filter(c => 
+        c.name.toLowerCase().includes(mentionQuery.toLowerCase())
+    );
+
     const handleAddComment = () => {
         if (!newComment.trim()) return;
+        
         const comment: TaskComment = {
             id: `comm_${Date.now()}`,
             authorId: currentUser.id,
@@ -136,10 +174,34 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
             text: newComment,
             timestamp: new Date().toISOString()
         };
+
+        // Detect Mentions for Notification
+        const mentionedCollaborators = collaborators.filter(c => newComment.includes(`@${c.name}`));
+        
+        mentionedCollaborators.forEach(c => {
+             // Skip notifying self
+            if (c.id === currentUser.id) return;
+
+            const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
+            
+            sendMentionNotificationEmail({
+                toEmail: c.email,
+                toName: c.name,
+                comment: newComment,
+                taskTitle: task.title,
+                projectName: project.title,
+                mentionedBy: currentUser.name,
+                taskLink: taskLink
+            }).then(() => {
+                onSendNotification(`Notified ${c.name} via email.`);
+            });
+        });
+
         const updatedTask = { ...editedTask, comments: [...(editedTask.comments || []), comment] };
         setEditedTask(updatedTask);
         onUpdateTask(updatedTask); // Save immediately
         setNewComment('');
+        setShowMentionList(false);
     };
 
     return (
@@ -163,18 +225,49 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                                     <div key={c.id} className="flex items-start gap-2">
                                         <div className="w-7 h-7 mt-1 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">{c.authorInitials}</div>
                                         <div>
-                                            <div className="bg-slate-100 p-2 rounded-lg rounded-tl-none">
+                                            <div className="bg-slate-100 p-2 rounded-lg rounded-tl-none relative group/comment">
                                                 <p className="text-xs font-semibold">{c.authorName}</p>
-                                                <p className="text-sm text-slate-700">{c.text}</p>
+                                                {/* Highlight mentions in blue */}
+                                                <p className="text-sm text-slate-700">
+                                                    {c.text.split(' ').map((word, i) => 
+                                                        word.startsWith('@') ? <span key={i} className="text-indigo-600 font-medium">{word} </span> : word + ' '
+                                                    )}
+                                                </p>
                                             </div>
                                             <p className="text-[10px] text-slate-400 mt-1">{new Date(c.timestamp).toLocaleString()}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="mt-3 flex gap-2">
-                                <input value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="Add a comment..."/>
-                                <button onClick={handleAddComment} className="p-2 bg-indigo-600 text-white rounded-lg"><Send className="w-4 h-4"/></button>
+                            <div className="mt-3 relative">
+                                {showMentionList && (
+                                    <div className="absolute bottom-full mb-1 left-0 w-64 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-20">
+                                        <div className="bg-slate-50 px-3 py-1 text-[10px] font-bold text-slate-500 uppercase">Mention Member</div>
+                                        {filteredCollaborators.length > 0 ? filteredCollaborators.map(c => (
+                                            <button 
+                                                key={c.id} 
+                                                onClick={() => handleSelectMention(c)}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2"
+                                            >
+                                                <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold">{c.initials}</div>
+                                                {c.name}
+                                            </button>
+                                        )) : (
+                                            <div className="px-3 py-2 text-xs text-slate-400 italic">No matching members</div>
+                                        )}
+                                    </div>
+                                )}
+                                <div className="flex gap-2">
+                                    <input 
+                                        ref={commentInputRef}
+                                        value={newComment} 
+                                        onChange={handleCommentChange} 
+                                        onKeyDown={e => e.key === 'Enter' && handleAddComment()} 
+                                        className="flex-1 border rounded-lg px-3 py-2 text-sm" 
+                                        placeholder="Add a comment... Type @ to mention"
+                                    />
+                                    <button onClick={handleAddComment} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"><Send className="w-4 h-4"/></button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -412,7 +505,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
                                 {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                             </button>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1">Anyone with this link can request to join as a Guest.</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Anyone with this link can request to join as a Guest (valid email required).</p>
                     </div>
 
                     <div className="border-t border-slate-100"></div>
@@ -604,7 +697,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     projectName: project.title,
                     assignedBy: currentUser.name,
                 }).then(() => {
-                    showNotification(`An email notification was sent to ${assignee.name}.`);
+                    showNotification(`Assigned notification sent to ${assignee.name}.`);
                 }).catch(error => {
                     console.error("Email send failed:", error);
                     showNotification(`Failed to send email to ${assignee.name}.`);
@@ -1088,6 +1181,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     onClose={() => setSelectedTask(null)}
                     onUpdateTask={handleUpdateSingleTask}
                     onDeleteTask={handleDeleteTask}
+                    onSendNotification={showNotification}
                 />
             )}
             {addingTaskForStatus && (

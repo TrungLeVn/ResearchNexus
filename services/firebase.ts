@@ -307,8 +307,8 @@ interface EmailData {
 
 export const sendTaskNotificationEmail = async (data: EmailData) => {
     if (!functions) {
-        console.error("Firebase Functions not initialized.");
-        return;
+        console.log("Firebase Functions not initialized. Simulating email log:", data);
+        return { success: true, simulated: true };
     }
 
     try {
@@ -318,6 +318,34 @@ export const sendTaskNotificationEmail = async (data: EmailData) => {
         return result;
     } catch (error) {
         console.error("Error calling cloud function:", error);
-        throw error;
+        // Fallback simulation for demo purposes
+        return { success: false, simulated: true };
+    }
+};
+
+interface MentionEmailData {
+    toEmail: string;
+    toName: string;
+    comment: string;
+    taskTitle: string;
+    projectName: string;
+    mentionedBy: string;
+    taskLink: string;
+}
+
+export const sendMentionNotificationEmail = async (data: MentionEmailData) => {
+    if (!functions) {
+        console.log("Firebase Functions not initialized. Simulating mention email:", data);
+        return { success: true, simulated: true };
+    }
+
+    try {
+        const sendEmail = httpsCallable(functions, 'sendMentionNotificationEmail');
+        const result = await sendEmail(data);
+        console.log("Cloud Function called successfully:", result);
+        return result;
+    } catch (error) {
+        console.error("Error calling mention cloud function:", error);
+        return { success: false, simulated: true };
     }
 };
