@@ -2,6 +2,8 @@
 
 
 
+
+
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -56,6 +58,15 @@ export interface Collaborator {
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high';
 
+export interface TaskComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorInitials: string;
+  text: string;
+  timestamp: string; // ISO string
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -65,6 +76,7 @@ export interface Task {
   dueDate: string; // ISO Date string
   assigneeId?: string;
   dependencies?: string[]; // Array of Task IDs that must be completed before this task
+  comments?: TaskComment[];
 }
 
 export interface ProjectActivity {

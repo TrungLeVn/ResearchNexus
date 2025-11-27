@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Project, Collaborator, Task, TaskStatus, ProjectStatus, StickyNote, Paper, ProjectFile } from '../types';
-import { ChevronLeft, Plus, Users, Bot, ClipboardList, Book, File as FileIcon, StickyNote as NoteIcon, Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink } from 'lucide-react';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile } from '../types';
+import { 
+    ChevronLeft, Plus, Users, Bot, ClipboardList, Book, File as FileIcon, StickyNote as NoteIcon, 
+    Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle 
+} from 'lucide-react';
 import { AIChat } from './AIChat';
 
 interface ProjectDetailProps {
@@ -39,51 +42,210 @@ const getStatusClasses = (status: ProjectStatus) => {
 
 interface TaskCardProps {
     task: Task;
-    onMove: (taskId: string, newStatus: TaskStatus) => void;
-    onDelete: (taskId: string) => void;
+    project: Project;
+    onClick: () => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onMove, onDelete }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
+    const assignee = project.collaborators.find(c => c.id === task.assigneeId);
+
+    const priorityIcons: Record<TaskPriority, React.ReactNode> = {
+        high: <Flame className="w-3.5 h-3.5 text-red-500" title="High Priority"/>,
+        medium: <ArrowUp className="w-3.5 h-3.5 text-amber-500" title="Medium Priority"/>,
+        low: <ArrowDown className="w-3.5 h-3.5 text-green-500" title="Low Priority"/>,
+    };
+    
     return (
-        <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm group hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start">
-                <p className="text-sm font-medium text-slate-800 line-clamp-2">{task.title}</p>
-                <button 
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-500 transition-all" 
-                    onClick={() => onDelete(task.id)}
-                    title="Delete Task"
-                >
-                    <Trash2 className="w-3 h-3" />
-                </button>
+        <div onClick={onClick} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm group hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer">
+            <p className="text-sm font-medium text-slate-800 line-clamp-2 mb-3">{task.title}</p>
+            <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>{new Date(task.dueDate).toLocaleDateString('en-CA')}</span>
+                    </div>
+                    {priorityIcons[task.priority]}
+                    <div className="flex items-center gap-1">
+                        <MessageCircle className="w-3 h-3" />
+                        <span>{task.comments?.length || 0}</span>
+                    </div>
+                </div>
+                {assignee && (
+                    <div title={assignee.name} className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-[10px] border-2 border-white">
+                        {assignee.initials}
+                    </div>
+                )}
             </div>
-            <div className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-                <span>Due: {task.dueDate}</span>
+        </div>
+    );
+};
+
+
+interface TaskDetailModalProps {
+    task: Task;
+    project: Project;
+    currentUser: Collaborator;
+    onClose: () => void;
+    onUpdateTask: (updatedTask: Task) => void;
+    onDeleteTask: (taskId: string) => void;
+}
+
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask }) => {
+    const [editedTask, setEditedTask] = useState<Task>(task);
+    const [newComment, setNewComment] = useState('');
+
+    const handleSave = () => {
+        onUpdateTask(editedTask);
+        onClose();
+    };
+
+    const handleDelete = () => {
+        if (window.confirm("Are you sure you want to delete this task?")) {
+            onDeleteTask(task.id);
+            onClose();
+        }
+    };
+    
+    const handleAddComment = () => {
+        if (!newComment.trim()) return;
+        const comment: TaskComment = {
+            id: `comm_${Date.now()}`,
+            authorId: currentUser.id,
+            authorName: currentUser.name,
+            authorInitials: currentUser.initials,
+            text: newComment,
+            timestamp: new Date().toISOString()
+        };
+        const updatedTask = { ...editedTask, comments: [...(editedTask.comments || []), comment] };
+        setEditedTask(updatedTask);
+        onUpdateTask(updatedTask); // Save immediately
+        setNewComment('');
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <input value={editedTask.title} onChange={e => setEditedTask({...editedTask, title: e.target.value})} className="text-lg font-bold text-slate-800 bg-transparent outline-none w-full" />
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+
+                <div className="flex-1 p-6 grid grid-cols-3 gap-6 overflow-y-auto">
+                    <div className="col-span-2 space-y-4">
+                        <div>
+                            <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
+                            <textarea value={editedTask.description} onChange={e => setEditedTask({...editedTask, description: e.target.value})} className="w-full mt-1 p-2 border rounded-md h-24 text-sm" placeholder="Add task details..."/>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-400 uppercase">Comments</label>
+                            <div className="mt-2 space-y-3 max-h-64 overflow-y-auto pr-2">
+                                {(editedTask.comments || []).map(c => (
+                                    <div key={c.id} className="flex items-start gap-2">
+                                        <div className="w-7 h-7 mt-1 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">{c.authorInitials}</div>
+                                        <div>
+                                            <div className="bg-slate-100 p-2 rounded-lg rounded-tl-none">
+                                                <p className="text-xs font-semibold">{c.authorName}</p>
+                                                <p className="text-sm text-slate-700">{c.text}</p>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 mt-1">{new Date(c.timestamp).toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                                <input value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="Add a comment..."/>
+                                <button onClick={handleAddComment} className="p-2 bg-indigo-600 text-white rounded-lg"><Send className="w-4 h-4"/></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-span-1 space-y-4">
+                        <div className="bg-slate-50 p-3 rounded-lg border">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
+                            <select value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value as TaskStatus})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
+                                <option value="todo">To Do</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="done">Done</option>
+                            </select>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Assignee</label>
+                            <select value={editedTask.assigneeId || ''} onChange={e => setEditedTask({...editedTask, assigneeId: e.target.value})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
+                                <option value="">Unassigned</option>
+                                {project.collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Due Date</label>
+                            <input type="date" value={editedTask.dueDate} onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})} className="w-full mt-1 p-2 border rounded-md text-sm"/>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Priority</label>
+                            <select value={editedTask.priority} onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
+                    <button onClick={handleDelete} className="text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                        <Trash2 className="w-4 h-4"/> Delete Task
+                    </button>
+                    <button onClick={handleSave} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">Save & Close</button>
+                </div>
             </div>
-            <div className="flex gap-1 mt-3">
-                {task.status !== 'todo' && (
-                    <button 
-                        onClick={() => onMove(task.id, 'todo')} 
-                        className="text-[10px] px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                    >
-                        To Do
-                    </button>
-                )}
-                {task.status !== 'in_progress' && (
-                    <button 
-                        onClick={() => onMove(task.id, 'in_progress')} 
-                        className="text-[10px] px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
-                    >
-                        In Progress
-                    </button>
-                )}
-                {task.status !== 'done' && (
-                    <button 
-                        onClick={() => onMove(task.id, 'done')} 
-                        className="text-[10px] px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-colors"
-                    >
-                        Done
-                    </button>
-                )}
+        </div>
+    );
+};
+
+interface AddTaskModalProps {
+    status: TaskStatus;
+    project: Project;
+    onClose: () => void;
+    onSave: (newTask: Task) => void;
+}
+const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, onSave }) => {
+    const [title, setTitle] = useState('');
+    const [assigneeId, setAssigneeId] = useState<string>('');
+    const [priority, setPriority] = useState<TaskPriority>('medium');
+    const [dueDate, setDueDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
+
+    const handleSave = () => {
+        if (!title.trim()) return;
+        const newTask: Task = {
+            id: `task_${Date.now()}`,
+            title,
+            status,
+            priority,
+            dueDate,
+            assigneeId: assigneeId || undefined,
+            comments: [],
+            description: ''
+        };
+        onSave(newTask);
+    };
+
+    return (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800">Add New Task to "{statusMap[status]}"</h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title..." className="w-full border rounded-lg p-2 text-lg"/>
+                    <div className="grid grid-cols-3 gap-4">
+                        <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className="w-full p-2 border rounded-md text-sm bg-white"><option value="">Unassigned</option>{project.collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded-md text-sm"/>
+                        <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="w-full p-2 border rounded-md text-sm bg-white"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+                    </div>
+                </div>
+                <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button onClick={handleSave} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Task</button>
+                </div>
             </div>
         </div>
     );
@@ -242,6 +404,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'notes' | 'team' | 'ai'>('tasks');
     const [showShareModal, setShowShareModal] = useState(false);
     
+    // Task Modals State
+    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+    const [addingTaskForStatus, setAddingTaskForStatus] = useState<TaskStatus | null>(null);
+
     // State for new Papers/Files forms
     const [showAddPaper, setShowAddPaper] = useState(false);
     const [newPaper, setNewPaper] = useState({ title: '', authors: '', year: new Date().getFullYear(), url: '' });
@@ -251,34 +417,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     // State for Sticky Notes Board
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
 
-    const handleUpdateTasks = (updatedTasks: Task[]) => {
+    const handleUpdateSingleTask = (updatedTask: Task) => {
+        const updatedTasks = project.tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
         onUpdateProject({ ...project, tasks: updatedTasks });
     };
 
-    const handleAddTask = (status: TaskStatus) => {
-        const title = prompt(`New task title for "${statusMap[status]}":`);
-        if (title) {
-            const newTask: Task = {
-                id: `task_${Date.now()}`,
-                title,
-                status,
-                priority: 'medium',
-                dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-            };
-            handleUpdateTasks([...project.tasks, newTask]);
-        }
-    };
-    
-    const handleMoveTask = (taskId: string, newStatus: TaskStatus) => {
-        const updatedTasks = project.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
-        handleUpdateTasks(updatedTasks);
+    const handleCreateTask = (newTask: Task) => {
+        onUpdateProject({ ...project, tasks: [...project.tasks, newTask] });
+        setAddingTaskForStatus(null);
     };
 
     const handleDeleteTask = (taskId: string) => {
-        if (window.confirm("Delete this task?")) {
-            const updatedTasks = project.tasks.filter(t => t.id !== taskId);
-            handleUpdateTasks(updatedTasks);
-        }
+        const updatedTasks = project.tasks.filter(t => t.id !== taskId);
+        onUpdateProject({ ...project, tasks: updatedTasks });
     };
 
     const handleAddCollaborator = (newCollab: Collaborator) => {
@@ -396,11 +547,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div key={status} className="bg-slate-100/70 rounded-xl p-4 flex flex-col h-full overflow-hidden">
                                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                                     <h3 className="font-semibold text-slate-700 flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${status === 'todo' ? 'bg-slate-400' : status === 'in_progress' ? 'bg-blue-400' : 'bg-emerald-400'}`} />{statusMap[status]}</h3>
-                                    <button onClick={() => handleAddTask(status)} className="p-1 hover:bg-white rounded text-slate-500 hover:text-indigo-600" title="Add Task"><Plus className="w-4 h-4" /></button>
+                                    <button onClick={() => setAddingTaskForStatus(status)} className="p-1 hover:bg-white rounded text-slate-500 hover:text-indigo-600" title="Add Task"><Plus className="w-4 h-4" /></button>
                                 </div>
                                 <div className="space-y-3 overflow-y-auto flex-1 pr-1">
                                     {project.tasks.filter(t => t.status === status).map(task => (
-                                        <TaskCard key={task.id} task={task} onMove={handleMoveTask} onDelete={handleDeleteTask} />
+                                        <TaskCard key={task.id} task={task} project={project} onClick={() => setSelectedTask(task)} />
                                     ))}
                                     {project.tasks.filter(t => t.status === status).length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">No tasks</div>}
                                 </div>
@@ -507,6 +658,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         <div className="h-full flex flex-col overflow-hidden animate-in fade-in duration-300 relative bg-slate-50">
             {showShareModal && <ShareModal project={project} currentUser={currentUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} />}
             {renderExpandedNoteModal()}
+            {selectedTask && (
+                <TaskDetailModal 
+                    task={selectedTask}
+                    project={project}
+                    currentUser={currentUser}
+                    onClose={() => setSelectedTask(null)}
+                    onUpdateTask={handleUpdateSingleTask}
+                    onDeleteTask={handleDeleteTask}
+                />
+            )}
+            {addingTaskForStatus && (
+                <AddTaskModal 
+                    status={addingTaskForStatus}
+                    project={project}
+                    onClose={() => setAddingTaskForStatus(null)}
+                    onSave={handleCreateTask}
+                />
+            )}
+
 
             <header className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0 bg-white shadow-sm z-10">
                 <div className="flex items-center gap-4">

@@ -2,6 +2,8 @@
 
 
 
+
+
 import { Project, ProjectStatus, Idea, Reminder, Collaborator, Course, MeetingNote } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
@@ -25,9 +27,36 @@ export const MOCK_PROJECTS: Project[] = [
         MOCK_USERS[0] // Only Owner
     ],
     tasks: [
-        { id: 't1', title: 'Run benchmarks on ImageNet', status: 'in_progress', priority: 'high', dueDate: '2024-06-15', assigneeId: 'c1' },
-        { id: 't2', title: 'Draft methodology section', status: 'done', priority: 'medium', dueDate: '2024-05-20', assigneeId: 'c1' },
-        { id: 't3', title: 'Clean up code repository', status: 'todo', priority: 'low', dueDate: '2024-06-20', assigneeId: 'c1' }
+        { 
+            id: 't1', 
+            title: 'Run benchmarks on ImageNet', 
+            status: 'in_progress', 
+            priority: 'high', 
+            dueDate: '2024-06-15', 
+            assigneeId: 'c1',
+            description: 'Use the latest version of the evolutionary algorithm to run a full benchmark on the ImageNet validation set. Record top-1 and top-5 accuracy.',
+            comments: [
+                { id: 'tc1', authorId: 'c1', authorName: 'Assoc.Prof. Trung Le', authorInitials: 'TL', text: 'Make sure to use the correct GPU drivers for this.', timestamp: new Date(Date.now() - 86400000 * 2).toISOString() }
+            ]
+        },
+        { 
+            id: 't2', 
+            title: 'Draft methodology section', 
+            status: 'done', 
+            priority: 'medium', 
+            dueDate: '2024-05-20', 
+            assigneeId: 'c1',
+            description: 'Write up the first version of the methodology chapter for the upcoming paper submission. Focus on clarity and reproducibility.'
+        },
+        { 
+            id: 't3', 
+            title: 'Clean up code repository', 
+            status: 'todo', 
+            priority: 'low', 
+            dueDate: '2024-06-20', 
+            assigneeId: 'c1',
+            description: 'Refactor all Python scripts, add docstrings, and ensure the README is up to date for public release.'
+        }
     ],
     files: [
         { id: 'f1', name: 'Experiment Logs v1', type: 'data', lastModified: '2024-05-10', url: 'https://drive.google.com/...' },
