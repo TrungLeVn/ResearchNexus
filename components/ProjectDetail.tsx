@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile } from '../types';
 import { 
-    ChevronLeft, Plus, Users, Bot, ClipboardList, Book, File as FileIcon, StickyNote as NoteIcon, 
+    ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, StickyNote as NoteIcon, 
     Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers
+    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2
 } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
 
 interface ProjectDetailProps {
@@ -402,16 +403,14 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
 };
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
-    const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'notes' | 'team' | 'ai'>('tasks');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'notes' | 'team' | 'ai'>('dashboard');
     const [showShareModal, setShowShareModal] = useState(false);
     
     // Task Modals State
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [addingTaskForStatus, setAddingTaskForStatus] = useState<TaskStatus | null>(null);
 
-    // State for new Papers/Files forms
-    const [showAddPaper, setShowAddPaper] = useState(false);
-    const [newPaper, setNewPaper] = useState({ title: '', authors: '', year: new Date().getFullYear(), url: '' });
+    // State for new Files forms
     const [showAddDraft, setShowAddDraft] = useState(false);
     const [newDraft, setNewDraft] = useState({ name: '', url: '' });
     const [showAddCodeData, setShowAddCodeData] = useState(false);
@@ -459,23 +458,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         }
     };
 
-    // --- PAPERS & FILES LOGIC ---
-    const handleAddPaper = () => {
-        if(!newPaper.title || !newPaper.url) return;
-        const paper: Paper = {
-            id: `paper_${Date.now()}`,
-            ...newPaper,
-            status: 'Unread'
-        };
-        onUpdateProject({...project, papers: [...project.papers, paper]});
-        setNewPaper({ title: '', authors: '', year: new Date().getFullYear(), url: '' });
-        setShowAddPaper(false);
-    };
-    
-    const handleDeletePaper = (id: string) => {
-        onUpdateProject({...project, papers: project.papers.filter(p => p.id !== id)});
-    };
-
+    // --- FILES LOGIC ---
     const handleAddFile = (
         fileData: { name: string; url: string; },
         type: ProjectFile['type']
@@ -561,6 +544,83 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
     const renderTabContent = () => {
         switch (activeTab) {
+            case 'dashboard': {
+                const todoTasks = project.tasks.filter(t => t.status === 'todo').length;
+                const inProgressTasks = project.tasks.filter(t => t.status === 'in_progress').length;
+                const doneTasks = project.tasks.filter(t => t.status === 'done').length;
+
+                const taskData = [
+                    { name: 'To Do', value: todoTasks, color: '#f59e0b' },
+                    { name: 'In Progress', value: inProgressTasks, color: '#3b82f6' },
+                    { name: 'Done', value: doneTasks, color: '#16a34a' },
+                ];
+
+                const upcomingTasks = project.tasks
+                    .filter(t => t.status !== 'done' && new Date(t.dueDate) >= new Date())
+                    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                    .slice(0, 5);
+                
+                return (
+                    <div className="p-6 h-full overflow-y-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Left Column */}
+                        <div className="lg:col-span-1 space-y-6">
+                            {/* Stat Cards */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                    <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Tasks</p>
+                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{doneTasks}/{project.tasks.length}</h3>
+                                    <p className="text-xs text-slate-400">Completed</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                    <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><Users className="w-4 h-4" /> Team</p>
+                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{project.collaborators.length}</h3>
+                                    <p className="text-xs text-slate-400">Members</p>
+                                </div>
+                            </div>
+                            {/* Upcoming Tasks */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Calendar className="w-4 h-4 text-amber-500"/> Upcoming Deadlines</h4>
+                                <div className="space-y-2">
+                                    {upcomingTasks.length > 0 ? upcomingTasks.map(task => (
+                                        <div key={task.id} className="text-sm p-2 bg-slate-50 rounded-lg flex justify-between items-center">
+                                            <span className="font-medium text-slate-700 truncate pr-2">{task.title}</span>
+                                            <span className="text-xs text-slate-500 shrink-0">{new Date(task.dueDate).toLocaleDateString('en-CA')}</span>
+                                        </div>
+                                    )) : <p className="text-xs text-slate-400 italic text-center py-4">No upcoming deadlines.</p>}
+                                </div>
+                            </div>
+                        </div>
+                        {/* Right Column */}
+                        <div className="lg:col-span-2 space-y-6">
+                             {/* Task Breakdown Chart */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm h-64 flex flex-col">
+                                <h4 className="font-medium text-slate-800 mb-2">Task Breakdown</h4>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={taskData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} innerRadius={40} paddingAngle={5}>
+                                            {taskData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                                        </Pie>
+                                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            {/* Recent Activity */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Activity className="w-4 h-4 text-green-500"/> Recent Activity</h4>
+                                <div className="space-y-3">
+                                    {project.activity && project.activity.length > 0 ? [...project.activity].reverse().map(act => (
+                                        <div key={act.id} className="flex items-center gap-3 text-sm">
+                                            <div className="p-1.5 bg-slate-100 rounded-full"><CheckCircle2 className="w-3 h-3 text-slate-500"/></div>
+                                            <p className="text-slate-600 flex-1">{act.message}</p>
+                                            <p className="text-xs text-slate-400">{act.time}</p>
+                                        </div>
+                                    )) : <p className="text-xs text-slate-400 italic text-center py-4">No recent activity.</p>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
             case 'tasks':
                 return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 h-full overflow-hidden">
@@ -587,28 +647,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
                 return (
                     <div className="p-6 space-y-6 h-full overflow-y-auto">
-                        {/* Reference Papers Section */}
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Book className="w-4 h-4 text-indigo-600"/> Reference Papers</h4>
-                                {!isGuestView && <button onClick={() => setShowAddPaper(!showAddPaper)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Paper</button>}
-                            </div>
-                            {showAddPaper && !isGuestView && <div className="p-3 mb-3 bg-indigo-50 rounded-lg border border-indigo-100 grid grid-cols-2 gap-2 text-sm">
-                                <input placeholder="Title" value={newPaper.title} onChange={e => setNewPaper({...newPaper, title: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                <input placeholder="Authors" value={newPaper.authors} onChange={e => setNewPaper({...newPaper, authors: e.target.value})} className="p-2 rounded border"/>
-                                <input type="number" placeholder="Year" value={newPaper.year} onChange={e => setNewPaper({...newPaper, year: parseInt(e.target.value)})} className="p-2 rounded border"/>
-                                <input placeholder="URL" value={newPaper.url} onChange={e => setNewPaper({...newPaper, url: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                <div className="col-span-2 flex gap-2"><button onClick={handleAddPaper} className="bg-indigo-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddPaper(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                            </div>}
-                            <div className="space-y-2">
-                                {project.papers.map(p => (<div key={p.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                    <div><a href={p.url} target="_blank" rel="noreferrer" className="font-medium hover:text-indigo-600">{p.title}</a><p className="text-xs text-slate-500">{p.authors} ({p.year})</p></div>
-                                    {!isGuestView && <button onClick={() => handleDeletePaper(p.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
-                                </div>))}
-                                {project.papers.length === 0 && !showAddPaper && <p className="text-xs text-slate-400 italic text-center py-4">No papers linked.</p>}
-                            </div>
-                        </div>
-
                         {/* Manuscript Drafts Section */}
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                             <div className="flex justify-between items-center mb-3">
@@ -779,8 +817,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             </header>
             
             <nav className="px-6 py-3 border-b border-slate-200 flex-shrink-0 bg-white flex items-center gap-4">
+                <TabButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
                 <TabButton id="tasks" icon={ClipboardList} label="Tasks" />
-                <TabButton id="files" icon={Book} label="Papers & Files" />
+                <TabButton id="files" icon={FileIcon} label="Files" />
                 <TabButton id="notes" icon={NoteIcon} label="Notes" />
                 <TabButton id="team" icon={Users} label="Team" />
                 <div className="w-px h-6 bg-slate-200 mx-2"></div>
