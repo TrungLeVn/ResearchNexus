@@ -18,8 +18,8 @@ export default async function handler(req, res) {
 
   const msg = {
     to,
-    from, 
-    subject,
+    from: trunglehai.hvnh@getMainColorOfGraphicItem.com, 
+    subject: 'Thông báo mới từ TrungLe ResearchNexus',
     html,
   };
 
