@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity } from '../types';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity, Paper, StickyNote } from '../types';
 import { 
     ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, 
     Trash2, Share2, X, Copy, Check, Mail, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers, LayoutDashboard, Activity, ChevronDown, Sparkles, Loader2, FileText, AtSign
+    Pencil, Database, Layers, LayoutDashboard, Activity, ChevronDown, Sparkles, Loader2, FileText, AtSign,
+    BookOpen, StickyNote as NoteIcon, Download
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
@@ -130,8 +131,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
             addedIds.forEach(id => {
                 const user = collaborators.find(c => c.id === id);
                 if (user && user.id !== currentUser.id) { // Don't notify self
-                    const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-                    sendEmailNotification(
+                     const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
+                     sendEmailNotification(
                         user.email,
                         user.name,
                         `New Task Assigned: ${editedTask.title}`,
@@ -720,6 +721,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [briefingContent, setBriefingContent] = useState<string>('');
     const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
     const [notificationMsg, setNotificationMsg] = useState('');
+    
+    // View State
+    const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'papers' | 'notes'>('tasks');
 
     useEffect(() => {
         setTasks(project.tasks);
@@ -768,6 +772,76 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         onUpdateProject(updatedProject);
     };
 
+    // --- HELPER HANDLERS FOR OTHER TABS ---
+    const handleAddFile = () => {
+        const name = prompt("File Name:");
+        if (!name) return;
+        const url = prompt("File URL (Drive/Dropbox/etc):");
+        if (!url) return;
+        const type = prompt("Type (data/code/draft/slide/document):", "document");
+
+        const newFile: ProjectFile = {
+            id: `file-${Date.now()}`,
+            name,
+            url,
+            type: (type as any) || 'document',
+            lastModified: new Date().toISOString()
+        };
+        onUpdateProject({ ...project, files: [...(project.files || []), newFile] });
+    };
+
+    const handleDeleteFile = (fileId: string) => {
+        if (!window.confirm("Remove this file reference?")) return;
+        onUpdateProject({ ...project, files: project.files.filter(f => f.id !== fileId) });
+    };
+
+    const handleAddPaper = () => {
+         const title = prompt("Paper Title:");
+         if (!title) return;
+         const authors = prompt("Authors:") || "Unknown";
+         const year = parseInt(prompt("Year:") || "2024");
+         
+         const newPaper: Paper = {
+             id: `paper-${Date.now()}`,
+             title,
+             authors,
+             year,
+             status: 'Unread',
+             url: ''
+         };
+         onUpdateProject({ ...project, papers: [...(project.papers || []), newPaper] });
+    };
+
+     const handleDeletePaper = (paperId: string) => {
+        if (!window.confirm("Remove this paper?")) return;
+        onUpdateProject({ ...project, papers: project.papers.filter(p => p.id !== paperId) });
+    };
+    
+    const handleUpdatePaperStatus = (paperId: string, status: 'Unread' | 'Reading' | 'Annotated') => {
+         const updatedPapers = project.papers.map(p => p.id === paperId ? { ...p, status } : p);
+         onUpdateProject({ ...project, papers: updatedPapers });
+    };
+
+    const handleAddNote = () => {
+        const title = prompt("Note Title:");
+        if (!title) return;
+        const content = prompt("Content:");
+        
+        const newNote: StickyNote = {
+            id: `note-${Date.now()}`,
+            title,
+            content: content || '',
+            color: 'yellow',
+            createdAt: new Date().toISOString()
+        };
+        onUpdateProject({ ...project, notes: [...(project.notes || []), newNote] });
+    };
+
+    const handleDeleteNote = (noteId: string) => {
+        if (!window.confirm("Delete this note?")) return;
+        onUpdateProject({ ...project, notes: project.notes.filter(n => n.id !== noteId) });
+    };
+
     // Deep linking logic for tasks
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -808,6 +882,134 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         { name: 'Done', value: tasks.filter(t => t.status === 'done').length, color: '#10b981' }
     ].filter(d => d.value > 0);
 
+    // --- RENDER FUNCTIONS FOR TABS ---
+    const renderFiles = () => (
+        <div className="p-6 h-full overflow-y-auto">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {(project.files || []).map(file => (
+                    <div key={file.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all group relative">
+                         <button 
+                            onClick={() => handleDeleteFile(file.id)}
+                            className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
+                            file.type === 'data' ? 'bg-emerald-50 text-emerald-600' :
+                            file.type === 'code' ? 'bg-slate-800 text-white' :
+                            file.type === 'slide' ? 'bg-orange-50 text-orange-600' :
+                            'bg-blue-50 text-blue-600'
+                        }`}>
+                            <FileIcon className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-semibold text-slate-800 truncate" title={file.name}>{file.name}</h4>
+                        <p className="text-xs text-slate-500 mb-4 capitalize">{file.type} • {new Date(file.lastModified).toLocaleDateString()}</p>
+                        {file.url && (
+                             <a 
+                                href={file.url} target="_blank" rel="noreferrer"
+                                className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+                             >
+                                 <ExternalLink className="w-3 h-3" /> Open File
+                             </a>
+                        )}
+                    </div>
+                ))}
+                <button 
+                    onClick={handleAddFile}
+                    className="border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-6 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                    <Plus className="w-6 h-6 mb-2" />
+                    <span className="font-medium text-sm">Add File</span>
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderPapers = () => (
+        <div className="p-6 h-full overflow-y-auto">
+            <div className="space-y-4">
+                {(project.papers || []).map(paper => (
+                    <div key={paper.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-start group">
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                                <BookOpen className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h4 className="font-semibold text-slate-800 text-lg">{paper.title}</h4>
+                                <p className="text-sm text-slate-500">{paper.authors} • {paper.year}</p>
+                                <div className="flex gap-2 mt-2">
+                                     <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold ${
+                                         paper.status === 'Unread' ? 'bg-slate-100 text-slate-500' :
+                                         paper.status === 'Reading' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'
+                                     }`}>{paper.status}</span>
+                                     {paper.summary && <span className="text-xs text-slate-400 truncate max-w-md">{paper.summary}</span>}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <select 
+                                value={paper.status}
+                                onChange={(e) => handleUpdatePaperStatus(paper.id, e.target.value as any)}
+                                className="text-xs border rounded p-1 bg-slate-50"
+                            >
+                                <option value="Unread">Unread</option>
+                                <option value="Reading">Reading</option>
+                                <option value="Annotated">Annotated</option>
+                            </select>
+                            {paper.url && (
+                                <a href={paper.url} target="_blank" rel="noreferrer" className="p-2 text-slate-400 hover:text-indigo-600">
+                                    <ExternalLink className="w-4 h-4" />
+                                </a>
+                            )}
+                            <button onClick={() => handleDeletePaper(paper.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                <button 
+                    onClick={handleAddPaper}
+                    className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+                >
+                    <Plus className="w-5 h-5" /> Add Research Paper
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderNotes = () => (
+        <div className="p-6 h-full overflow-y-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(project.notes || []).map(note => (
+                    <div key={note.id} className={`p-6 rounded-xl shadow-sm border relative group min-h-[200px] flex flex-col ${
+                        note.color === 'yellow' ? 'bg-amber-50 border-amber-100' :
+                        note.color === 'blue' ? 'bg-blue-50 border-blue-100' :
+                        'bg-purple-50 border-purple-100'
+                    }`}>
+                        <button 
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                        <h4 className="font-bold text-slate-800 mb-2">{note.title}</h4>
+                        <div className="text-sm text-slate-600 whitespace-pre-wrap font-medium leading-relaxed flex-1">
+                            {note.content}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-4 text-right">{new Date(note.createdAt).toLocaleDateString()}</p>
+                    </div>
+                ))}
+                <button 
+                    onClick={handleAddNote}
+                    className="border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-6 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors min-h-[200px]"
+                >
+                    <Plus className="w-8 h-8 mb-2" />
+                    <span className="font-medium">New Note</span>
+                </button>
+            </div>
+        </div>
+    );
+
     return (
         <div className="h-full flex flex-col bg-slate-50 relative animate-in fade-in slide-in-from-bottom-4 duration-500">
             {editingTask && <TaskDetailModal task={editingTask} project={project} currentUser={currentUser} onClose={() => setEditingTask(null)} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onSendNotification={showNotification} />}
@@ -826,184 +1028,226 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             )}
 
             {/* Header */}
-            <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-10 sticky top-0">
-                <div className="flex items-center gap-4">
-                    {!isGuestView && (
-                        <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-                            <ChevronLeft className="w-6 h-6" />
-                        </button>
-                    )}
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-xl font-bold text-slate-800">{project.title}</h1>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusClasses(project.status)}`}>
-                                {project.status}
-                            </span>
+            <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col gap-4 shadow-sm z-10 sticky top-0">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        {!isGuestView && (
+                            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+                                <ChevronLeft className="w-6 h-6" />
+                            </button>
+                        )}
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-xl font-bold text-slate-800">{project.title}</h1>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusClasses(project.status)}`}>
+                                    {project.status}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 max-w-md">{project.description}</p>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 max-w-md">{project.description}</p>
                     </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="hidden md:flex items-center -space-x-2 mr-2">
-                        {(project.collaborators || []).slice(0, 3).map(c => (
-                            <div key={c.id} title={c.name} className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center font-bold text-slate-600 text-xs">
-                                {c.initials}
-                            </div>
-                        ))}
-                        {(project.collaborators || []).length > 3 && (
-                            <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center font-bold text-slate-500 text-xs">
-                                +{(project.collaborators || []).length - 3}
-                            </div>
+                    <div className="flex items-center gap-3">
+                        <div className="hidden md:flex items-center -space-x-2 mr-2">
+                            {(project.collaborators || []).slice(0, 3).map(c => (
+                                <div key={c.id} title={c.name} className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center font-bold text-slate-600 text-xs">
+                                    {c.initials}
+                                </div>
+                            ))}
+                            {(project.collaborators || []).length > 3 && (
+                                <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center font-bold text-slate-500 text-xs">
+                                    +{(project.collaborators || []).length - 3}
+                                </div>
+                            )}
+                        </div>
+                        
+                        {!isGuestView && (
+                            <>
+                                 {/* AI Briefing Button */}
+                                 <button 
+                                    onClick={handleGenerateBriefing}
+                                    className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-200 rounded-lg text-sm hover:shadow-sm transition-all"
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Daily Brief</span>
+                                </button>
+
+                                 {/* AI Chat Toggle */}
+                                 <button 
+                                    onClick={() => setShowChat(!showChat)}
+                                    className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm transition-all ${
+                                        showChat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <Bot className="w-4 h-4" />
+                                    <span className="hidden sm:inline">AI Chat</span>
+                                </button>
+                            </>
+                        )}
+
+                        {/* Notify Colleague Button (Manual) */}
+                        <button
+                            onClick={() => setIsNotifyModalOpen(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+                            title="Notify Colleague"
+                        >
+                            <Mail className="w-4 h-4" />
+                            <span className="hidden sm:inline">Notify</span>
+                        </button>
+
+                        <button 
+                            onClick={() => setIsShareModalOpen(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+                        >
+                            <Share2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Share</span>
+                        </button>
+
+                         {!isGuestView && (
+                            <button 
+                                onClick={() => { if(window.confirm('Delete project?')) onDeleteProject(project.id); }}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Project"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
                         )}
                     </div>
-                    
-                    {!isGuestView && (
-                        <>
-                             {/* AI Briefing Button */}
-                             <button 
-                                onClick={handleGenerateBriefing}
-                                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-200 rounded-lg text-sm hover:shadow-sm transition-all"
-                            >
-                                <Sparkles className="w-4 h-4" />
-                                <span className="hidden sm:inline">Daily Brief</span>
-                            </button>
+                </div>
 
-                             {/* AI Chat Toggle */}
-                             <button 
-                                onClick={() => setShowChat(!showChat)}
-                                className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm transition-all ${
-                                    showChat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                                }`}
-                            >
-                                <Bot className="w-4 h-4" />
-                                <span className="hidden sm:inline">AI Chat</span>
-                            </button>
-                        </>
-                    )}
-
-                    {/* Notify Colleague Button (Manual) */}
-                    <button
-                        onClick={() => setIsNotifyModalOpen(true)}
-                        className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 transition-colors"
-                        title="Notify Colleague"
+                {/* Tab Navigation */}
+                <div className="flex gap-6 border-b border-slate-100">
+                     <button 
+                        onClick={() => setActiveTab('tasks')}
+                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'tasks' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        <Mail className="w-4 h-4" />
-                        <span className="hidden sm:inline">Notify</span>
-                    </button>
-
-                    <button 
-                        onClick={() => setIsShareModalOpen(true)}
-                        className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+                        <ClipboardList className="w-4 h-4" /> Tasks
+                        {activeTab === 'tasks' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
+                     </button>
+                     <button 
+                        onClick={() => setActiveTab('files')}
+                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'files' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        <Share2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Share</span>
-                    </button>
-
-                     {!isGuestView && (
-                        <button 
-                            onClick={() => { if(window.confirm('Delete project?')) onDeleteProject(project.id); }}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete Project"
-                        >
-                            <Trash2 className="w-5 h-5" />
-                        </button>
-                    )}
+                        <FileIcon className="w-4 h-4" /> Files
+                        {activeTab === 'files' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
+                     </button>
+                     <button 
+                        onClick={() => setActiveTab('papers')}
+                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'papers' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <BookOpen className="w-4 h-4" /> Literature
+                        {activeTab === 'papers' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
+                     </button>
+                     <button 
+                        onClick={() => setActiveTab('notes')}
+                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'notes' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <NoteIcon className="w-4 h-4" /> Notes
+                        {activeTab === 'notes' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
+                     </button>
                 </div>
             </header>
 
             <div className="flex-1 flex overflow-hidden">
-                {/* Main Kanban Board */}
-                <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-                    {/* Project Metrics / Briefing Area */}
-                    {showBriefing && (
-                         <div className="mb-6 bg-white p-6 rounded-xl border border-amber-200 shadow-sm animate-in fade-in slide-in-from-top-4 relative">
-                            <button onClick={() => setShowBriefing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
-                                <Sparkles className="w-5 h-5 text-amber-500" /> AI Project Briefing
-                            </h3>
-                            {isGeneratingBriefing ? (
-                                <div className="flex items-center gap-2 text-slate-500 py-8 justify-center">
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Analyzing project data...
-                                </div>
-                            ) : (
-                                <div className="prose prose-sm prose-slate max-w-none">
-                                    <ReactMarkdown>{briefingContent}</ReactMarkdown>
-                                </div>
-                            )}
-                         </div>
-                    )}
-                    
-                    {!showBriefing && (
-                         <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                                <span className="text-xs font-semibold text-slate-500 uppercase">Overall Progress</span>
-                                <div className="flex items-end gap-2 mt-1">
-                                    <span className="text-2xl font-bold text-indigo-600">{progress}%</span>
-                                    <div className="flex-1 h-2 bg-slate-100 rounded-full mb-1.5 overflow-hidden">
-                                        <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                                <div className="w-16 h-16 relative">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie data={pieData} innerRadius={15} outerRadius={25} paddingAngle={2} dataKey="value">
-                                                {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                                            </Pie>
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-500 uppercase">Task Stats</p>
-                                    <p className="text-sm font-medium text-slate-700">{completedTasks} / {tasks.length} Completed</p>
-                                </div>
-                            </div>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                                <span className="text-xs font-semibold text-slate-500 uppercase">Team Activity</span>
-                                <div className="flex items-center gap-2 mt-2">
-                                     <Activity className="w-5 h-5 text-emerald-500" />
-                                     <span className="text-sm font-medium text-slate-700">Healthy</span>
-                                </div>
-                            </div>
-                         </div>
-                    )}
-
-                    <div className="flex gap-6 h-full min-w-max pb-4">
-                        {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => (
-                            <div key={status} className="w-80 flex flex-col h-full">
-                                <div className="flex justify-between items-center mb-4 px-1">
-                                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                        {status === 'todo' && <div className="w-2 h-2 rounded-full bg-sky-500"></div>}
-                                        {status === 'in_progress' && <div className="w-2 h-2 rounded-full bg-amber-500"></div>}
-                                        {status === 'done' && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
-                                        {statusMap[status]} 
-                                        <span className="text-slate-400 text-xs font-normal ml-1">({tasks.filter(t => t.status === status).length})</span>
+                {/* Main Content Area - Switched by Tab */}
+                <div className="flex-1 overflow-hidden relative">
+                    {activeTab === 'tasks' && (
+                        <div className="h-full overflow-x-auto overflow-y-hidden p-6 flex flex-col">
+                            {/* Project Metrics / Briefing Area (Only visible in Tasks tab) */}
+                            {showBriefing && (
+                                <div className="mb-6 bg-white p-6 rounded-xl border border-amber-200 shadow-sm animate-in fade-in slide-in-from-top-4 relative flex-shrink-0">
+                                    <button onClick={() => setShowBriefing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                                        <Sparkles className="w-5 h-5 text-amber-500" /> AI Project Briefing
                                     </h3>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => setAddingTaskStatus(status)} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4"/></button>
-                                    </div>
-                                </div>
-                                <div className="flex-1 bg-slate-100/50 rounded-xl p-3 border border-slate-200 overflow-y-auto space-y-3">
-                                    {tasks.filter(t => t.status === status).map(task => (
-                                        <TaskCard key={task.id} task={task} project={project} onClick={() => setEditingTask(task)} />
-                                    ))}
-                                    {tasks.filter(t => t.status === status).length === 0 && (
-                                        <div className="h-24 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center text-slate-400 text-xs italic">
-                                            No tasks here
+                                    {isGeneratingBriefing ? (
+                                        <div className="flex items-center gap-2 text-slate-500 py-8 justify-center">
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            Analyzing project data...
+                                        </div>
+                                    ) : (
+                                        <div className="prose prose-sm prose-slate max-w-none">
+                                            <ReactMarkdown>{briefingContent}</ReactMarkdown>
                                         </div>
                                     )}
-                                    <button 
-                                        onClick={() => setAddingTaskStatus(status)}
-                                        className="w-full py-2 text-xs text-slate-500 hover:bg-slate-200 rounded-lg border border-transparent hover:border-slate-300 transition-all flex items-center justify-center gap-1"
-                                    >
-                                        <Plus className="w-3 h-3" /> Add Task
-                                    </button>
                                 </div>
+                            )}
+                            
+                            {!showBriefing && (
+                                <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 flex-shrink-0">
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                                        <span className="text-xs font-semibold text-slate-500 uppercase">Overall Progress</span>
+                                        <div className="flex items-end gap-2 mt-1">
+                                            <span className="text-2xl font-bold text-indigo-600">{progress}%</span>
+                                            <div className="flex-1 h-2 bg-slate-100 rounded-full mb-1.5 overflow-hidden">
+                                                <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="w-16 h-16 relative">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie data={pieData} innerRadius={15} outerRadius={25} paddingAngle={2} dataKey="value">
+                                                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                                    </Pie>
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-500 uppercase">Task Stats</p>
+                                            <p className="text-sm font-medium text-slate-700">{completedTasks} / {tasks.length} Completed</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                                        <span className="text-xs font-semibold text-slate-500 uppercase">Team Activity</span>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <Activity className="w-5 h-5 text-emerald-500" />
+                                            <span className="text-sm font-medium text-slate-700">Healthy</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-6 h-full min-w-max pb-4 overflow-y-hidden">
+                                {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => (
+                                    <div key={status} className="w-80 flex flex-col h-full">
+                                        <div className="flex justify-between items-center mb-4 px-1">
+                                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                                {status === 'todo' && <div className="w-2 h-2 rounded-full bg-sky-500"></div>}
+                                                {status === 'in_progress' && <div className="w-2 h-2 rounded-full bg-amber-500"></div>}
+                                                {status === 'done' && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
+                                                {statusMap[status]} 
+                                                <span className="text-slate-400 text-xs font-normal ml-1">({tasks.filter(t => t.status === status).length})</span>
+                                            </h3>
+                                            <div className="flex gap-1">
+                                                <button onClick={() => setAddingTaskStatus(status)} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4"/></button>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 bg-slate-100/50 rounded-xl p-3 border border-slate-200 overflow-y-auto space-y-3">
+                                            {tasks.filter(t => t.status === status).map(task => (
+                                                <TaskCard key={task.id} task={task} project={project} onClick={() => setEditingTask(task)} />
+                                            ))}
+                                            {tasks.filter(t => t.status === status).length === 0 && (
+                                                <div className="h-24 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center text-slate-400 text-xs italic">
+                                                    No tasks here
+                                                </div>
+                                            )}
+                                            <button 
+                                                onClick={() => setAddingTaskStatus(status)}
+                                                className="w-full py-2 text-xs text-slate-500 hover:bg-slate-200 rounded-lg border border-transparent hover:border-slate-300 transition-all flex items-center justify-center gap-1"
+                                            >
+                                                <Plus className="w-3 h-3" /> Add Task
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    )}
+                    
+                    {activeTab === 'files' && renderFiles()}
+                    {activeTab === 'papers' && renderPapers()}
+                    {activeTab === 'notes' && renderNotes()}
                 </div>
 
                 {/* Right Sidebar: Chat or Details */}
