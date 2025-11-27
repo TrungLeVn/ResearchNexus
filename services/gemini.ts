@@ -566,4 +566,47 @@ export const generateCourseImage = async (courseName: string): Promise<string | 
         console.error("Gemini Image Gen Error:", error);
         return null;
     }
-}
+};
+
+/**
+ * Generates a daily briefing for a project.
+ */
+export const generateProjectBriefing = async (project: Project): Promise<string> => {
+    try {
+        const ai = getGenAI();
+        
+        const taskSummary = project.tasks.map(t => `- ${t.title} (Status: ${t.status}, Due: ${t.dueDate})`).join('\n');
+        const activitySummary = (project.activity || []).slice(0, 5).map(a => `- ${a.message} (${new Date(a.timestamp).toLocaleDateString()})`).join('\n');
+
+        const prompt = `
+        Act as an expert project manager. Here is the current data for a research project:
+        
+        **Title:** ${project.title}
+        **Description:** ${project.description}
+        **Status:** ${project.status}
+        **Progress:** ${project.progress}%
+        
+        **Tasks:**
+        ${taskSummary}
+        
+        **Recent Activity (last 5):**
+        ${activitySummary}
+        
+        Please provide a concise, actionable "Daily Briefing" in Markdown. Your briefing should:
+        1.  Start with a one-sentence summary of the project's current state.
+        2.  Identify the top 1-3 immediate priorities. Mention any overdue tasks specifically.
+        3.  Give a heads-up on any upcoming deadlines in the next week.
+        4.  Conclude with a brief, encouraging summary.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+        });
+
+        return response.text || "Could not generate project briefing.";
+    } catch (error) {
+        console.error("Gemini Project Briefing Error:", error);
+        return "Error: Could not connect to AI to generate briefing.";
+    }
+};

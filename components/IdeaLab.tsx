@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Idea, LinkResource } from '../types';
 import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive, Maximize2, X, BrainCircuit, Wand2, Save, Loader2 } from 'lucide-react';
@@ -457,7 +458,8 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
 
                         <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold text-slate-800 leading-tight line-clamp-2 pr-4">{idea.title}</h3>
-                            {idea.aiEnhanced && <Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0" title="AI Enhanced" />}
+                            {/* FIX: The `title` prop is not valid on lucide-react icons. Wrap with a span to show a tooltip. */}
+                            {idea.aiEnhanced && <span title="AI Enhanced"><Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0" /></span>}
                         </div>
                         
                         <div className="flex-1 overflow-hidden relative">

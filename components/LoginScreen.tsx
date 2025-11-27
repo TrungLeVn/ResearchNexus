@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Collaborator } from '../types';
 import { MOCK_USERS } from '../constants';
 import { Beaker, Users, ArrowLeft, Mail, Loader2 } from 'lucide-react';
@@ -14,6 +15,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [returningGuest, setReturningGuest] = useState<Collaborator | null>(null);
+
+  useEffect(() => {
+    if (inviteProjectId) {
+      const savedGuestRaw = localStorage.getItem('rn_guest_user');
+      if (savedGuestRaw) {
+        try {
+          const savedGuest = JSON.parse(savedGuestRaw);
+          if (savedGuest.id && savedGuest.name && savedGuest.email) {
+            setReturningGuest(savedGuest);
+          }
+        } catch (e) {
+          console.error("Could not parse saved guest data", e);
+          localStorage.removeItem('rn_guest_user');
+        }
+      }
+    }
+  }, [inviteProjectId]);
 
   const handleGuestJoin = async () => {
       if (!guestName.trim() || !guestEmail.trim()) return;
@@ -21,7 +40,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
       setIsLoading(true);
 
       const guestUser: Collaborator = {
-          // Use email as ID for guests to ensure uniqueness/persistence across sessions
           id: guestEmail.toLowerCase().replace(/[^a-z0-9]/g, '-'), 
           name: guestName,
           email: guestEmail,
@@ -30,10 +48,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
       };
 
       try {
-          // If this is an invite link, add them to the database
           if (inviteProjectId) {
               await addCollaboratorToProject(inviteProjectId, guestUser);
           }
+          localStorage.setItem('rn_guest_user', JSON.stringify(guestUser));
           onLogin(guestUser);
       } catch (error) {
           console.error("Failed to join project:", error);
@@ -43,15 +61,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
       }
   };
 
+  const handleContinueAsGuest = () => {
+    if (returningGuest) {
+        onLogin(returningGuest);
+    }
+  };
+
+  const handleSwitchGuestAccount = () => {
+      localStorage.removeItem('rn_guest_user');
+      setReturningGuest(null);
+  };
+
   const handleOwnerEntry = () => {
-      // Login as default Owner
       onLogin(MOCK_USERS[0]);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-6 font-sans">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
-        {/* Header */}
         <div className="p-8 text-center border-b border-slate-50 bg-gradient-to-b from-white to-slate-50/50">
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 mx-auto mb-6">
             <Beaker className="w-8 h-8 text-white" />
@@ -68,9 +95,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
           )}
         </div>
 
-        {/* Login Area */}
         <div className="p-8">
           {inviteProjectId ? (
+            returningGuest ? (
+                <div className="space-y-4 animate-in fade-in zoom-in duration-300">
+                    <div className="text-center">
+                        <p className="text-sm text-slate-500">Welcome back,</p>
+                        <h3 className="text-lg font-bold text-slate-800">{returningGuest.name}</h3>
+                        <p className="text-xs text-slate-400">{returningGuest.email}</p>
+                    </div>
+                    <button
+                        onClick={handleContinueAsGuest}
+                        className="w-full bg-indigo-600 text-white font-medium py-3 px-4 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                    >
+                        Continue as {returningGuest.name.split(' ')[0]}
+                    </button>
+                    <div className="pt-4 border-t border-slate-100 text-center">
+                        <button onClick={handleSwitchGuestAccount} className="text-xs text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 mx-auto">
+                            Not you? Join with a different account
+                        </button>
+                    </div>
+                </div>
+            ) : (
               <div className="space-y-4 animate-in fade-in zoom-in duration-300">
                   <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex gap-3 items-start">
                       <Users className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
@@ -119,6 +165,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
                        </button>
                   </div>
               </div>
+            )
           ) : (
             <div className="text-center space-y-4 animate-in fade-in duration-300">
                <p className="text-slate-600 text-sm">
@@ -137,7 +184,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
           )}
         </div>
         
-        {/* Footer */}
         <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
           <p className="text-[10px] text-slate-400">
             &copy; 2024 ResearchNexus AI.

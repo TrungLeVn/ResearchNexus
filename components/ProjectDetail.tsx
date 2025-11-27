@@ -1,12 +1,15 @@
+
 import React, { useState } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile, ProjectActivity } from '../types';
 import { 
     ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, StickyNote as NoteIcon, 
     Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2, ChevronDown
+    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2, ChevronDown, Sparkles, Loader2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import ReactMarkdown from 'react-markdown';
 import { AIChat } from './AIChat';
+import { generateProjectBriefing } from '../services/gemini';
 
 interface ProjectDetailProps {
   project: Project;
@@ -51,10 +54,11 @@ interface TaskCardProps {
 const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
     const assignees = project.collaborators.filter(c => task.assigneeIds?.includes(c.id));
 
+    // FIX: The `title` prop is not valid for lucide-react icons. Wrap with a span to show a tooltip.
     const priorityIcons: Record<TaskPriority, React.ReactNode> = {
-        high: <Flame className="w-3.5 h-3.5 text-red-500" title="High Priority"/>,
-        medium: <ArrowUp className="w-3.5 h-3.5 text-amber-500" title="Medium Priority"/>,
-        low: <ArrowDown className="w-3.5 h-3.5 text-green-500" title="Low Priority"/>,
+        high: <span title="High Priority"><Flame className="w-3.5 h-3.5 text-red-500"/></span>,
+        medium: <span title="Medium Priority"><ArrowUp className="w-3.5 h-3.5 text-amber-500"/></span>,
+        low: <span title="Low Priority"><ArrowDown className="w-3.5 h-3.5 text-green-500"/></span>,
     };
     
     return (
@@ -502,6 +506,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
     // State for Sticky Notes Board
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+    
+    // State for AI Briefing
+    const [briefing, setBriefing] = useState<string>('');
+    const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
+
 
     // --- ACTIVITY LOGGING ---
     const logActivity = (
@@ -608,6 +617,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const handleDeleteProjectConfirm = () => {
         if (window.confirm(`Are you sure you want to delete "${project.title}"?`)) {
             onDeleteProject(project.id);
+        }
+    };
+
+    const handleGenerateBriefing = async () => {
+        setIsGeneratingBriefing(true);
+        setBriefing('');
+        try {
+            const result = await generateProjectBriefing(project);
+            setBriefing(result);
+        } catch (error) {
+            setBriefing("An error occurred while generating the briefing.");
+        } finally {
+            setIsGeneratingBriefing(false);
         }
     };
 
@@ -734,10 +756,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 
                 return (
                     <div className="p-6 h-full overflow-y-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Left Column */}
-                        <div className="lg:col-span-1 space-y-6">
-                            {/* Stat Cards */}
-                            <div className="grid grid-cols-2 gap-4">
+                        {/* Center Column */}
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                     <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Tasks</p>
                                     <h3 className="text-2xl font-bold text-slate-800 mt-1">{doneTasks}/{project.tasks.length}</h3>
@@ -748,22 +769,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                     <h3 className="text-2xl font-bold text-slate-800 mt-1">{project.collaborators.length}</h3>
                                     <p className="text-xs text-slate-400">Members</p>
                                 </div>
-                            </div>
-                            {/* Upcoming Tasks */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Calendar className="w-4 h-4 text-amber-500"/> Upcoming Deadlines</h4>
-                                <div className="space-y-2">
-                                    {upcomingTasks.length > 0 ? upcomingTasks.map(task => (
-                                        <div key={task.id} className="text-sm p-2 bg-slate-50 rounded-lg flex justify-between items-center">
-                                            <span className="font-medium text-slate-700 truncate pr-2">{task.title}</span>
-                                            <span className="text-xs text-slate-500 shrink-0">{new Date(task.dueDate).toLocaleDateString('en-CA')}</span>
-                                        </div>
-                                    )) : <p className="text-xs text-slate-400 italic text-center py-4">No upcoming deadlines.</p>}
+                                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                    <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><FileIcon className="w-4 h-4" /> Files</p>
+                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{project.files.length}</h3>
+                                    <p className="text-xs text-slate-400">Attached</p>
                                 </div>
                             </div>
-                        </div>
-                        {/* Right Column */}
-                        <div className="lg:col-span-2 space-y-6">
+                            
                              {/* Task Breakdown Chart */}
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm h-64 flex flex-col">
                                 <h4 className="font-medium text-slate-800 mb-2">Task Breakdown</h4>
@@ -776,10 +788,48 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
+                        </div>
+                        {/* Right Column */}
+                        <div className="lg:col-span-1 space-y-6">
+                           {/* AI Daily Briefing */}
+                           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Bot className="w-4 h-4 text-indigo-500"/> AI Daily Briefing</h4>
+                                {briefing ? (
+                                    <div className="prose prose-sm prose-slate max-w-none">
+                                        <ReactMarkdown>{briefing}</ReactMarkdown>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-4">
+                                        <p className="text-xs text-slate-500 mb-3">Get a quick summary of priorities and upcoming tasks.</p>
+                                        <button 
+                                            onClick={handleGenerateBriefing} 
+                                            disabled={isGeneratingBriefing}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-100 disabled:opacity-50"
+                                        >
+                                            {isGeneratingBriefing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+                                            {isGeneratingBriefing ? 'Generating...' : "Generate Today's Briefing"}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                           
+                            {/* Upcoming Tasks */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Calendar className="w-4 h-4 text-amber-500"/> Upcoming Deadlines</h4>
+                                <div className="space-y-2">
+                                    {upcomingTasks.length > 0 ? upcomingTasks.map(task => (
+                                        <div key={task.id} className="text-sm p-2 bg-slate-50 rounded-lg flex justify-between items-center">
+                                            <span className="font-medium text-slate-700 truncate pr-2">{task.title}</span>
+                                            <span className="text-xs text-slate-500 shrink-0">{new Date(task.dueDate).toLocaleDateString('en-CA')}</span>
+                                        </div>
+                                    )) : <p className="text-xs text-slate-400 italic text-center py-4">No upcoming deadlines.</p>}
+                                </div>
+                            </div>
+                            
                             {/* Recent Activity */}
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Activity className="w-4 h-4 text-green-500"/> Recent Activity</h4>
-                                <div className="space-y-3">
+                                <div className="space-y-3 max-h-48 overflow-y-auto">
                                     {project.activity && project.activity.length > 0 ? [...project.activity].map(act => {
                                         const author = project.collaborators.find(c => c.id === act.authorId) || { name: 'Unknown', initials: '?' };
                                         return (
