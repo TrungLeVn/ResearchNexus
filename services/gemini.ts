@@ -26,9 +26,9 @@ const generateSystemInstruction = (project?: Project) => {
     if (!project) return base;
 
     // Serialize Project Context
-    const taskList = project.tasks.map(t => `- ${t.title} (${t.status}, due ${t.dueDate})`).join('\n');
-    const paperList = project.papers.map(p => `- ${p.title} (${p.status})`).join('\n');
-    const fileList = project.files.map(f => `- ${f.name} (${f.type})`).join('\n');
+    const taskList = (project.tasks || []).map(t => `- ${t.title} (${t.status}, due ${t.dueDate})`).join('\n');
+    const paperList = (project.papers || []).map(p => `- ${p.title} (${p.status})`).join('\n');
+    const fileList = (project.files || []).map(f => `- ${f.name} (${f.type})`).join('\n');
 
     return `${base}
     
@@ -575,7 +575,7 @@ export const generateProjectBriefing = async (project: Project): Promise<string>
     try {
         const ai = getGenAI();
         
-        const taskSummary = project.tasks.map(t => `- ${t.title} (Status: ${t.status}, Due: ${t.dueDate})`).join('\n');
+        const taskSummary = (project.tasks || []).map(t => `- ${t.title} (Status: ${t.status}, Due: ${t.dueDate})`).join('\n');
         const activitySummary = (project.activity || []).slice(0, 5).map(a => `- ${a.message} (${new Date(a.timestamp).toLocaleDateString()})`).join('\n');
 
         const prompt = `

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile, ProjectActivity } from '../types';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, Paper, ProjectFile, ProjectActivity } from '../types';
 import { 
-    ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, StickyNote as NoteIcon, 
+    ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, 
     Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2, ChevronDown, Sparkles, Loader2
+    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2, ChevronDown, Sparkles, Loader2, FileText
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
@@ -52,9 +52,8 @@ interface TaskCardProps {
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
-    const assignees = project.collaborators.filter(c => task.assigneeIds?.includes(c.id));
+    const assignees = (project.collaborators || []).filter(c => task.assigneeIds?.includes(c.id));
 
-    // FIX: The `title` prop is not valid for lucide-react icons. Wrap with a span to show a tooltip.
     const priorityIcons: Record<TaskPriority, React.ReactNode> = {
         high: <span title="High Priority"><Flame className="w-3.5 h-3.5 text-red-500"/></span>,
         medium: <span title="Medium Priority"><ArrowUp className="w-3.5 h-3.5 text-amber-500"/></span>,
@@ -104,7 +103,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
     const [newComment, setNewComment] = useState('');
     const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
     
-    const assignees = project.collaborators.filter(c => editedTask.assigneeIds?.includes(c.id));
+    const collaborators = project.collaborators || [];
+    const assignees = collaborators.filter(c => editedTask.assigneeIds?.includes(c.id));
 
     const handleAssigneeToggle = (collaboratorId: string) => {
         const currentIds = editedTask.assigneeIds || [];
@@ -205,7 +205,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                                 </button>
                                 {assigneeDropdownOpen && (
                                     <div className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-40 overflow-y-auto">
-                                        {project.collaborators.map(c => (
+                                        {collaborators.map(c => (
                                             <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer text-sm">
                                                 <input
                                                     type="checkbox"
@@ -259,7 +259,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
     const [dueDate, setDueDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
     const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
     
-    const selectedAssignees = project.collaborators.filter(c => assigneeIds.includes(c.id));
+    const collaborators = project.collaborators || [];
+    const selectedAssignees = collaborators.filter(c => assigneeIds.includes(c.id));
 
     const handleAssigneeToggle = (collaboratorId: string) => {
         const newIds = assigneeIds.includes(collaboratorId)
@@ -310,7 +311,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
                             </button>
                             {assigneeDropdownOpen && (
                                 <div className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-40 overflow-y-auto">
-                                    {project.collaborators.map(c => (
+                                    {collaborators.map(c => (
                                         <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer text-sm">
                                             <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" checked={assigneeIds.includes(c.id)} onChange={() => handleAssigneeToggle(c.id)}/>
                                             {c.name}
@@ -353,6 +354,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
     const [copied, setCopied] = useState(false);
 
     const inviteLink = typeof window !== 'undefined' ? `${window.location.origin}?pid=${project.id}` : '';
+    const collaborators = project.collaborators || [];
 
     const handleCopy = async () => {
         if (!inviteLink) return;
@@ -457,7 +459,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Current Access</label>
                         <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                            {project.collaborators.map(c => (
+                            {collaborators.map(c => (
                                 <div key={c.id} className="flex items-center justify-between text-sm bg-slate-50 p-2 rounded-lg group border border-transparent hover:border-slate-200 transition-colors">
                                     <div className="flex items-center gap-2">
                                         <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">
@@ -488,7 +490,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
 };
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'notes' | 'team' | 'ai'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
     const [showShareModal, setShowShareModal] = useState(false);
     const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
     
@@ -502,12 +504,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [showAddOther, setShowAddOther] = useState(false);
     const [newOther, setNewOther] = useState({ name: '', url: '', type: 'slide' as 'slide' | 'document' | 'other' });
 
-    const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-    
+    // NEW STATES FOR ADMIN PROJECT FILES
+    const [showAddAdminDoc, setShowAddAdminDoc] = useState(false);
+    const [newAdminDoc, setNewAdminDoc] = useState({ name: '', url: '', type: 'document' as 'draft' | 'document' | 'other' });
+    const [showAddAdminAsset, setShowAddAdminAsset] = useState(false);
+    const [newAdminAsset, setNewAdminAsset] = useState({ name: '', url: '', type: 'slide' as 'code' | 'data' | 'slide' });
+
     const [briefing, setBriefing] = useState<string>('');
     const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
     
     const [notification, setNotification] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+
+    // Defensive state destructuring with fallbacks
+    const tasks = project.tasks || [];
+    const collaborators = project.collaborators || [];
+    const files = project.files || [];
+    const activity = project.activity || [];
 
     const showNotification = (message: string) => {
         setNotification({ message, visible: true });
@@ -559,7 +571,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
     const triggerEmailNotification = (task: Task, addedAssigneeIds: string[]) => {
         addedAssigneeIds.forEach(id => {
-            const assignee = project.collaborators.find(c => c.id === id);
+            const assignee = collaborators.find(c => c.id === id);
             if (assignee) {
                 sendTaskNotificationEmail({
                     toEmail: assignee.email,
@@ -578,7 +590,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     };
 
     const handleUpdateSingleTask = (updatedTask: Task) => {
-        const oldTask = project.tasks.find(t => t.id === updatedTask.id);
+        const oldTask = tasks.find(t => t.id === updatedTask.id);
         let projectToUpdate = { ...project };
 
         if (oldTask && oldTask.status !== updatedTask.status) {
@@ -598,12 +610,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             triggerEmailNotification(updatedTask, addedAssigneeIds);
         }
 
-        const updatedTasks = project.tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
+        const updatedTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
         onUpdateProject({ ...projectToUpdate, tasks: updatedTasks });
     };
 
     const handleCreateTask = (newTask: Task) => {
-        const projectWithNewTask = { ...project, tasks: [...project.tasks, newTask] };
+        const projectWithNewTask = { ...project, tasks: [...tasks, newTask] };
         const message = `added task: '${newTask.title}'`;
         const projectWithActivity = logActivity(projectWithNewTask, message);
         onUpdateProject(projectWithActivity);
@@ -615,10 +627,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     };
 
     const handleDeleteTask = (taskId: string) => {
-        const taskToDelete = project.tasks.find(t => t.id === taskId);
+        const taskToDelete = tasks.find(t => t.id === taskId);
         if (!taskToDelete) return;
 
-        const updatedTasks = project.tasks.filter(t => t.id !== taskId);
+        const updatedTasks = tasks.filter(t => t.id !== taskId);
         const projectWithTasksUpdated = { ...project, tasks: updatedTasks };
         const message = `deleted task: '${taskToDelete.title}'`;
         const projectWithActivity = logActivity(projectWithTasksUpdated, message);
@@ -626,11 +638,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     };
 
     const handleAddCollaborator = (newCollab: Collaborator) => {
-        if (project.collaborators.some(c => c.email.toLowerCase() === newCollab.email.toLowerCase())) {
+        if (collaborators.some(c => c.email.toLowerCase() === newCollab.email.toLowerCase())) {
             alert("This user is already a collaborator.");
             return;
         }
-        const updatedCollaborators = [...project.collaborators, newCollab];
+        const updatedCollaborators = [...collaborators, newCollab];
         const projectWithNewCollab = { ...project, collaborators: updatedCollaborators };
         const message = `added ${newCollab.name} to the team`;
         const projectWithActivity = logActivity(projectWithNewCollab, message);
@@ -638,11 +650,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     };
 
     const handleRemoveCollaborator = (collaboratorId: string) => {
-        const collaboratorToRemove = project.collaborators.find(c => c.id === collaboratorId);
+        const collaboratorToRemove = collaborators.find(c => c.id === collaboratorId);
         if (!collaboratorToRemove) return;
 
         if (window.confirm("Are you sure you want to remove this member?")) {
-            const updatedCollaborators = project.collaborators.filter(c => c.id !== collaboratorId);
+            const updatedCollaborators = collaborators.filter(c => c.id !== collaboratorId);
             const projectWithCollabRemoved = { ...project, collaborators: updatedCollaborators };
             const message = `removed ${collaboratorToRemove.name} from the team`;
             const projectWithActivity = logActivity(projectWithCollabRemoved, message);
@@ -684,85 +696,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             lastModified: new Date().toISOString().split('T')[0]
         };
 
-        const projectWithNewFile = {...project, files: [...project.files, file]};
+        const projectWithNewFile = {...project, files: [...files, file]};
         const message = `added file: '${file.name}'`;
         const projectWithActivity = logActivity(projectWithNewFile, message);
         onUpdateProject(projectWithActivity);
-
-        // Reset respective forms
-        if (type === 'draft') {
-            setNewDraft({ name: '', url: '' });
-            setShowAddDraft(false);
-        } else if (type === 'code' || type === 'data') {
-            setNewCodeData({ name: '', url: '', type: 'code' });
-            setShowAddCodeData(false);
-        } else { // slide, document, other
-            setNewOther({ name: '', url: '', type: 'slide' });
-            setShowAddOther(false);
-        }
     };
 
     const handleDeleteFile = (id: string) => {
-        const fileToDelete = project.files.find(f => f.id === id);
+        const fileToDelete = files.find(f => f.id === id);
         if (!fileToDelete) return;
 
-        const projectWithFileRemoved = {...project, files: project.files.filter(f => f.id !== id)};
+        const projectWithFileRemoved = {...project, files: files.filter(f => f.id !== id)};
         const message = `deleted file: '${fileToDelete.name}'`;
         const projectWithActivity = logActivity(projectWithFileRemoved, message);
         onUpdateProject(projectWithActivity);
-    };
-
-    // --- STICKY NOTES LOGIC ---
-    const addStickyNote = () => {
-        const newNote: StickyNote = {
-            id: `p-note-${Date.now()}`,
-            title: 'New Note',
-            content: '',
-            color: 'yellow',
-            createdAt: new Date().toISOString()
-        };
-        const projectWithNewNote = { ...project, notes: [newNote, ...(project.notes || [])] };
-        const message = `added a sticky note: '${newNote.title}'`;
-        const projectWithActivity = logActivity(projectWithNewNote, message);
-        onUpdateProject(projectWithActivity);
-    };
-
-    const updateStickyNote = (id: string, updates: Partial<StickyNote>) => {
-        const updatedNotes = (project.notes || []).map(note => 
-            note.id === id ? { ...note, ...updates } : note
-        );
-        onUpdateProject({ ...project, notes: updatedNotes });
-    };
-
-    const deleteStickyNote = (id: string) => {
-        const noteToDelete = (project.notes || []).find(n => n.id === id);
-        if (!noteToDelete) return;
-
-        if (!window.confirm("Delete this note?")) return;
-        const updatedNotes = (project.notes || []).filter(n => n.id !== id);
-        const projectWithNoteRemoved = { ...project, notes: updatedNotes };
-        const message = `deleted a sticky note: '${noteToDelete.title}'`;
-        const projectWithActivity = logActivity(projectWithNoteRemoved, message);
-        onUpdateProject(projectWithActivity);
-        if (expandedNoteId === id) setExpandedNoteId(null);
-    };
-
-    const renderExpandedNoteModal = () => {
-        if (!expandedNoteId) return null;
-        const note = project.notes?.find(n => n.id === expandedNoteId);
-        if (!note) return null;
-
-        return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div className={`w-full max-w-2xl h-[70vh] rounded-xl shadow-2xl flex flex-col overflow-hidden ${ note.color === 'yellow' ? 'bg-amber-50' : 'bg-blue-50'}`}>
-                    <div className="p-4 border-b border-black/5 flex justify-between items-center bg-white/50">
-                        <input className="bg-transparent text-xl font-bold text-slate-800 outline-none w-full mr-4" value={note.title} onChange={(e) => updateStickyNote(note.id, { title: e.target.value })}/>
-                        <button onClick={() => setExpandedNoteId(null)} className="p-2 hover:bg-slate-200 rounded-lg"><X className="w-6 h-6" /></button>
-                    </div>
-                    <textarea className="flex-1 w-full p-6 bg-transparent resize-none outline-none text-base text-slate-700" value={note.content} onChange={(e) => updateStickyNote(note.id, { content: e.target.value })} autoFocus/>
-                </div>
-            </div>
-        );
     };
 
     const TabButton = ({ id, icon: Icon, label }: { id: typeof activeTab, icon: React.ElementType, label: string }) => (
@@ -775,9 +722,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const renderTabContent = () => {
         switch (activeTab) {
             case 'dashboard': {
-                const todoTasks = project.tasks.filter(t => t.status === 'todo').length;
-                const inProgressTasks = project.tasks.filter(t => t.status === 'in_progress').length;
-                const doneTasks = project.tasks.filter(t => t.status === 'done').length;
+                const todoTasks = tasks.filter(t => t.status === 'todo').length;
+                const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
+                const doneTasks = tasks.filter(t => t.status === 'done').length;
 
                 const taskData = [
                     { name: 'To Do', value: todoTasks, color: '#f59e0b' },
@@ -785,7 +732,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     { name: 'Done', value: doneTasks, color: '#16a34a' },
                 ];
 
-                const upcomingTasks = project.tasks
+                const upcomingTasks = tasks
                     .filter(t => t.status !== 'done' && new Date(t.dueDate) >= new Date())
                     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                     .slice(0, 5);
@@ -797,17 +744,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                     <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Tasks</p>
-                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{doneTasks}/{project.tasks.length}</h3>
+                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{doneTasks}/{tasks.length}</h3>
                                     <p className="text-xs text-slate-400">Completed</p>
                                 </div>
                                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                     <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><Users className="w-4 h-4" /> Team</p>
-                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{project.collaborators.length}</h3>
+                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{collaborators.length}</h3>
                                     <p className="text-xs text-slate-400">Members</p>
                                 </div>
                                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                     <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><FileIcon className="w-4 h-4" /> Files</p>
-                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{project.files.length}</h3>
+                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{files.length}</h3>
                                     <p className="text-xs text-slate-400">Attached</p>
                                 </div>
                             </div>
@@ -866,8 +813,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Activity className="w-4 h-4 text-green-500"/> Recent Activity</h4>
                                 <div className="space-y-3 max-h-48 overflow-y-auto">
-                                    {project.activity && project.activity.length > 0 ? [...project.activity].map(act => {
-                                        const author = project.collaborators.find(c => c.id === act.authorId) || { name: 'Unknown', initials: '?' };
+                                    {activity.length > 0 ? activity.map(act => {
+                                        const author = collaborators.find(c => c.id === act.authorId) || { name: 'Unknown', initials: '?' };
                                         return (
                                             <div key={act.id} className="flex items-start gap-3 text-sm">
                                                 <div className="w-7 h-7 mt-0.5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-xs shrink-0" title={author.name}>
@@ -898,112 +845,154 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                     <button onClick={() => setAddingTaskForStatus(status)} className="p-1 hover:bg-white rounded text-slate-500 hover:text-indigo-600" title="Add Task"><Plus className="w-4 h-4" /></button>
                                 </div>
                                 <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-                                    {project.tasks.filter(t => t.status === status).map(task => (
+                                    {tasks.filter(t => t.status === status).map(task => (
                                         <TaskCard key={task.id} task={task} project={project} onClick={() => setSelectedTask(task)} />
                                     ))}
-                                    {project.tasks.filter(t => t.status === status).length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">No tasks</div>}
+                                    {tasks.filter(t => t.status === status).length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">No tasks</div>}
                                 </div>
                             </div>
                         ))}
                     </div>
                 );
             case 'files':
-                const drafts = project.files.filter(f => f.type === 'draft');
-                const codeAndData = project.files.filter(f => f.type === 'code' || f.type === 'data');
-                const otherAssets = project.files.filter(f => ['slide', 'document', 'other'].includes(f.type));
+                if (project.category === 'admin') {
+                    const documents = files.filter(f => ['draft', 'document', 'other'].includes(f.type));
+                    const assets = files.filter(f => ['code', 'data', 'slide'].includes(f.type));
 
-                return (
-                    <div className="p-6 space-y-6 h-full overflow-y-auto">
-                        {/* Manuscript Drafts Section */}
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Pencil className="w-4 h-4 text-emerald-600"/> Manuscript Drafts</h4>
-                                {!isGuestView && <button onClick={() => setShowAddDraft(!showAddDraft)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Draft</button>}
-                            </div>
-                            {showAddDraft && !isGuestView && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
-                                <input placeholder="Draft Title (e.g., Chapter 1 v2)" value={newDraft.name} onChange={e => setNewDraft({...newDraft, name: e.target.value})} className="p-2 rounded border"/>
-                                <input placeholder="URL" value={newDraft.url} onChange={e => setNewDraft({...newDraft, url: e.target.value})} className="p-2 rounded border"/>
-                                <div className="flex gap-2"><button onClick={() => handleAddFile(newDraft, 'draft')} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddDraft(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                            </div>}
-                            <div className="space-y-2">
-                                {drafts.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                    {!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
-                                </div>))}
-                                {drafts.length === 0 && !showAddDraft && <p className="text-xs text-slate-400 italic text-center py-4">No drafts linked.</p>}
-                            </div>
-                        </div>
-
-                        {/* Code & Data Section */}
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Database className="w-4 h-4 text-sky-600"/> Code & Data</h4>
-                                {!isGuestView && <button onClick={() => setShowAddCodeData(!showAddCodeData)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Item</button>}
-                            </div>
-                            {showAddCodeData && !isGuestView && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
-                                <input placeholder="File Name (e.g., main.py)" value={newCodeData.name} onChange={e => setNewCodeData({...newCodeData, name: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                <select value={newCodeData.type} onChange={e => setNewCodeData({...newCodeData, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="code">Code</option><option value="data">Data</option></select>
-                                <input placeholder="URL" value={newCodeData.url} onChange={e => setNewCodeData({...newCodeData, url: e.target.value})} className="p-2 rounded border"/>
-                                <div className="col-span-2 flex gap-2"><button onClick={() => handleAddFile(newCodeData, newCodeData.type)} className="bg-sky-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddCodeData(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                            </div>}
-                            <div className="space-y-2">
-                                {codeAndData.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                    <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
-                                </div>))}
-                                {codeAndData.length === 0 && !showAddCodeData && <p className="text-xs text-slate-400 italic text-center py-4">No code or data files linked.</p>}
-                            </div>
-                        </div>
-                        
-                        {/* Other Assets Section */}
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-amber-600"/> Other Assets</h4>
-                                {!isGuestView && <button onClick={() => setShowAddOther(!showAddOther)} className="text-xs font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
-                            </div>
-                            {showAddOther && !isGuestView && <div className="p-3 mb-3 bg-amber-50 rounded-lg border border-amber-100 grid grid-cols-2 gap-2 text-sm">
-                                <input placeholder="File Name (e.g., Presentation Slides)" value={newOther.name} onChange={e => setNewOther({...newOther, name: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                <select value={newOther.type} onChange={e => setNewOther({...newOther, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Slide Deck</option><option value="document">Document</option><option value="other">Other</option></select>
-                                <input placeholder="URL" value={newOther.url} onChange={e => setNewOther({...newOther, url: e.target.value})} className="p-2 rounded border"/>
-                                <div className="col-span-2 flex gap-2"><button onClick={() => handleAddFile(newOther, newOther.type)} className="bg-amber-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddOther(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                            </div>}
-                            <div className="space-y-2">
-                                {otherAssets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-amber-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                    <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
-                                </div>))}
-                                {otherAssets.length === 0 && !showAddOther && <p className="text-xs text-slate-400 italic text-center py-4">No other assets linked.</p>}
-                            </div>
-                        </div>
-                    </div>
-                );
-            case 'notes':
-                 const notes = project.notes || [];
-                 return (
-                    <div className="p-6 flex flex-col h-full overflow-hidden">
-                         <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                            <h3 className="font-semibold text-slate-700 text-lg">Project Sticky Board</h3>
-                            <button onClick={addStickyNote} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-700 shadow-sm flex items-center gap-2"><Plus className="w-4 h-4"/> New Note</button>
-                         </div>
-                         <div className="flex-1 bg-slate-100/70 rounded-xl border border-slate-200 p-4 overflow-y-auto">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {notes.map(note => (
-                                    <div key={note.id} className={`group relative p-4 rounded-lg shadow-sm flex flex-col min-h-[200px] border ${note.color === 'yellow' ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'}`}>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <input className="bg-transparent font-bold text-sm text-slate-700 outline-none w-full" value={note.title} onChange={(e) => updateStickyNote(note.id, { title: e.target.value })}/>
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                                                <button onClick={() => setExpandedNoteId(note.id)} className="p-1 hover:bg-white/50 rounded" title="Expand"><Maximize2 className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => deleteStickyNote(note.id)} className="p-1 hover:bg-white/50 rounded text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                                            </div>
-                                        </div>
-                                        <textarea className="flex-1 w-full text-sm text-slate-600 bg-transparent resize-none outline-none" value={note.content} onChange={(e) => updateStickyNote(note.id, { content: e.target.value })} />
+                    return (
+                        <div className="p-6 space-y-6 h-full overflow-y-auto">
+                            {/* Documents Section */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><FileText className="w-4 h-4 text-emerald-600"/> Documents</h4>
+                                    {!isGuestView && <button onClick={() => setShowAddAdminDoc(!showAddAdminDoc)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Document</button>}
+                                </div>
+                                {showAddAdminDoc && !isGuestView && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
+                                    <input placeholder="Document Title" value={newAdminDoc.name} onChange={e => setNewAdminDoc({...newAdminDoc, name: e.target.value})} className="p-2 rounded border"/>
+                                    <input placeholder="URL" value={newAdminDoc.url} onChange={e => setNewAdminDoc({...newAdminDoc, url: e.target.value})} className="p-2 rounded border"/>
+                                    <select value={newAdminDoc.type} onChange={e => setNewAdminDoc({...newAdminDoc, type: e.target.value as any})} className="p-2 rounded border bg-white">
+                                        <option value="document">Official Document</option>
+                                        <option value="draft">Draft / Meeting Note</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => {
+                                            handleAddFile(newAdminDoc, newAdminDoc.type);
+                                            setNewAdminDoc({ name: '', url: '', type: 'document' });
+                                            setShowAddAdminDoc(false);
+                                        }} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button>
+                                        <button onClick={() => setShowAddAdminDoc(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button>
                                     </div>
-                                ))}
-                                {notes.length === 0 && <button onClick={addStickyNote} className="border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 min-h-[200px]"><Plus className="w-6 h-6 mb-1" /><span>New Sticky Note</span></button>}
+                                </div>}
+                                <div className="space-y-2">
+                                    {documents.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                        {!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
+                                    </div>))}
+                                    {documents.length === 0 && !showAddAdminDoc && <p className="text-xs text-slate-400 italic text-center py-4">No documents linked.</p>}
+                                </div>
                             </div>
-                         </div>
-                    </div>
-                 );
+    
+                            {/* Assets Section */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-sky-600"/> Assets</h4>
+                                    {!isGuestView && <button onClick={() => setShowAddAdminAsset(!showAddAdminAsset)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
+                                </div>
+                                {showAddAdminAsset && !isGuestView && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
+                                    <input placeholder="Asset Name" value={newAdminAsset.name} onChange={e => setNewAdminAsset({...newAdminAsset, name: e.target.value})} className="p-2 rounded border col-span-2"/>
+                                    <select value={newAdminAsset.type} onChange={e => setNewAdminAsset({...newAdminAsset, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Presentation</option><option value="data">Data Sheet</option><option value="code">Script/Code</option></select>
+                                    <input placeholder="URL" value={newAdminAsset.url} onChange={e => setNewAdminAsset({...newAdminAsset, url: e.target.value})} className="p-2 rounded border"/>
+                                    <div className="col-span-2 flex gap-2">
+                                        <button onClick={() => {
+                                            handleAddFile(newAdminAsset, newAdminAsset.type);
+                                            setNewAdminAsset({ name: '', url: '', type: 'slide' });
+                                            setShowAddAdminAsset(false);
+                                        }} className="bg-sky-600 text-white px-3 py-1 rounded text-xs">Save</button>
+                                        <button onClick={() => setShowAddAdminAsset(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button>
+                                    </div>
+                                </div>}
+                                <div className="space-y-2">
+                                    {assets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                    </div>))}
+                                    {assets.length === 0 && !showAddAdminAsset && <p className="text-xs text-slate-400 italic text-center py-4">No assets linked.</p>}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                } else {
+                    const drafts = files.filter(f => f.type === 'draft');
+                    const codeAndData = files.filter(f => f.type === 'code' || f.type === 'data');
+                    const otherAssets = files.filter(f => ['slide', 'document', 'other'].includes(f.type));
+
+                    return (
+                        <div className="p-6 space-y-6 h-full overflow-y-auto">
+                            {/* Manuscript Drafts Section */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Pencil className="w-4 h-4 text-emerald-600"/> Manuscript Drafts</h4>
+                                    {!isGuestView && <button onClick={() => setShowAddDraft(!showAddDraft)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Draft</button>}
+                                </div>
+                                {showAddDraft && !isGuestView && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
+                                    <input placeholder="Draft Title (e.g., Chapter 1 v2)" value={newDraft.name} onChange={e => setNewDraft({...newDraft, name: e.target.value})} className="p-2 rounded border"/>
+                                    <input placeholder="URL" value={newDraft.url} onChange={e => setNewDraft({...newDraft, url: e.target.value})} className="p-2 rounded border"/>
+                                    <div className="flex gap-2"><button onClick={() => { handleAddFile(newDraft, 'draft'); setNewDraft({ name: '', url: '' }); setShowAddDraft(false); }} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddDraft(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
+                                </div>}
+                                <div className="space-y-2">
+                                    {drafts.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                        {!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
+                                    </div>))}
+                                    {drafts.length === 0 && !showAddDraft && <p className="text-xs text-slate-400 italic text-center py-4">No drafts linked.</p>}
+                                </div>
+                            </div>
+
+                            {/* Code & Data Section */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Database className="w-4 h-4 text-sky-600"/> Code & Data</h4>
+                                    {!isGuestView && <button onClick={() => setShowAddCodeData(!showAddCodeData)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Item</button>}
+                                </div>
+                                {showAddCodeData && !isGuestView && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
+                                    <input placeholder="File Name (e.g., main.py)" value={newCodeData.name} onChange={e => setNewCodeData({...newCodeData, name: e.target.value})} className="p-2 rounded border col-span-2"/>
+                                    <select value={newCodeData.type} onChange={e => setNewCodeData({...newCodeData, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="code">Code</option><option value="data">Data</option></select>
+                                    <input placeholder="URL" value={newCodeData.url} onChange={e => setNewCodeData({...newCodeData, url: e.target.value})} className="p-2 rounded border"/>
+                                    <div className="col-span-2 flex gap-2"><button onClick={() => { handleAddFile(newCodeData, newCodeData.type); setNewCodeData({ name: '', url: '', type: 'code' }); setShowAddCodeData(false); }} className="bg-sky-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddCodeData(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
+                                </div>}
+                                <div className="space-y-2">
+                                    {codeAndData.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                    </div>))}
+                                    {codeAndData.length === 0 && !showAddCodeData && <p className="text-xs text-slate-400 italic text-center py-4">No code or data files linked.</p>}
+                                </div>
+                            </div>
+                            
+                            {/* Other Assets Section */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-amber-600"/> Other Assets</h4>
+                                    {!isGuestView && <button onClick={() => setShowAddOther(!showAddOther)} className="text-xs font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
+                                </div>
+                                {showAddOther && !isGuestView && <div className="p-3 mb-3 bg-amber-50 rounded-lg border border-amber-100 grid grid-cols-2 gap-2 text-sm">
+                                    <input placeholder="File Name (e.g., Presentation Slides)" value={newOther.name} onChange={e => setNewOther({...newOther, name: e.target.value})} className="p-2 rounded border col-span-2"/>
+                                    <select value={newOther.type} onChange={e => setNewOther({...newOther, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Slide Deck</option><option value="document">Document</option><option value="other">Other</option></select>
+                                    <input placeholder="URL" value={newOther.url} onChange={e => setNewOther({...newOther, url: e.target.value})} className="p-2 rounded border"/>
+                                    <div className="col-span-2 flex gap-2"><button onClick={() => { handleAddFile(newOther, newOther.type); setNewOther({ name: '', url: '', type: 'slide' }); setShowAddOther(false); }} className="bg-amber-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddOther(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
+                                </div>}
+                                <div className="space-y-2">
+                                    {otherAssets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-amber-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                    </div>))}
+                                    {otherAssets.length === 0 && !showAddOther && <p className="text-xs text-slate-400 italic text-center py-4">No other assets linked.</p>}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
             case 'team':
                  return (
                     <div className="p-6">
@@ -1012,7 +1001,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             {!isGuestView && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {project.collaborators.map(c => (
+                            {collaborators.map(c => (
                                 <div key={c.id} className="relative group bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 shrink-0">{c.initials}</div>
                                     <div className="flex-1 min-w-0">
@@ -1053,7 +1042,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 </div>
             )}
             {showShareModal && <ShareModal project={project} currentUser={currentUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} />}
-            {renderExpandedNoteModal()}
             {selectedTask && (
                 <TaskDetailModal 
                     task={selectedTask}
@@ -1116,7 +1104,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 <TabButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
                 <TabButton id="tasks" icon={ClipboardList} label="Tasks" />
                 <TabButton id="files" icon={FileIcon} label="Files" />
-                <TabButton id="notes" icon={NoteIcon} label="Notes" />
                 <TabButton id="team" icon={Users} label="Team" />
                 <div className="w-px h-6 bg-slate-200 mx-2"></div>
                 <TabButton id="ai" icon={Bot} label="AI Assistant" />
