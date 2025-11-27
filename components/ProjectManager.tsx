@@ -1,67 +1,24 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Project, Collaborator, ProjectStatus } from '../types';
 import { ChevronLeft, Plus, Users } from 'lucide-react';
 
 interface ProjectManagerProps {
   projects: Project[];
-  selectedProject: Project | null;
   currentUser: Collaborator;
-  onSelectProject: (project: Project | null) => void;
-  onUpdateProject: (project: Project) => void;
-  onDeleteProject?: (id: string) => void;
-  onArchiveProject?: (id: string) => void;
+  onSelectProject: (project: Project) => void;
   onAddProject?: (project: Project) => void;
   title?: string;
-  isGuestView?: boolean; // New prop
+  isGuestView?: boolean;
 }
 
 const ProjectManager: React.FC<ProjectManagerProps> = ({
   projects,
-  selectedProject,
   currentUser,
   onSelectProject,
-  onUpdateProject,
-  onDeleteProject,
-  onArchiveProject,
   onAddProject,
   title = 'Research Projects',
   isGuestView = false,
 }) => {
-  if (selectedProject) {
-    return (
-      <div className="h-full flex flex-col p-6 overflow-y-auto">
-        <header className="flex items-center mb-6">
-          {!isGuestView && (
-            <button 
-              onClick={() => onSelectProject(null)} 
-              className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 font-medium p-2 rounded-lg hover:bg-slate-100"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              All Projects
-            </button>
-          )}
-        </header>
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 flex-1">
-          <h2 className="text-2xl font-bold text-slate-800">{selectedProject.title}</h2>
-          <p className="text-slate-600 mt-2">{selectedProject.description}</p>
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold uppercase text-slate-400 tracking-wider">Team</h3>
-            <div className="flex items-center -space-x-2 mt-2">
-              {selectedProject.collaborators.map(c => (
-                <div key={c.id} title={c.name} className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs border-2 border-white">
-                  {c.initials}
-                </div>
-              ))}
-            </div>
-          </div>
-          <p className="mt-8 text-sm text-slate-500 italic">
-            (A complete project detail view with tabs for dashboard, tasks, files, etc. would be rendered here.)
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       <header className="flex justify-between items-center mb-6">

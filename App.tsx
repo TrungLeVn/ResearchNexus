@@ -3,6 +3,7 @@ import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppMod
 import { MOCK_USERS } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { ProjectManager } from './components/ProjectManager';
+import { ProjectDetail } from './components/ProjectDetail'; // Import new component
 import { IdeaLab } from './components/IdeaLab';
 import { AIChat } from './components/AIChat';
 import { LoginScreen } from './components/LoginScreen';
@@ -324,16 +325,12 @@ const App: React.FC = () => {
                 </div>
             </header>
             <main className="flex-1 overflow-hidden">
-                <ProjectManager
+                <ProjectDetail
                     isGuestView={true}
-                    projects={[selectedProject]}
-                    selectedProject={selectedProject}
+                    project={selectedProject}
                     currentUser={currentUser}
-                    onSelectProject={() => {}} // Guests can't navigate away
                     onUpdateProject={handleUpdateProject}
-                    onDeleteProject={() => alert("Guests do not have permission to delete projects.")}
-                    onArchiveProject={() => alert("Guests do not have permission to archive projects.")}
-                    onAddProject={() => alert("Guests do not have permission to add projects.")}
+                    onBack={() => {}} // No back action for guests
                 />
             </main>
         </div>
@@ -359,15 +356,19 @@ const App: React.FC = () => {
                   />
               );
           case ViewState.PROJECTS:
-              return (
+              return selectedProject ? (
+                  <ProjectDetail
+                      project={selectedProject}
+                      currentUser={currentUser}
+                      onUpdateProject={handleUpdateProject}
+                      onBack={() => setSelectedProject(null)}
+                      isGuestView={false}
+                  />
+              ) : (
                   <ProjectManager 
                       projects={researchProjects} 
-                      selectedProject={selectedProject}
                       currentUser={currentUser}
                       onSelectProject={setSelectedProject}
-                      onUpdateProject={handleUpdateProject}
-                      onDeleteProject={handleDeleteProject}
-                      onArchiveProject={handleArchiveProject}
                       onAddProject={handleAddProject}
                   />
               );
@@ -507,7 +508,7 @@ const App: React.FC = () => {
                 
                 {/* RESEARCH MODULE + SUB-TABS */}
                 <button
-                    onClick={() => { setActiveModule(AppModule.RESEARCH); setCurrentResearchView(ViewState.DASHBOARD); }}
+                    onClick={() => { setActiveModule(AppModule.RESEARCH); setCurrentResearchView(ViewState.DASHBOARD); setSelectedProject(null); }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 mb-1 ${
                         activeModule === AppModule.RESEARCH && currentResearchView !== ViewState.SETTINGS
                             ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
@@ -530,7 +531,7 @@ const App: React.FC = () => {
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> Dashboard
                         </button>
                         <button
-                            onClick={() => setCurrentResearchView(ViewState.PROJECTS)}
+                            onClick={() => {setCurrentResearchView(ViewState.PROJECTS); setSelectedProject(null);}}
                             className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                                 currentResearchView === ViewState.PROJECTS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'
                             }`}
