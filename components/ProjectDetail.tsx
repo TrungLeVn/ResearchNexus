@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Project, Collaborator, Task, Paper, ProjectFile, TaskStatus } from '../types';
-import { ChevronLeft, Plus, Users, Bot, ClipboardList, Book, File, MessageSquare, StickyNote, Trash2, MoreVertical, ChevronsRight } from 'lucide-react';
+import { Project, Collaborator, Task, TaskStatus } from '../types';
+import { ChevronLeft, Plus, Users, Bot, ClipboardList, Book, File, StickyNote, Trash2, Share2, X, Copy, Check, Mail } from 'lucide-react';
 import { AIChat } from './AIChat';
 
 interface ProjectDetailProps {
@@ -8,6 +8,7 @@ interface ProjectDetailProps {
   currentUser: Collaborator;
   onUpdateProject: (project: Project) => void;
   onBack: () => void;
+  onDeleteProject: (projectId: string) => void;
   isGuestView?: boolean;
 }
 
@@ -17,7 +18,6 @@ const statusMap: { [key in TaskStatus]: string } = {
     done: 'Done'
 };
 
-// FIX: Define props interface for TaskCard and use React.FC to properly handle props including the special 'key' prop.
 interface TaskCardProps {
     task: Task;
     onMove: (taskId: string, newStatus: TaskStatus) => void;
@@ -45,10 +45,141 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onMove, onDelete }) => {
     );
 };
 
+interface ShareModalProps {
+    project: Project;
+    onClose: () => void;
+    onAddCollaborator: (c: Collaborator) => void;
+}
 
-export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, isGuestView = false }) => {
+const ShareModal: React.FC<ShareModalProps> = ({ project, onClose, onAddCollaborator }) => {
+    const [email, setEmail] = useState('');
+    const [name, setName] = useState('');
+    const [role, setRole] = useState<'Editor' | 'Viewer'>('Editor');
+    const [copied, setCopied] = useState(false);
+
+    const inviteLink = `${window.location.origin}?pid=${project.id}`;
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(inviteLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleAdd = () => {
+        if (!email || !name) return;
+        const newCollaborator: Collaborator = {
+            id: `collab_${Date.now()}`,
+            name,
+            email,
+            role,
+            initials: name.substring(0, 2).toUpperCase()
+        };
+        onAddCollaborator(newCollaborator);
+        setEmail('');
+        setName('');
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Share2 className="w-4 h-4 text-indigo-600" /> Share Project
+                    </h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                    {/* Invite Link Section */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Invite via Link</label>
+                        <div className="flex gap-2">
+                            <input 
+                                readOnly
+                                value={inviteLink}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 select-all outline-none"
+                            />
+                            <button 
+                                onClick={handleCopy}
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                                title="Copy Link"
+                            >
+                                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">Anyone with this link can request to join as a Guest.</p>
+                    </div>
+
+                    <div className="border-t border-slate-100"></div>
+
+                    {/* Add Collaborator Section */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-3">Add Team Member</label>
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <input 
+                                    placeholder="Name"
+                                    value={name}
+                                    onChange={e => setName(e.target.value)}
+                                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                                />
+                                <select 
+                                    value={role}
+                                    onChange={e => setRole(e.target.value as any)}
+                                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white outline-none"
+                                >
+                                    <option value="Editor">Editor</option>
+                                    <option value="Viewer">Viewer</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                                    <input 
+                                        placeholder="Email Address"
+                                        value={email}
+                                        onChange={e => setEmail(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <button 
+                                    onClick={handleAdd}
+                                    disabled={!name || !email}
+                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                >
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Current Team List Preview */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Current Access</label>
+                        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                            {project.collaborators.map(c => (
+                                <div key={c.id} className="flex items-center justify-between text-sm bg-slate-50 p-2 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                                            {c.initials}
+                                        </div>
+                                        <span className="text-slate-700">{c.name}</span>
+                                    </div>
+                                    <span className="text-xs text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">{c.role}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
     const [activeTab, setActiveTab] = useState<'tasks' | 'files' | 'notes' | 'team' | 'ai'>('tasks');
     const [notes, setNotes] = useState(project.notes);
+    const [showShareModal, setShowShareModal] = useState(false);
 
     const handleUpdateTasks = (updatedTasks: Task[]) => {
         onUpdateProject({ ...project, tasks: updatedTasks });
@@ -83,6 +214,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const handleSaveNotes = () => {
         onUpdateProject({ ...project, notes });
         alert("Notes saved!");
+    };
+
+    const handleAddCollaborator = (newCollab: Collaborator) => {
+        const updatedCollaborators = [...project.collaborators, newCollab];
+        onUpdateProject({ ...project, collaborators: updatedCollaborators });
+    };
+
+    const handleDeleteProjectConfirm = () => {
+        if (window.confirm(`Are you sure you want to delete "${project.title}"? This action cannot be undone.`)) {
+            onDeleteProject(project.id);
+        }
     };
 
     const renderTabContent = () => {
@@ -141,7 +283,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             case 'team':
                  return (
                     <div className="p-6">
-                         <h3 className="font-semibold text-slate-700 text-lg mb-4">Collaborators</h3>
+                         <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-semibold text-slate-700 text-lg">Collaborators</h3>
+                            {!isGuestView && (
+                                <button 
+                                    onClick={() => setShowShareModal(true)} 
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100"
+                                >
+                                    <Plus className="w-4 h-4" /> Add Member
+                                </button>
+                            )}
+                         </div>
                          <div className="space-y-2 max-w-md">
                              {project.collaborators.map(c => (
                                  <div key={c.id} className="flex items-center gap-3 bg-white p-3 rounded-lg border">
@@ -173,7 +325,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     );
 
     return (
-        <div className="h-full flex flex-col overflow-hidden animate-in fade-in duration-300">
+        <div className="h-full flex flex-col overflow-hidden animate-in fade-in duration-300 relative">
+            {showShareModal && (
+                <ShareModal 
+                    project={project} 
+                    onClose={() => setShowShareModal(false)} 
+                    onAddCollaborator={handleAddCollaborator} 
+                />
+            )}
+
             {/* Header */}
             <header className="flex items-center justify-between p-4 border-b border-slate-200 flex-shrink-0 bg-white">
                 <div className="flex items-center gap-3">
@@ -190,15 +350,35 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                         <p className="text-sm text-slate-500">{project.description}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                      <span className="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{project.status}</span>
-                     <div className="flex items-center -space-x-2">
+                     <div className="flex items-center -space-x-2 mr-2">
                         {project.collaborators.map(c => (
                             <div key={c.id} title={c.name} className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs border-2 border-white">
                             {c.initials}
                             </div>
                         ))}
                     </div>
+                    
+                    {!isGuestView && (
+                        <>
+                            <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                            <button 
+                                onClick={() => setShowShareModal(true)}
+                                className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                                title="Share Project"
+                            >
+                                <Share2 className="w-5 h-5" />
+                            </button>
+                            <button 
+                                onClick={handleDeleteProjectConfirm}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Project"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                        </>
+                    )}
                 </div>
             </header>
 

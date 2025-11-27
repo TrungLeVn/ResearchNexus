@@ -224,10 +224,10 @@ const App: React.FC = () => {
   const handleAddProject = (newProject: Project) => saveProject(newProject);
   
   const handleDeleteProject = (projectId: string) => {
-      if (window.confirm("Are you sure you want to delete this project?")) {
-          deleteProject(projectId);
-          if (selectedProject?.id === projectId) setSelectedProject(null);
-      }
+      // Logic inside ProjectDetail handles the confirmation, but we double check or just execute
+      // Since ProjectDetail calls this after confirmation, we just delete.
+      deleteProject(projectId);
+      if (selectedProject?.id === projectId) setSelectedProject(null);
   };
 
   const handleArchiveProject = (projectId: string) => {
@@ -331,6 +331,7 @@ const App: React.FC = () => {
                     currentUser={currentUser}
                     onUpdateProject={handleUpdateProject}
                     onBack={() => {}} // No back action for guests
+                    onDeleteProject={() => {}} // Guests can't delete
                 />
             </main>
         </div>
@@ -363,6 +364,7 @@ const App: React.FC = () => {
                       onUpdateProject={handleUpdateProject}
                       onBack={() => setSelectedProject(null)}
                       isGuestView={false}
+                      onDeleteProject={handleDeleteProject}
                   />
               ) : (
                   <ProjectManager 
