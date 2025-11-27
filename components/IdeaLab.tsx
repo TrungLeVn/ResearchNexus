@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Idea, LinkResource } from '../types';
-import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive, Maximize2, X, BrainCircuit, Wand2, Save } from 'lucide-react';
+import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive, Maximize2, X, BrainCircuit, Wand2, Save, Loader2 } from 'lucide-react';
 import { expandResearchIdea, structureIdeaContent, brainstormRelatedTopics } from '../services/gemini';
 import ReactMarkdown from 'react-markdown';
 
@@ -58,7 +58,7 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
             const structured = await structureIdeaContent(content);
             setContent(structured);
             // Auto-save after AI action
-            onUpdate({ ...idea, title, content: structured, description });
+            onUpdate({ ...idea, title, content: structured, description, aiEnhanced: true });
         } catch (e) {
             console.error(e);
         } finally {
@@ -72,7 +72,7 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
             const expanded = await expandResearchIdea(title, content);
             const newContent = content + "\n\n---\n\n" + expanded;
             setContent(newContent);
-            onUpdate({ ...idea, title, content: newContent, description });
+            onUpdate({ ...idea, title, content: newContent, description, aiEnhanced: true });
         } catch (e) {
             console.error(e);
         } finally {
@@ -284,24 +284,13 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
 
 export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea, onDeleteIdea }) => {
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
-  const [isCreatingNew, setIsCreatingNew] = useState(false); // Flag for new idea creation
   const [quickTitle, setQuickTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // State for quick AI actions from main board
+  const [processingIdeaId, setProcessingIdeaId] = useState<string | null>(null);
+  const [aiMenuOpenId, setAiMenuOpenId] = useState<string | null>(null);
 
-  // This effect synchronizes an OPEN modal with external data changes (e.g., from another client).
-  // It is careful not to close the modal for newly created, unsaved ideas.
-  useEffect(() => {
-    if (selectedIdea && !isCreatingNew) {
-      const freshIdea = ideas.find(i => i.id === selectedIdea.id);
-      if (!freshIdea) {
-        // The idea is no longer in the main list, so it must have been deleted. Close the modal.
-        setSelectedIdea(null);
-      } else if (JSON.stringify(freshIdea) !== JSON.stringify(selectedIdea)) {
-        // The idea data has changed, so update the modal's state.
-        setSelectedIdea(freshIdea);
-      }
-    }
-  }, [ideas, selectedIdea, isCreatingNew]);
 
   const handleQuickAdd = () => {
       if (!quickTitle.trim()) return;
@@ -313,31 +302,57 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
           relatedResources: [],
           aiEnhanced: false
       };
-      setIsCreatingNew(true); // Set flag to prevent useEffect from closing modal
+      // For new ideas, we save it right away and then select it.
+      // This simplifies state management.
+      onAddIdea(newIdea);
       setSelectedIdea(newIdea);
       setQuickTitle('');
   };
   
-  const handleCloseModal = () => {
-      setSelectedIdea(null);
-      setIsCreatingNew(false); // Reset flag when modal is closed
-  };
-  
   const handleSaveOrUpdate = (ideaToSave: Idea) => {
-      if (isCreatingNew) {
-          onAddIdea(ideaToSave);
-          setIsCreatingNew(false); // The idea is now saved, so it's no longer "new"
-      } else {
-          onUpdateIdea(ideaToSave);
-      }
+    // This function handles saves from the modal.
+    // It finds if the idea exists to decide if it's an add or update.
+    const ideaExists = ideas.some(i => i.id === ideaToSave.id);
+    if (ideaExists) {
+        onUpdateIdea(ideaToSave);
+    } else {
+        onAddIdea(ideaToSave);
+    }
   };
 
   const handleDelete = (id: string) => {
-      if (!isCreatingNew) { // Only delete from DB if it's not a new, unsaved idea
-          onDeleteIdea(id);
+      onDeleteIdea(id);
+      if(selectedIdea?.id === id) {
+          setSelectedIdea(null);
       }
-      handleCloseModal();
   };
+
+  // --- AI HANDLERS for main board ---
+  const handleAiStructure = async (e: React.MouseEvent, idea: Idea) => {
+    e.stopPropagation();
+    setAiMenuOpenId(null);
+    setProcessingIdeaId(idea.id);
+    try {
+        const structured = await structureIdeaContent(idea.content);
+        onUpdateIdea({ ...idea, content: structured, aiEnhanced: true });
+    } catch (err) { console.error(err); } 
+    finally { setProcessingIdeaId(null); }
+  };
+
+  const handleAiConnections = async (e: React.MouseEvent, idea: Idea) => {
+    e.stopPropagation();
+    setAiMenuOpenId(null);
+    setProcessingIdeaId(idea.id);
+    try {
+        const topics = await brainstormRelatedTopics(idea.title, idea.content);
+        if (topics.length > 0) {
+            const connectionsMd = `\n\n### AI Suggested Connections\n${topics.map(t => `- ${t}`).join('\n')}`;
+            onUpdateIdea({ ...idea, content: idea.content + connectionsMd, aiEnhanced: true });
+        }
+    } catch (err) { console.error(err); }
+    finally { setProcessingIdeaId(null); }
+  };
+
 
   const filteredIdeas = ideas.filter(i => 
       i.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -345,11 +360,11 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
   );
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 overflow-hidden relative">
+    <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 overflow-hidden relative" onClick={() => setAiMenuOpenId(null)}>
         {selectedIdea && (
             <IdeaDetailModal 
                 idea={selectedIdea} 
-                onClose={handleCloseModal} 
+                onClose={() => setSelectedIdea(null)} 
                 onUpdate={handleSaveOrUpdate}
                 onDelete={handleDelete}
             />
@@ -400,15 +415,49 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
                 {filteredIdeas.map(idea => (
                     <div 
                         key={idea.id}
-                        onClick={() => {
-                            setIsCreatingNew(false); // This is an existing idea
-                            setSelectedIdea(idea);
-                        }}
-                        className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-amber-200 hover:-translate-y-1 transition-all cursor-pointer group flex flex-col h-[220px]"
+                        onClick={() => setSelectedIdea(idea)}
+                        className="relative bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-amber-200 hover:-translate-y-1 transition-all cursor-pointer group flex flex-col h-[220px]"
                     >
+                        {/* Action buttons */}
+                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <div className="relative">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setAiMenuOpenId(aiMenuOpenId === idea.id ? null : idea.id); }}
+                                    className="p-1.5 bg-white/70 backdrop-blur-sm rounded-md hover:bg-amber-100 text-amber-600"
+                                    title="AI Actions"
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                </button>
+                                {aiMenuOpenId === idea.id && (
+                                    <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 py-1 animate-in fade-in zoom-in-95">
+                                        <button onClick={(e) => handleAiStructure(e, idea)} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2">
+                                            <Wand2 className="w-3 h-3"/> Structure & Summarize
+                                        </button>
+                                        <button onClick={(e) => handleAiConnections(e, idea)} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2">
+                                            <BrainCircuit className="w-3 h-3"/> Find Connections
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); if (window.confirm('Are you sure you want to delete this idea?')) handleDelete(idea.id); }}
+                                className="p-1.5 bg-white/70 backdrop-blur-sm rounded-md hover:bg-red-100 text-red-500"
+                                title="Delete Idea"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                         {/* Loading Overlay */}
+                        {processingIdeaId === idea.id && (
+                            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-20">
+                                <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+                            </div>
+                        )}
+
                         <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-bold text-slate-800 leading-tight line-clamp-2">{idea.title}</h3>
-                            {idea.aiEnhanced && <Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0" />}
+                            <h3 className="font-bold text-slate-800 leading-tight line-clamp-2 pr-4">{idea.title}</h3>
+                            {idea.aiEnhanced && <Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0" title="AI Enhanced" />}
                         </div>
                         
                         <div className="flex-1 overflow-hidden relative">
