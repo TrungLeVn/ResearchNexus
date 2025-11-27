@@ -100,6 +100,16 @@ const App: React.FC = () => {
         const invitedProject = data.find(p => p.id === inviteProjectId);
         if (invitedProject) {
             setSelectedProject(invitedProject);
+
+            // Role upgrade logic for pre-added collaborators joining as guests
+            const existingCollaborator = (invitedProject.collaborators || []).find(
+                c => c.email.toLowerCase() === currentUser.email.toLowerCase()
+            );
+
+            if (existingCollaborator && existingCollaborator.role !== 'Guest') {
+                // This is a pre-added editor/viewer, not a true guest. Upgrade their role for the session.
+                setCurrentUser(existingCollaborator);
+            }
         }
       }
     });

@@ -35,7 +35,8 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                     // FIX: `notes` must be an array of StickyNote, not a string. Initializing as an empty array.
                     progress: 0, tags: [], papers: [], files: [], notes: [],
                     collaborators: [currentUser], tasks: [],
-                    category: projectCategory,
+                    // FIX: Explicitly cast projectCategory to satisfy the Project type, addressing a type inference issue with React.FC default props.
+                    category: projectCategory as 'research' | 'admin',
                 };
                 onAddProject(newProject);
             }

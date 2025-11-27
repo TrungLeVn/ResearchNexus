@@ -521,6 +521,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const files = project.files || [];
     const activity = project.activity || [];
 
+    const canEdit = !isGuestView && (currentUser.role === 'Owner' || currentUser.role === 'Editor');
+
     const showNotification = (message: string) => {
         setNotification({ message, visible: true });
         setTimeout(() => {
@@ -842,7 +844,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div key={status} className="bg-slate-100/70 rounded-xl p-4 flex flex-col h-full overflow-hidden">
                                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                                     <h3 className="font-semibold text-slate-700 flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${status === 'todo' ? 'bg-slate-400' : status === 'in_progress' ? 'bg-blue-400' : 'bg-emerald-400'}`} />{statusMap[status]}</h3>
-                                    <button onClick={() => setAddingTaskForStatus(status)} className="p-1 hover:bg-white rounded text-slate-500 hover:text-indigo-600" title="Add Task"><Plus className="w-4 h-4" /></button>
+                                    {canEdit && <button onClick={() => setAddingTaskForStatus(status)} className="p-1 hover:bg-white rounded text-slate-500 hover:text-indigo-600" title="Add Task"><Plus className="w-4 h-4" /></button>}
                                 </div>
                                 <div className="space-y-3 overflow-y-auto flex-1 pr-1">
                                     {tasks.filter(t => t.status === status).map(task => (
@@ -865,9 +867,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="font-medium flex items-center gap-2 text-slate-800"><FileText className="w-4 h-4 text-emerald-600"/> Documents</h4>
-                                    {!isGuestView && <button onClick={() => setShowAddAdminDoc(!showAddAdminDoc)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Document</button>}
+                                    {canEdit && <button onClick={() => setShowAddAdminDoc(!showAddAdminDoc)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Document</button>}
                                 </div>
-                                {showAddAdminDoc && !isGuestView && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
+                                {showAddAdminDoc && canEdit && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
                                     <input placeholder="Document Title" value={newAdminDoc.name} onChange={e => setNewAdminDoc({...newAdminDoc, name: e.target.value})} className="p-2 rounded border"/>
                                     <input placeholder="URL" value={newAdminDoc.url} onChange={e => setNewAdminDoc({...newAdminDoc, url: e.target.value})} className="p-2 rounded border"/>
                                     <select value={newAdminDoc.type} onChange={e => setNewAdminDoc({...newAdminDoc, type: e.target.value as any})} className="p-2 rounded border bg-white">
@@ -887,7 +889,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <div className="space-y-2">
                                     {documents.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
                                         <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        {!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
+                                        {canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
                                     </div>))}
                                     {documents.length === 0 && !showAddAdminDoc && <p className="text-xs text-slate-400 italic text-center py-4">No documents linked.</p>}
                                 </div>
@@ -897,9 +899,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-sky-600"/> Assets</h4>
-                                    {!isGuestView && <button onClick={() => setShowAddAdminAsset(!showAddAdminAsset)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
+                                    {canEdit && <button onClick={() => setShowAddAdminAsset(!showAddAdminAsset)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
                                 </div>
-                                {showAddAdminAsset && !isGuestView && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
+                                {showAddAdminAsset && canEdit && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
                                     <input placeholder="Asset Name" value={newAdminAsset.name} onChange={e => setNewAdminAsset({...newAdminAsset, name: e.target.value})} className="p-2 rounded border col-span-2"/>
                                     <select value={newAdminAsset.type} onChange={e => setNewAdminAsset({...newAdminAsset, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Presentation</option><option value="data">Data Sheet</option><option value="code">Script/Code</option></select>
                                     <input placeholder="URL" value={newAdminAsset.url} onChange={e => setNewAdminAsset({...newAdminAsset, url: e.target.value})} className="p-2 rounded border"/>
@@ -915,7 +917,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <div className="space-y-2">
                                     {assets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
                                         <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
                                     </div>))}
                                     {assets.length === 0 && !showAddAdminAsset && <p className="text-xs text-slate-400 italic text-center py-4">No assets linked.</p>}
                                 </div>
@@ -933,9 +935,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="font-medium flex items-center gap-2 text-slate-800"><Pencil className="w-4 h-4 text-emerald-600"/> Manuscript Drafts</h4>
-                                    {!isGuestView && <button onClick={() => setShowAddDraft(!showAddDraft)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Draft</button>}
+                                    {canEdit && <button onClick={() => setShowAddDraft(!showAddDraft)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Draft</button>}
                                 </div>
-                                {showAddDraft && !isGuestView && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
+                                {showAddDraft && canEdit && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
                                     <input placeholder="Draft Title (e.g., Chapter 1 v2)" value={newDraft.name} onChange={e => setNewDraft({...newDraft, name: e.target.value})} className="p-2 rounded border"/>
                                     <input placeholder="URL" value={newDraft.url} onChange={e => setNewDraft({...newDraft, url: e.target.value})} className="p-2 rounded border"/>
                                     <div className="flex gap-2"><button onClick={() => { handleAddFile(newDraft, 'draft'); setNewDraft({ name: '', url: '' }); setShowAddDraft(false); }} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddDraft(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
@@ -943,7 +945,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <div className="space-y-2">
                                     {drafts.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
                                         <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        {!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
+                                        {canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
                                     </div>))}
                                     {drafts.length === 0 && !showAddDraft && <p className="text-xs text-slate-400 italic text-center py-4">No drafts linked.</p>}
                                 </div>
@@ -953,9 +955,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="font-medium flex items-center gap-2 text-slate-800"><Database className="w-4 h-4 text-sky-600"/> Code & Data</h4>
-                                    {!isGuestView && <button onClick={() => setShowAddCodeData(!showAddCodeData)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Item</button>}
+                                    {canEdit && <button onClick={() => setShowAddCodeData(!showAddCodeData)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Item</button>}
                                 </div>
-                                {showAddCodeData && !isGuestView && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
+                                {showAddCodeData && canEdit && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
                                     <input placeholder="File Name (e.g., main.py)" value={newCodeData.name} onChange={e => setNewCodeData({...newCodeData, name: e.target.value})} className="p-2 rounded border col-span-2"/>
                                     <select value={newCodeData.type} onChange={e => setNewCodeData({...newCodeData, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="code">Code</option><option value="data">Data</option></select>
                                     <input placeholder="URL" value={newCodeData.url} onChange={e => setNewCodeData({...newCodeData, url: e.target.value})} className="p-2 rounded border"/>
@@ -964,7 +966,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <div className="space-y-2">
                                     {codeAndData.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
                                         <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
                                     </div>))}
                                     {codeAndData.length === 0 && !showAddCodeData && <p className="text-xs text-slate-400 italic text-center py-4">No code or data files linked.</p>}
                                 </div>
@@ -974,9 +976,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-amber-600"/> Other Assets</h4>
-                                    {!isGuestView && <button onClick={() => setShowAddOther(!showAddOther)} className="text-xs font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
+                                    {canEdit && <button onClick={() => setShowAddOther(!showAddOther)} className="text-xs font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
                                 </div>
-                                {showAddOther && !isGuestView && <div className="p-3 mb-3 bg-amber-50 rounded-lg border border-amber-100 grid grid-cols-2 gap-2 text-sm">
+                                {showAddOther && canEdit && <div className="p-3 mb-3 bg-amber-50 rounded-lg border border-amber-100 grid grid-cols-2 gap-2 text-sm">
                                     <input placeholder="File Name (e.g., Presentation Slides)" value={newOther.name} onChange={e => setNewOther({...newOther, name: e.target.value})} className="p-2 rounded border col-span-2"/>
                                     <select value={newOther.type} onChange={e => setNewOther({...newOther, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Slide Deck</option><option value="document">Document</option><option value="other">Other</option></select>
                                     <input placeholder="URL" value={newOther.url} onChange={e => setNewOther({...newOther, url: e.target.value})} className="p-2 rounded border"/>
@@ -985,7 +987,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <div className="space-y-2">
                                     {otherAssets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
                                         <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-amber-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
                                     </div>))}
                                     {otherAssets.length === 0 && !showAddOther && <p className="text-xs text-slate-400 italic text-center py-4">No other assets linked.</p>}
                                 </div>
@@ -998,7 +1000,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     <div className="p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-semibold text-slate-700 text-lg">Team Members</h3>
-                            {!isGuestView && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
+                            {currentUser.role === 'Owner' && !isGuestView && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {collaborators.map(c => (
@@ -1075,7 +1077,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 >
                                     {project.status} <ChevronDown className="w-3 h-3"/>
                                 </button>
-                                {statusDropdownOpen && !isGuestView && (
+                                {statusDropdownOpen && currentUser.role === 'Owner' && !isGuestView && (
                                     <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-20 w-32">
                                         {Object.values(ProjectStatus).map(s => (
                                             <button 
@@ -1093,9 +1095,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {!isGuestView && (<>
+                    {currentUser.role === 'Owner' && !isGuestView && (<>
                         <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"><Share2 className="w-4 h-4" /> Share</button>
-                        {currentUser.role === 'Owner' && (<button onClick={handleDeleteProjectConfirm} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Delete Project"><Trash2 className="w-5 h-5" /></button>)}
+                        <button onClick={handleDeleteProjectConfirm} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Delete Project"><Trash2 className="w-5 h-5" /></button>
                     </>)}
                 </div>
             </header>
