@@ -30,7 +30,8 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                 const newProject: Project = { 
                     id: `proj_${Date.now()}`,
                     title: newTitle, description: "", status: ProjectStatus.PLANNING,
-                    progress: 0, tags: [], papers: [], files: [], notes: '',
+                    // FIX: `notes` must be an array of StickyNote, not a string. Initializing as an empty array.
+                    progress: 0, tags: [], papers: [], files: [], notes: [],
                     collaborators: [currentUser], tasks: [],
                 };
                 onAddProject(newProject);

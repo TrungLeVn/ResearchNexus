@@ -122,7 +122,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
           ) : (
             <div className="text-center space-y-4 animate-in fade-in duration-300">
                <p className="text-slate-600 text-sm">
-                   Welcome back, Dr. Researcher.
+                   Welcome back, {MOCK_USERS[0].name}.
                </p>
                <button
                   onClick={handleOwnerEntry}

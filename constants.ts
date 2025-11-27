@@ -1,6 +1,7 @@
 
 
 
+
 import { Project, ProjectStatus, Idea, Reminder, Collaborator, Course, MeetingNote } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
@@ -15,7 +16,10 @@ export const MOCK_PROJECTS: Project[] = [
     status: ProjectStatus.ACTIVE,
     progress: 65,
     tags: ['AI', 'Optimization', 'Deep Learning'],
-    notes: 'Focusing on MobileNet variants.',
+    notes: [
+        { id: 'pn1', title: 'Initial Thoughts', content: 'Focus on MobileNet variants. Check latest survey paper.', color: 'yellow', createdAt: new Date().toISOString() },
+        { id: 'pn2', title: 'To-Do', content: '- Setup Conda Env\n- Download ImageNet subset', color: 'blue', createdAt: new Date().toISOString() }
+    ],
     category: 'research',
     collaborators: [
         MOCK_USERS[0] // Only Owner
@@ -62,7 +66,7 @@ export const MOCK_PROJECTS: Project[] = [
     progress: 15,
     tags: ['Climate', 'Agriculture', 'Statistics'],
     category: 'research',
-    notes: '',
+    notes: [],
     collaborators: [
         MOCK_USERS[0]
     ],
@@ -84,7 +88,7 @@ export const MOCK_PROJECTS: Project[] = [
     progress: 40,
     tags: ['Conference', 'Admin', 'Event'],
     category: 'admin',
-    notes: 'Venue booking pending.',
+    notes: [],
     collaborators: [MOCK_USERS[0]],
     tasks: [
         { id: 'at1', title: 'Book Keynote Speaker', status: 'done', priority: 'high', dueDate: '2024-05-01', assigneeId: 'c1' },

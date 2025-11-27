@@ -1,6 +1,7 @@
 
 
 
+
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -81,7 +82,7 @@ export interface Project {
   tags: string[];
   papers: Paper[];
   files: ProjectFile[];
-  notes: string;
+  notes: StickyNote[]; // Changed from string to StickyNote array
   collaborators: Collaborator[];
   tasks: Task[];
   activity?: ProjectActivity[];
