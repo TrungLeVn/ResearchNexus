@@ -9,7 +9,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import { AIChat } from './AIChat';
 import { generateProjectBriefing } from '../services/gemini';
-import { sendTaskNotificationEmail, sendMentionNotificationEmail } from '../services/firebase';
+import { sendEmailNotification } from '../services/email';
 
 interface ProjectDetailProps {
   project: Project;
@@ -121,6 +121,28 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
     };
 
     const handleSave = () => {
+        // Detect new assignees to send notification
+        const oldIds = task.assigneeIds || [];
+        const newIds = editedTask.assigneeIds || [];
+        const addedIds = newIds.filter(id => !oldIds.includes(id));
+
+        if (addedIds.length > 0) {
+            addedIds.forEach(id => {
+                const user = collaborators.find(c => c.id === id);
+                if (user && user.id !== currentUser.id) { // Don't notify self
+                    const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
+                    sendEmailNotification(
+                        user.email,
+                        user.name,
+                        `New Task Assigned: ${editedTask.title}`,
+                        `You have been assigned to the task "<strong>${editedTask.title}</strong>" in project <strong>${project.title}</strong> by ${currentUser.name}.`,
+                        taskLink
+                    );
+                }
+            });
+            onSendNotification(`Notified ${addedIds.length} new assignee(s)`);
+        }
+
         onUpdateTask(editedTask);
         onClose();
     };
@@ -138,7 +160,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
         setNewComment(value);
 
         // Detect if typing @
-        const lastChar = value.slice(-1);
         const words = value.split(' ');
         const lastWord = words[words.length - 1];
 
@@ -175,31 +196,25 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
             timestamp: new Date().toISOString()
         };
 
-        // Detect Mentions for Notification
-        const mentionedCollaborators = collaborators.filter(c => newComment.includes(`@${c.name}`));
-        
-        mentionedCollaborators.forEach(c => {
-             // Skip notifying self
-            if (c.id === currentUser.id) return;
-
-            const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-            
-            sendMentionNotificationEmail({
-                toEmail: c.email,
-                toName: c.name,
-                comment: newComment,
-                taskTitle: task.title,
-                projectName: project.title,
-                mentionedBy: currentUser.name,
-                taskLink: taskLink
-            }).then(() => {
-                onSendNotification(`Notified ${c.name} via email.`);
-            });
-        });
-
         const updatedTask = { ...editedTask, comments: [...(editedTask.comments || []), comment] };
         setEditedTask(updatedTask);
         onUpdateTask(updatedTask); // Save immediately
+        
+        // --- CHECK MENTIONS & SEND EMAILS ---
+        collaborators.forEach(c => {
+            // Check if user is mentioned in the comment text (e.g., "@Name")
+            if (newComment.includes(`@${c.name}`) && c.id !== currentUser.id) {
+                const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
+                sendEmailNotification(
+                    c.email,
+                    c.name,
+                    `You were mentioned in ${project.title}`,
+                    `${currentUser.name} mentioned you in a comment on task "<strong>${updatedTask.title}</strong>":<br/><i>"${newComment}"</i>`,
+                    taskLink
+                );
+            }
+        });
+
         setNewComment('');
         setShowMentionList(false);
     };
@@ -374,6 +389,24 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
             comments: [],
             description: ''
         };
+        
+        // Notify assignees for new task
+        if (assigneeIds.length > 0) {
+            assigneeIds.forEach(id => {
+                const user = collaborators.find(c => c.id === id);
+                if (user) {
+                     const taskLink = `${window.location.origin}?pid=${project.id}&tid=${newTask.id}`;
+                     sendEmailNotification(
+                        user.email,
+                        user.name,
+                        `New Task: ${title}`,
+                        `You have been assigned to a new task in <strong>${project.title}</strong>.`,
+                        taskLink
+                    );
+                }
+            });
+        }
+
         onSave(newTask);
     };
 
@@ -499,89 +532,74 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
                             />
                             <button 
                                 onClick={handleCopy}
-                                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors flex items-center justify-center min-w-[3rem]"
-                                title="Copy Link"
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
                             >
-                                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                                {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                <span className="text-xs font-medium">{copied ? 'Copied' : 'Copy'}</span>
                             </button>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1">Anyone with this link can request to join as a Guest (valid email required).</p>
+                        <p className="text-[10px] text-slate-400 mt-2">
+                            Anyone with this link can view this project as a guest.
+                        </p>
                     </div>
 
-                    <div className="border-t border-slate-100"></div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-3">Add Team Member</label>
+                    <div className="border-t border-slate-100 pt-6">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Add Collaborator</label>
                         <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
+                            <input 
+                                placeholder="Full Name"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                            <div className="flex gap-2">
                                 <input 
-                                    placeholder="Name"
-                                    value={name}
-                                    onChange={e => setName(e.target.value)}
-                                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    placeholder="Email Address"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
                                 <select 
                                     value={role}
-                                    onChange={e => setRole(e.target.value as any)}
-                                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-indigo-500"
+                                    onChange={e => setRole(e.target.value as 'Editor' | 'Viewer')}
+                                    className="border border-slate-200 rounded-lg px-2 py-2 text-sm outline-none bg-white"
                                 >
                                     <option value="Editor">Editor</option>
                                     <option value="Viewer">Viewer</option>
                                 </select>
                             </div>
-                            <div className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                                    <input 
-                                        placeholder="Email Address"
-                                        value={email}
-                                        onChange={e => setEmail(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <button 
-                                    onClick={handleAdd}
-                                    disabled={!name || !email}
-                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                                >
-                                    Add
-                                </button>
-                            </div>
+                            <button 
+                                onClick={handleAdd}
+                                disabled={!name || !email}
+                                className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                            >
+                                Add Member
+                            </button>
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Current Access</label>
-                        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                    <div className="border-t border-slate-100 pt-6">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Team Members</label>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
                             {collaborators.map(c => (
-                                <div key={c.id} className="flex items-center justify-between text-sm bg-slate-50 p-2 rounded-lg group border border-transparent hover:border-slate-200 transition-colors">
+                                <div key={c.id} className="flex justify-between items-center p-2 hover:bg-slate-50 rounded-lg group">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">
+                                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
                                             {c.initials}
                                         </div>
-                                        <span className="text-slate-700 truncate max-w-[120px]" title={c.name}>{c.name}</span>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-800">{c.name} {c.id === currentUser.id && '(You)'}</p>
+                                            <p className="text-xs text-slate-500">{c.email}</p>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {currentUser.role === 'Owner' && c.role !== 'Owner' ? (
-                                            <select
-                                                value={c.role}
-                                                onChange={(e) => onUpdateCollaboratorRole(c.id, e.target.value as 'Editor' | 'Viewer')}
-                                                className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 focus:ring-1 focus:ring-indigo-500 outline-none"
-                                            >
-                                                <option value="Editor">Editor</option>
-                                                <option value="Viewer">Viewer</option>
-                                                {c.role === 'Guest' && <option value="Guest">Guest</option>}
-                                            </select>
-                                        ) : (
-                                            <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{c.role}</span>
-                                        )}
-                                        {currentUser.role === 'Owner' && c.role !== 'Owner' && (
+                                        <span className="text-xs px-2 py-1 bg-slate-100 rounded text-slate-600">{c.role}</span>
+                                        {c.role !== 'Owner' && c.id !== currentUser.id && (
                                             <button 
                                                 onClick={() => onRemoveCollaborator(c.id)}
-                                                className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                                                title="Remove member"
+                                                className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                             >
-                                                <X className="w-3.5 h-3.5" />
+                                                <X className="w-4 h-4" />
                                             </button>
                                         )}
                                     </div>
@@ -595,653 +613,415 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
     );
 };
 
+// --- NOTIFY MODAL ---
+
+interface NotifyModalProps {
+    project: Project;
+    currentUser: Collaborator;
+    onClose: () => void;
+}
+
+const NotifyModal: React.FC<NotifyModalProps> = ({ project, currentUser, onClose }) => {
+    const [recipientId, setRecipientId] = useState('');
+    const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
+    
+    // Filter out current user from recipients list
+    const recipients = (project.collaborators || []).filter(c => c.id !== currentUser.id);
+
+    const handleSend = async () => {
+        if(!recipientId || !message) return;
+        setLoading(true);
+        const recipient = recipients.find(r => r.id === recipientId);
+        if(recipient) {
+             try {
+                const success = await sendEmailNotification(
+                    recipient.email,
+                    recipient.name,
+                    `Notification from ${currentUser.name}`,
+                    message,
+                    window.location.href
+                );
+                if(success) {
+                    alert("Email sent successfully!");
+                    onClose();
+                } else {
+                    alert("Failed to send email. Please check your network or API configuration.");
+                }
+             } catch(e) {
+                 console.error(e);
+                 alert("Error sending email.");
+             }
+        }
+        setLoading(false);
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-indigo-600" /> Notify Colleague
+                    </h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Recipient</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            value={recipientId}
+                            onChange={e => setRecipientId(e.target.value)}
+                        >
+                            <option value="">Select a colleague...</option>
+                            {recipients.map(c => (
+                                <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
+                            ))}
+                        </select>
+                        {recipients.length === 0 && (
+                            <p className="text-xs text-amber-500 mt-1">No other collaborators in this project.</p>
+                        )}
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Message</label>
+                        <textarea 
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm h-32 outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                            placeholder="Type your message here..."
+                            value={message}
+                            onChange={e => setMessage(e.target.value)}
+                        />
+                        <p className="text-xs text-slate-400 mt-1">A link to this project will be included automatically.</p>
+                    </div>
+                </div>
+                <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+                    <button 
+                        onClick={handleSend} 
+                        disabled={loading || !recipientId || !message}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                    >
+                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Send Email
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
-    const [showShareModal, setShowShareModal] = useState(false);
-    const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-    
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-    const [addingTaskForStatus, setAddingTaskForStatus] = useState<TaskStatus | null>(null);
-
-    const [showAddDraft, setShowAddDraft] = useState(false);
-    const [newDraft, setNewDraft] = useState({ name: '', url: '' });
-    const [showAddCodeData, setShowAddCodeData] = useState(false);
-    const [newCodeData, setNewCodeData] = useState({ name: '', url: '', type: 'code' as 'code' | 'data' });
-    const [showAddOther, setShowAddOther] = useState(false);
-    const [newOther, setNewOther] = useState({ name: '', url: '', type: 'slide' as 'slide' | 'document' | 'other' });
-
-    // NEW STATES FOR ADMIN PROJECT FILES
-    const [showAddAdminDoc, setShowAddAdminDoc] = useState(false);
-    const [newAdminDoc, setNewAdminDoc] = useState({ name: '', url: '', type: 'document' as 'draft' | 'document' | 'other' });
-    const [showAddAdminAsset, setShowAddAdminAsset] = useState(false);
-    const [newAdminAsset, setNewAdminAsset] = useState({ name: '', url: '', type: 'slide' as 'code' | 'data' | 'slide' });
-
-    const [briefing, setBriefing] = useState<string>('');
+    const [tasks, setTasks] = useState<Task[]>(project.tasks);
+    const [editingTask, setEditingTask] = useState<Task | null>(null);
+    const [addingTaskStatus, setAddingTaskStatus] = useState<TaskStatus | null>(null);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [isNotifyModalOpen, setIsNotifyModalOpen] = useState(false);
+    const [showChat, setShowChat] = useState(false);
+    const [showBriefing, setShowBriefing] = useState(false);
+    const [briefingContent, setBriefingContent] = useState<string>('');
     const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
-    
-    const [notification, setNotification] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+    const [notificationMsg, setNotificationMsg] = useState('');
 
-    // Defensive state destructuring with fallbacks
-    const tasks = project.tasks || [];
-    const collaborators = project.collaborators || [];
-    const files = project.files || [];
-    const activity = project.activity || [];
+    useEffect(() => {
+        setTasks(project.tasks);
+    }, [project.tasks]);
 
-    // Calculate effective role based on project's collaborator list
-    const memberInProject = collaborators.find(c => c.email.toLowerCase() === currentUser.email.toLowerCase());
-    const effectiveRole = memberInProject ? memberInProject.role : currentUser.role;
-    
-    // Create a proxy user object with the effective role for consistent checks in child components
-    const effectiveUser = { ...currentUser, role: effectiveRole };
-
-    // Permission flags
-    const isOwner = effectiveRole === 'Owner';
-    const canEdit = effectiveRole === 'Owner' || effectiveRole === 'Editor';
-
-    const showNotification = (message: string) => {
-        setNotification({ message, visible: true });
-        setTimeout(() => {
-            setNotification({ message: '', visible: false });
-        }, 4000);
-    };
-
-
-    // --- ACTIVITY LOGGING ---
-    const logActivity = (
-        proj: Project,
-        message: string
-    ): Project => {
-        const newActivity: ProjectActivity = {
-            id: `act_${Date.now()}`,
-            message,
-            timestamp: new Date().toISOString(),
-            authorId: currentUser.id,
-        };
-
-        const currentActivities = proj.activity || [];
-        const updatedActivities = [newActivity, ...currentActivities].slice(0, 50); // Keep last 50
-
-        return { ...proj, activity: updatedActivities };
-    };
-
-    const formatRelativeTime = (isoString: string): string => {
-        const date = new Date(isoString);
-        const now = new Date();
-        const seconds = Math.round((now.getTime() - date.getTime()) / 1000);
-        const minutes = Math.round(seconds / 60);
-        const hours = Math.round(minutes / 60);
-        const days = Math.round(hours / 24);
-
-        if (seconds < 60) return "just now";
-        if (minutes < 60) return `${minutes}m ago`;
-        if (hours < 24) return `${hours}h ago`;
-        if (days < 7) return `${days}d ago`;
-        return date.toLocaleDateString('en-CA');
-    };
-
-    const handleUpdateProjectStatus = (newStatus: ProjectStatus) => {
-        const projectWithNewStatus = { ...project, status: newStatus };
-        const message = `changed project status to ${newStatus}`;
-        const projectWithActivity = logActivity(projectWithNewStatus, message);
-        onUpdateProject(projectWithActivity);
-    };
-
-    const triggerEmailNotification = (task: Task, addedAssigneeIds: string[]) => {
-        addedAssigneeIds.forEach(id => {
-            const assignee = collaborators.find(c => c.id === id);
-            if (assignee) {
-                sendTaskNotificationEmail({
-                    toEmail: assignee.email,
-                    toName: assignee.name,
-                    taskTitle: task.title,
-                    projectName: project.title,
-                    assignedBy: currentUser.name,
-                }).then(() => {
-                    showNotification(`Assigned notification sent to ${assignee.name}.`);
-                }).catch(error => {
-                    console.error("Email send failed:", error);
-                    showNotification(`Failed to send email to ${assignee.name}.`);
-                });
-            }
-        });
-    };
-
-    const handleUpdateSingleTask = (updatedTask: Task) => {
-        const oldTask = tasks.find(t => t.id === updatedTask.id);
-        let projectToUpdate = { ...project };
-
-        if (oldTask && oldTask.status !== updatedTask.status) {
-            const message = `moved task '${updatedTask.title}' to ${statusMap[updatedTask.status]}`;
-            projectToUpdate = logActivity(projectToUpdate, message);
-        }
-        
-        if (oldTask && (updatedTask.comments?.length || 0) > (oldTask.comments?.length || 0)) {
-            const message = `commented on task: '${updatedTask.title}'`;
-            projectToUpdate = logActivity(projectToUpdate, message);
-        }
-
-        const oldAssignees = new Set(oldTask?.assigneeIds || []);
-        const addedAssigneeIds = (updatedTask.assigneeIds || []).filter(id => !oldAssignees.has(id));
-
-        if (addedAssigneeIds.length > 0) {
-            triggerEmailNotification(updatedTask, addedAssigneeIds);
-        }
-
-        const updatedTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
-        onUpdateProject({ ...projectToUpdate, tasks: updatedTasks });
-    };
-
-    const handleCreateTask = (newTask: Task) => {
-        const projectWithNewTask = { ...project, tasks: [...tasks, newTask] };
-        const message = `added task: '${newTask.title}'`;
-        const projectWithActivity = logActivity(projectWithNewTask, message);
-        onUpdateProject(projectWithActivity);
-        setAddingTaskForStatus(null);
-        
-        if (newTask.assigneeIds && newTask.assigneeIds.length > 0) {
-            triggerEmailNotification(newTask, newTask.assigneeIds);
-        }
+    const handleUpdateTask = (updatedTask: Task) => {
+        const newTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
+        setTasks(newTasks);
+        onUpdateProject({ ...project, tasks: newTasks });
     };
 
     const handleDeleteTask = (taskId: string) => {
-        const taskToDelete = tasks.find(t => t.id === taskId);
-        if (!taskToDelete) return;
-
-        const updatedTasks = tasks.filter(t => t.id !== taskId);
-        const projectWithTasksUpdated = { ...project, tasks: updatedTasks };
-        const message = `deleted task: '${taskToDelete.title}'`;
-        const projectWithActivity = logActivity(projectWithTasksUpdated, message);
-        onUpdateProject(projectWithActivity);
+        const newTasks = tasks.filter(t => t.id !== taskId);
+        setTasks(newTasks);
+        onUpdateProject({ ...project, tasks: newTasks });
     };
 
-    const handleAddCollaborator = (newCollab: Collaborator) => {
-        if (collaborators.some(c => c.email.toLowerCase() === newCollab.email.toLowerCase())) {
-            alert("This user is already a collaborator.");
-            return;
+    const handleAddTask = (newTask: Task) => {
+        const newTasks = [...tasks, newTask];
+        setTasks(newTasks);
+        onUpdateProject({ ...project, tasks: newTasks });
+        setAddingTaskStatus(null);
+    };
+
+    const handleAddCollaborator = (newCollaborator: Collaborator) => {
+        const updatedProject = {
+            ...project,
+            collaborators: [...(project.collaborators || []), newCollaborator]
+        };
+        onUpdateProject(updatedProject);
+    };
+
+    const handleRemoveCollaborator = (collabId: string) => {
+         const updatedProject = {
+            ...project,
+            collaborators: (project.collaborators || []).filter(c => c.id !== collabId)
+        };
+        onUpdateProject(updatedProject);
+    };
+    
+    const handleUpdateCollaboratorRole = (collabId: string, newRole: 'Editor' | 'Viewer') => {
+        const updatedProject = {
+            ...project,
+            collaborators: (project.collaborators || []).map(c => c.id === collabId ? { ...c, role: newRole } : c)
+        };
+        onUpdateProject(updatedProject);
+    };
+
+    // Deep linking logic for tasks
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const tid = params.get('tid');
+        if (tid && !editingTask) {
+             const foundTask = tasks.find(t => t.id === tid);
+             if (foundTask) {
+                 setEditingTask(foundTask);
+             }
         }
-        const updatedCollaborators = [...collaborators, newCollab];
-        const projectWithNewCollab = { ...project, collaborators: updatedCollaborators };
-        const message = `added ${newCollab.name} to the team`;
-        const projectWithActivity = logActivity(projectWithNewCollab, message);
-        onUpdateProject(projectWithActivity);
-    };
-
-    const handleRemoveCollaborator = (collaboratorId: string) => {
-        const collaboratorToRemove = collaborators.find(c => c.id === collaboratorId);
-        if (!collaboratorToRemove) return;
-
-        if (window.confirm("Are you sure you want to remove this member?")) {
-            const updatedCollaborators = collaborators.filter(c => c.id !== collaboratorId);
-            const projectWithCollabRemoved = { ...project, collaborators: updatedCollaborators };
-            const message = `removed ${collaboratorToRemove.name} from the team`;
-            const projectWithActivity = logActivity(projectWithCollabRemoved, message);
-            onUpdateProject(projectWithActivity);
-        }
-    };
-
-    const handleUpdateCollaboratorRole = (collaboratorId: string, newRole: 'Editor' | 'Viewer') => {
-        const collaboratorToUpdate = collaborators.find(c => c.id === collaboratorId);
-        if (!collaboratorToUpdate || collaboratorToUpdate.role === 'Owner') return;
-
-        const updatedCollaborators = collaborators.map(c => 
-            c.id === collaboratorId ? { ...c, role: newRole } : c
-        );
-
-        const projectWithRoleUpdated = { ...project, collaborators: updatedCollaborators };
-        const message = `changed ${collaboratorToUpdate.name}'s role to ${newRole}`;
-        const projectWithActivity = logActivity(projectWithRoleUpdated, message);
-        onUpdateProject(projectWithActivity);
-    };
-
-    const handleDeleteProjectConfirm = () => {
-        if (window.confirm(`Are you sure you want to delete "${project.title}"?`)) {
-            onDeleteProject(project.id);
-        }
-    };
+    }, [tasks]);
 
     const handleGenerateBriefing = async () => {
+        setShowBriefing(true);
         setIsGeneratingBriefing(true);
-        setBriefing('');
         try {
-            const result = await generateProjectBriefing(project);
-            setBriefing(result);
-        } catch (error) {
-            setBriefing("An error occurred while generating the briefing.");
+            const briefing = await generateProjectBriefing(project);
+            setBriefingContent(briefing);
+        } catch (e) {
+            setBriefingContent("Failed to generate briefing.");
         } finally {
             setIsGeneratingBriefing(false);
         }
     };
 
-    // --- FILES LOGIC ---
-    const handleAddFile = (
-        fileData: { name: string; url: string; },
-        type: ProjectFile['type']
-    ) => {
-        if(!fileData.name || !fileData.url) return;
-        
-        const file: ProjectFile = {
-            id: `file_${Date.now()}`,
-            name: fileData.name,
-            url: fileData.url,
-            type: type,
-            lastModified: new Date().toISOString().split('T')[0]
-        };
-
-        const projectWithNewFile = {...project, files: [...files, file]};
-        const message = `added file: '${file.name}'`;
-        const projectWithActivity = logActivity(projectWithNewFile, message);
-        onUpdateProject(projectWithActivity);
+    const showNotification = (msg: string) => {
+        setNotificationMsg(msg);
+        setTimeout(() => setNotificationMsg(''), 3000);
     };
 
-    const handleDeleteFile = (id: string) => {
-        const fileToDelete = files.find(f => f.id === id);
-        if (!fileToDelete) return;
+    // Derived Metrics
+    const completedTasks = tasks.filter(t => t.status === 'done').length;
+    const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+    
+    const pieData = [
+        { name: 'To Do', value: tasks.filter(t => t.status === 'todo').length, color: '#0ea5e9' },
+        { name: 'In Progress', value: tasks.filter(t => t.status === 'in_progress').length, color: '#f59e0b' },
+        { name: 'Done', value: tasks.filter(t => t.status === 'done').length, color: '#10b981' }
+    ].filter(d => d.value > 0);
 
-        const projectWithFileRemoved = {...project, files: files.filter(f => f.id !== id)};
-        const message = `deleted file: '${fileToDelete.name}'`;
-        const projectWithActivity = logActivity(projectWithFileRemoved, message);
-        onUpdateProject(projectWithActivity);
-    };
+    return (
+        <div className="h-full flex flex-col bg-slate-50 relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {editingTask && <TaskDetailModal task={editingTask} project={project} currentUser={currentUser} onClose={() => setEditingTask(null)} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onSendNotification={showNotification} />}
+            {addingTaskStatus && <AddTaskModal status={addingTaskStatus} project={project} onClose={() => setAddingTaskStatus(null)} onSave={handleAddTask} />}
+            {isShareModalOpen && <ShareModal project={project} currentUser={currentUser} onClose={() => setIsShareModalOpen(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} onUpdateCollaboratorRole={handleUpdateCollaboratorRole} />}
+            
+            {/* New Notify Modal */}
+            {isNotifyModalOpen && <NotifyModal project={project} currentUser={currentUser} onClose={() => setIsNotifyModalOpen(false)} />}
+            
+            {/* Notification Toast */}
+            {notificationMsg && (
+                <div className="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2 animate-in slide-in-from-bottom-2 z-50">
+                    <Mail className="w-4 h-4" />
+                    {notificationMsg}
+                </div>
+            )}
 
-    const TabButton = ({ id, icon: Icon, label }: { id: typeof activeTab, icon: React.ElementType, label: string }) => (
-        <button onClick={() => setActiveTab(id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === id ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}`}>
-            <Icon className="w-4 h-4" />
-            <span>{label}</span>
-        </button>
-    );
-
-    const renderTabContent = () => {
-        switch (activeTab) {
-            case 'dashboard': {
-                const todoTasks = tasks.filter(t => t.status === 'todo').length;
-                const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
-                const doneTasks = tasks.filter(t => t.status === 'done').length;
-
-                const taskData = [
-                    { name: 'To Do', value: todoTasks, color: '#f59e0b' },
-                    { name: 'In Progress', value: inProgressTasks, color: '#3b82f6' },
-                    { name: 'Done', value: doneTasks, color: '#16a34a' },
-                ];
-
-                const upcomingTasks = tasks
-                    .filter(t => t.status !== 'done' && new Date(t.dueDate) >= new Date())
-                    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                    .slice(0, 5);
-                
-                return (
-                    <div className="p-6 h-full overflow-y-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Center Column */}
-                        <div className="lg:col-span-2 space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                    <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Tasks</p>
-                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{doneTasks}/{tasks.length}</h3>
-                                    <p className="text-xs text-slate-400">Completed</p>
-                                </div>
-                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                    <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><Users className="w-4 h-4" /> Team</p>
-                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{collaborators.length}</h3>
-                                    <p className="text-xs text-slate-400">Members</p>
-                                </div>
-                                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                    <p className="text-sm text-slate-500 font-medium flex items-center gap-2"><FileIcon className="w-4 h-4" /> Files</p>
-                                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{files.length}</h3>
-                                    <p className="text-xs text-slate-400">Attached</p>
-                                </div>
-                            </div>
-                            
-                             {/* Task Breakdown Chart */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm h-64 flex flex-col">
-                                <h4 className="font-medium text-slate-800 mb-2">Task Breakdown</h4>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={taskData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} innerRadius={40} paddingAngle={5}>
-                                            {taskData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                                        </Pie>
-                                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}/>
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
+            {/* Header */}
+            <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-10 sticky top-0">
+                <div className="flex items-center gap-4">
+                    {!isGuestView && (
+                        <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+                            <ChevronLeft className="w-6 h-6" />
+                        </button>
+                    )}
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-xl font-bold text-slate-800">{project.title}</h1>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusClasses(project.status)}`}>
+                                {project.status}
+                            </span>
                         </div>
-                        {/* Right Column */}
-                        <div className="lg:col-span-1 space-y-6">
-                           {/* AI Daily Briefing */}
-                           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Bot className="w-4 h-4 text-indigo-500"/> AI Daily Briefing</h4>
-                                {briefing ? (
-                                    <div className="prose prose-sm prose-slate max-w-none">
-                                        <ReactMarkdown>{briefing}</ReactMarkdown>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-4">
-                                        <p className="text-xs text-slate-500 mb-3">Get a quick summary of priorities and upcoming tasks.</p>
-                                        <button 
-                                            onClick={handleGenerateBriefing} 
-                                            disabled={isGeneratingBriefing}
-                                            className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-100 disabled:opacity-50"
-                                        >
-                                            {isGeneratingBriefing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
-                                            {isGeneratingBriefing ? 'Generating...' : "Generate Today's Briefing"}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                           
-                            {/* Upcoming Tasks */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Calendar className="w-4 h-4 text-amber-500"/> Upcoming Deadlines</h4>
-                                <div className="space-y-2">
-                                    {upcomingTasks.length > 0 ? upcomingTasks.map(task => (
-                                        <div key={task.id} className="text-sm p-2 bg-slate-50 rounded-lg flex justify-between items-center">
-                                            <span className="font-medium text-slate-700 truncate pr-2">{task.title}</span>
-                                            <span className="text-xs text-slate-500 shrink-0">{new Date(task.dueDate).toLocaleDateString('en-CA')}</span>
-                                        </div>
-                                    )) : <p className="text-xs text-slate-400 italic text-center py-4">No upcoming deadlines.</p>}
-                                </div>
-                            </div>
-                            
-                            {/* Recent Activity */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Activity className="w-4 h-4 text-green-500"/> Recent Activity</h4>
-                                <div className="space-y-3 max-h-48 overflow-y-auto">
-                                    {activity.length > 0 ? activity.map(act => {
-                                        const author = collaborators.find(c => c.id === act.authorId) || { name: 'Unknown', initials: '?' };
-                                        return (
-                                            <div key={act.id} className="flex items-start gap-3 text-sm">
-                                                <div className="w-7 h-7 mt-0.5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-xs shrink-0" title={author.name}>
-                                                    {author.initials}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <p className="text-slate-700">
-                                                        <span className="font-semibold">{author.name}</span> {act.message}
-                                                    </p>
-                                                    <p className="text-xs text-slate-400 mt-0.5">{formatRelativeTime(act.timestamp)}</p>
-                                                </div>
-                                            </div>
-                                        )
-                                    }) : <p className="text-xs text-slate-400 italic text-center py-4">No recent activity.</p>}
-                                </div>
-                            </div>
-                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 max-w-md">{project.description}</p>
                     </div>
-                );
-            }
-            case 'tasks':
-                return (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 h-full overflow-hidden">
-                        {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => (
-                            <div key={status} className="bg-slate-100/70 rounded-xl p-4 flex flex-col h-full overflow-hidden">
-                                <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                                    <h3 className="font-semibold text-slate-700 flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${status === 'todo' ? 'bg-slate-400' : status === 'in_progress' ? 'bg-blue-400' : 'bg-emerald-400'}`} />{statusMap[status]}</h3>
-                                    {canEdit && <button onClick={() => setAddingTaskForStatus(status)} className="p-1 hover:bg-white rounded text-slate-500 hover:text-indigo-600" title="Add Task"><Plus className="w-4 h-4" /></button>}
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="hidden md:flex items-center -space-x-2 mr-2">
+                        {(project.collaborators || []).slice(0, 3).map(c => (
+                            <div key={c.id} title={c.name} className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center font-bold text-slate-600 text-xs">
+                                {c.initials}
+                            </div>
+                        ))}
+                        {(project.collaborators || []).length > 3 && (
+                            <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center font-bold text-slate-500 text-xs">
+                                +{(project.collaborators || []).length - 3}
+                            </div>
+                        )}
+                    </div>
+                    
+                    {!isGuestView && (
+                        <>
+                             {/* AI Briefing Button */}
+                             <button 
+                                onClick={handleGenerateBriefing}
+                                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-200 rounded-lg text-sm hover:shadow-sm transition-all"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                <span className="hidden sm:inline">Daily Brief</span>
+                            </button>
+
+                             {/* AI Chat Toggle */}
+                             <button 
+                                onClick={() => setShowChat(!showChat)}
+                                className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm transition-all ${
+                                    showChat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <Bot className="w-4 h-4" />
+                                <span className="hidden sm:inline">AI Chat</span>
+                            </button>
+                        </>
+                    )}
+
+                    {/* Notify Colleague Button (Manual) */}
+                    <button
+                        onClick={() => setIsNotifyModalOpen(true)}
+                        className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+                        title="Notify Colleague"
+                    >
+                        <Mail className="w-4 h-4" />
+                        <span className="hidden sm:inline">Notify</span>
+                    </button>
+
+                    <button 
+                        onClick={() => setIsShareModalOpen(true)}
+                        className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+                    >
+                        <Share2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">Share</span>
+                    </button>
+
+                     {!isGuestView && (
+                        <button 
+                            onClick={() => { if(window.confirm('Delete project?')) onDeleteProject(project.id); }}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Project"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
+            </header>
+
+            <div className="flex-1 flex overflow-hidden">
+                {/* Main Kanban Board */}
+                <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
+                    {/* Project Metrics / Briefing Area */}
+                    {showBriefing && (
+                         <div className="mb-6 bg-white p-6 rounded-xl border border-amber-200 shadow-sm animate-in fade-in slide-in-from-top-4 relative">
+                            <button onClick={() => setShowBriefing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                                <Sparkles className="w-5 h-5 text-amber-500" /> AI Project Briefing
+                            </h3>
+                            {isGeneratingBriefing ? (
+                                <div className="flex items-center gap-2 text-slate-500 py-8 justify-center">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    Analyzing project data...
                                 </div>
-                                <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                            ) : (
+                                <div className="prose prose-sm prose-slate max-w-none">
+                                    <ReactMarkdown>{briefingContent}</ReactMarkdown>
+                                </div>
+                            )}
+                         </div>
+                    )}
+                    
+                    {!showBriefing && (
+                         <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                                <span className="text-xs font-semibold text-slate-500 uppercase">Overall Progress</span>
+                                <div className="flex items-end gap-2 mt-1">
+                                    <span className="text-2xl font-bold text-indigo-600">{progress}%</span>
+                                    <div className="flex-1 h-2 bg-slate-100 rounded-full mb-1.5 overflow-hidden">
+                                        <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                <div className="w-16 h-16 relative">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={pieData} innerRadius={15} outerRadius={25} paddingAngle={2} dataKey="value">
+                                                {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                            </Pie>
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-500 uppercase">Task Stats</p>
+                                    <p className="text-sm font-medium text-slate-700">{completedTasks} / {tasks.length} Completed</p>
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                                <span className="text-xs font-semibold text-slate-500 uppercase">Team Activity</span>
+                                <div className="flex items-center gap-2 mt-2">
+                                     <Activity className="w-5 h-5 text-emerald-500" />
+                                     <span className="text-sm font-medium text-slate-700">Healthy</span>
+                                </div>
+                            </div>
+                         </div>
+                    )}
+
+                    <div className="flex gap-6 h-full min-w-max pb-4">
+                        {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => (
+                            <div key={status} className="w-80 flex flex-col h-full">
+                                <div className="flex justify-between items-center mb-4 px-1">
+                                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                        {status === 'todo' && <div className="w-2 h-2 rounded-full bg-sky-500"></div>}
+                                        {status === 'in_progress' && <div className="w-2 h-2 rounded-full bg-amber-500"></div>}
+                                        {status === 'done' && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
+                                        {statusMap[status]} 
+                                        <span className="text-slate-400 text-xs font-normal ml-1">({tasks.filter(t => t.status === status).length})</span>
+                                    </h3>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => setAddingTaskStatus(status)} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 bg-slate-100/50 rounded-xl p-3 border border-slate-200 overflow-y-auto space-y-3">
                                     {tasks.filter(t => t.status === status).map(task => (
-                                        <TaskCard key={task.id} task={task} project={project} onClick={() => setSelectedTask(task)} />
+                                        <TaskCard key={task.id} task={task} project={project} onClick={() => setEditingTask(task)} />
                                     ))}
-                                    {tasks.filter(t => t.status === status).length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">No tasks</div>}
+                                    {tasks.filter(t => t.status === status).length === 0 && (
+                                        <div className="h-24 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center text-slate-400 text-xs italic">
+                                            No tasks here
+                                        </div>
+                                    )}
+                                    <button 
+                                        onClick={() => setAddingTaskStatus(status)}
+                                        className="w-full py-2 text-xs text-slate-500 hover:bg-slate-200 rounded-lg border border-transparent hover:border-slate-300 transition-all flex items-center justify-center gap-1"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add Task
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
-                );
-            case 'files':
-                if (project.category === 'admin') {
-                    const documents = files.filter(f => ['draft', 'document', 'other'].includes(f.type));
-                    const assets = files.filter(f => ['code', 'data', 'slide'].includes(f.type));
+                </div>
 
-                    return (
-                        <div className="p-6 space-y-6 h-full overflow-y-auto">
-                            {/* Documents Section */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><FileText className="w-4 h-4 text-emerald-600"/> Documents</h4>
-                                    {canEdit && <button onClick={() => setShowAddAdminDoc(!showAddAdminDoc)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Document</button>}
-                                </div>
-                                {showAddAdminDoc && canEdit && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
-                                    <input placeholder="Document Title" value={newAdminDoc.name} onChange={e => setNewAdminDoc({...newAdminDoc, name: e.target.value})} className="p-2 rounded border"/>
-                                    <input placeholder="URL" value={newAdminDoc.url} onChange={e => setNewAdminDoc({...newAdminDoc, url: e.target.value})} className="p-2 rounded border"/>
-                                    <select value={newAdminDoc.type} onChange={e => setNewAdminDoc({...newAdminDoc, type: e.target.value as any})} className="p-2 rounded border bg-white">
-                                        <option value="document">Official Document</option>
-                                        <option value="draft">Draft / Meeting Note</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => {
-                                            handleAddFile(newAdminDoc, newAdminDoc.type);
-                                            setNewAdminDoc({ name: '', url: '', type: 'document' });
-                                            setShowAddAdminDoc(false);
-                                        }} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button>
-                                        <button onClick={() => setShowAddAdminDoc(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button>
-                                    </div>
-                                </div>}
-                                <div className="space-y-2">
-                                    {documents.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        {canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
-                                    </div>))}
-                                    {documents.length === 0 && !showAddAdminDoc && <p className="text-xs text-slate-400 italic text-center py-4">No documents linked.</p>}
-                                </div>
-                            </div>
-    
-                            {/* Assets Section */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-sky-600"/> Assets</h4>
-                                    {canEdit && <button onClick={() => setShowAddAdminAsset(!showAddAdminAsset)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
-                                </div>
-                                {showAddAdminAsset && canEdit && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
-                                    <input placeholder="Asset Name" value={newAdminAsset.name} onChange={e => setNewAdminAsset({...newAdminAsset, name: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                    <select value={newAdminAsset.type} onChange={e => setNewAdminAsset({...newAdminAsset, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Presentation</option><option value="data">Data Sheet</option><option value="code">Script/Code</option></select>
-                                    <input placeholder="URL" value={newAdminAsset.url} onChange={e => setNewAdminAsset({...newAdminAsset, url: e.target.value})} className="p-2 rounded border"/>
-                                    <div className="col-span-2 flex gap-2">
-                                        <button onClick={() => {
-                                            handleAddFile(newAdminAsset, newAdminAsset.type);
-                                            setNewAdminAsset({ name: '', url: '', type: 'slide' });
-                                            setShowAddAdminAsset(false);
-                                        }} className="bg-sky-600 text-white px-3 py-1 rounded text-xs">Save</button>
-                                        <button onClick={() => setShowAddAdminAsset(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button>
-                                    </div>
-                                </div>}
-                                <div className="space-y-2">
-                                    {assets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
-                                    </div>))}
-                                    {assets.length === 0 && !showAddAdminAsset && <p className="text-xs text-slate-400 italic text-center py-4">No assets linked.</p>}
-                                </div>
-                            </div>
+                {/* Right Sidebar: Chat or Details */}
+                {showChat && (
+                    <div className="w-96 bg-white border-l border-slate-200 shadow-xl z-20 flex flex-col animate-in slide-in-from-right duration-300">
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                <Bot className="w-5 h-5 text-indigo-600" />
+                                Project Assistant
+                            </h3>
+                            <button onClick={() => setShowChat(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
                         </div>
-                    );
-                } else {
-                    const drafts = files.filter(f => f.type === 'draft');
-                    const codeAndData = files.filter(f => f.type === 'code' || f.type === 'data');
-                    const otherAssets = files.filter(f => ['slide', 'document', 'other'].includes(f.type));
-
-                    return (
-                        <div className="p-6 space-y-6 h-full overflow-y-auto">
-                            {/* Manuscript Drafts Section */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Pencil className="w-4 h-4 text-emerald-600"/> Manuscript Drafts</h4>
-                                    {canEdit && <button onClick={() => setShowAddDraft(!showAddDraft)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Draft</button>}
-                                </div>
-                                {showAddDraft && canEdit && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
-                                    <input placeholder="Draft Title (e.g., Chapter 1 v2)" value={newDraft.name} onChange={e => setNewDraft({...newDraft, name: e.target.value})} className="p-2 rounded border"/>
-                                    <input placeholder="URL" value={newDraft.url} onChange={e => setNewDraft({...newDraft, url: e.target.value})} className="p-2 rounded border"/>
-                                    <div className="flex gap-2"><button onClick={() => { handleAddFile(newDraft, 'draft'); setNewDraft({ name: '', url: '' }); setShowAddDraft(false); }} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddDraft(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                                </div>}
-                                <div className="space-y-2">
-                                    {drafts.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        {canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
-                                    </div>))}
-                                    {drafts.length === 0 && !showAddDraft && <p className="text-xs text-slate-400 italic text-center py-4">No drafts linked.</p>}
-                                </div>
-                            </div>
-
-                            {/* Code & Data Section */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Database className="w-4 h-4 text-sky-600"/> Code & Data</h4>
-                                    {canEdit && <button onClick={() => setShowAddCodeData(!showAddCodeData)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Item</button>}
-                                </div>
-                                {showAddCodeData && canEdit && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
-                                    <input placeholder="File Name (e.g., main.py)" value={newCodeData.name} onChange={e => setNewCodeData({...newCodeData, name: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                    <select value={newCodeData.type} onChange={e => setNewCodeData({...newCodeData, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="code">Code</option><option value="data">Data</option></select>
-                                    <input placeholder="URL" value={newCodeData.url} onChange={e => setNewCodeData({...newCodeData, url: e.target.value})} className="p-2 rounded border"/>
-                                    <div className="col-span-2 flex gap-2"><button onClick={() => { handleAddFile(newCodeData, newCodeData.type); setNewCodeData({ name: '', url: '', type: 'code' }); setShowAddCodeData(false); }} className="bg-sky-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddCodeData(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                                </div>}
-                                <div className="space-y-2">
-                                    {codeAndData.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
-                                    </div>))}
-                                    {codeAndData.length === 0 && !showAddCodeData && <p className="text-xs text-slate-400 italic text-center py-4">No code or data files linked.</p>}
-                                </div>
-                            </div>
-                            
-                            {/* Other Assets Section */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-amber-600"/> Other Assets</h4>
-                                    {canEdit && <button onClick={() => setShowAddOther(!showAddOther)} className="text-xs font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
-                                </div>
-                                {showAddOther && canEdit && <div className="p-3 mb-3 bg-amber-50 rounded-lg border border-amber-100 grid grid-cols-2 gap-2 text-sm">
-                                    <input placeholder="File Name (e.g., Presentation Slides)" value={newOther.name} onChange={e => setNewOther({...newOther, name: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                    <select value={newOther.type} onChange={e => setNewOther({...newOther, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Slide Deck</option><option value="document">Document</option><option value="other">Other</option></select>
-                                    <input placeholder="URL" value={newOther.url} onChange={e => setNewOther({...newOther, url: e.target.value})} className="p-2 rounded border"/>
-                                    <div className="col-span-2 flex gap-2"><button onClick={() => { handleAddFile(newOther, newOther.type); setNewOther({ name: '', url: '', type: 'slide' }); setShowAddOther(false); }} className="bg-amber-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddOther(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
-                                </div>}
-                                <div className="space-y-2">
-                                    {otherAssets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                        <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-amber-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                        <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{canEdit && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
-                                    </div>))}
-                                    {otherAssets.length === 0 && !showAddOther && <p className="text-xs text-slate-400 italic text-center py-4">No other assets linked.</p>}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                }
-            case 'team':
-                 return (
-                    <div className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-semibold text-slate-700 text-lg">Team Members</h3>
-                            {isOwner && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {collaborators.map(c => (
-                                <div key={c.id} className="relative group bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 shrink-0">{c.initials}</div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-slate-800 truncate">{c.name}</p>
-                                        <p className="text-xs text-slate-500 truncate">{c.email}</p>
-                                    </div>
-                                    <span className="ml-auto text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-600 shrink-0">{c.role}</span>
-                                    
-                                    {isOwner && c.role !== 'Owner' && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveCollaborator(c.id);
-                                            }}
-                                            className="absolute top-2 right-2 p-1.5 bg-white/70 backdrop-blur-sm rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                                            title="Remove Member"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                        <div className="flex-1 overflow-hidden">
+                             <AIChat project={project} />
                         </div>
                     </div>
-                );
-            case 'ai':
-                return <div className="p-6 h-full overflow-hidden"><AIChat project={project} /></div>;
-            default: return null;
-        }
-    };
-
-    return (
-        <div className="h-full flex flex-col overflow-hidden animate-in fade-in duration-300 relative bg-slate-50">
-            {notification.visible && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-white shadow-lg rounded-full border border-slate-200 px-4 py-2 flex items-center gap-2 text-sm font-medium text-slate-700 animate-in fade-in slide-in-from-top-4 duration-300">
-                    <Mail className="w-4 h-4 text-indigo-500" />
-                    <span>{notification.message}</span>
-                </div>
-            )}
-            {showShareModal && <ShareModal project={project} currentUser={effectiveUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} onUpdateCollaboratorRole={handleUpdateCollaboratorRole} />}
-            {selectedTask && (
-                <TaskDetailModal 
-                    task={selectedTask}
-                    project={project}
-                    currentUser={effectiveUser}
-                    onClose={() => setSelectedTask(null)}
-                    onUpdateTask={handleUpdateSingleTask}
-                    onDeleteTask={handleDeleteTask}
-                    onSendNotification={showNotification}
-                />
-            )}
-            {addingTaskForStatus && (
-                <AddTaskModal 
-                    status={addingTaskForStatus}
-                    project={project}
-                    onClose={() => setAddingTaskForStatus(null)}
-                    onSave={handleCreateTask}
-                />
-            )}
-
-
-            <header className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0 bg-white shadow-sm z-10">
-                <div className="flex items-center gap-4">
-                    {!isGuestView && (<button onClick={onBack} className="p-2 rounded-xl hover:bg-slate-100" title="Back to Projects"><ChevronLeft className="w-5 h-5" /></button>)}
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-xl font-bold text-slate-800">{project.title}</h2>
-                            <div className="relative">
-                                <button
-                                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                                    className={`text-[10px] font-bold px-2 py-1.5 rounded-full uppercase tracking-wider flex items-center gap-1 ${getStatusClasses(project.status)}`}
-                                >
-                                    {project.status} <ChevronDown className="w-3 h-3"/>
-                                </button>
-                                {statusDropdownOpen && isOwner && (
-                                    <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-20 w-32">
-                                        {Object.values(ProjectStatus).map(s => (
-                                            <button 
-                                                key={s} 
-                                                onClick={() => { handleUpdateProjectStatus(s); setStatusDropdownOpen(false); }}
-                                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50"
-                                            >
-                                                {s}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    {isOwner && (<>
-                        <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"><Share2 className="w-4 h-4" /> Share</button>
-                        <button onClick={handleDeleteProjectConfirm} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Delete Project"><Trash2 className="w-5 h-5" /></button>
-                    </>)}
-                </div>
-            </header>
-            
-            <nav className="px-6 py-3 border-b border-slate-200 flex-shrink-0 bg-white flex items-center gap-4">
-                <TabButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
-                <TabButton id="tasks" icon={ClipboardList} label="Tasks" />
-                <TabButton id="files" icon={FileIcon} label="Files" />
-                <TabButton id="team" icon={Users} label="Team" />
-                <div className="w-px h-6 bg-slate-200 mx-2"></div>
-                <TabButton id="ai" icon={Bot} label="AI Assistant" />
-            </nav>
-
-            <main className="flex-1 overflow-hidden">{renderTabContent()}</main>
+                )}
+            </div>
         </div>
     );
 };

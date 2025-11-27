@@ -10,8 +10,6 @@ import {
   getDoc,
   updateDoc
 } from "firebase/firestore";
-// NEW: Import Firebase Functions SDK
-import { getFunctions, httpsCallable } from "firebase/functions";
 import { Project, Idea, Reminder, Collaborator, SystemSettings, PersonalGoal, Habit, Course, JournalEntry, AcademicYearDoc } from "../types";
 
 // Helper to check if env vars exist
@@ -39,13 +37,11 @@ const firebaseConfig = {
 
 // Initialize Firebase only if config is present
 let db: any = null;
-let functions: any = null; // NEW: Functions instance
 
 if (isFirebaseConfigured()) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
-    functions = getFunctions(app); // NEW: Initialize Functions
     console.log("Firebase initialized successfully");
   } catch (error) {
     console.error("Firebase Initialization Error:", error);
@@ -293,59 +289,4 @@ export const removeCollaboratorFromProject = async (projectId: string, collabora
     console.error("Error removing collaborator:", error);
     throw error;
   }
-};
-
-// --- EMAIL NOTIFICATIONS (via Cloud Function) ---
-
-interface EmailData {
-    toEmail: string;
-    toName: string;
-    taskTitle: string;
-    projectName: string;
-    assignedBy: string;
-}
-
-export const sendTaskNotificationEmail = async (data: EmailData) => {
-    if (!functions) {
-        console.log("Firebase Functions not initialized. Simulating email log:", data);
-        return { success: true, simulated: true };
-    }
-
-    try {
-        const sendEmail = httpsCallable(functions, 'sendTaskNotificationEmail');
-        const result = await sendEmail(data);
-        console.log("Cloud Function called successfully:", result);
-        return result;
-    } catch (error) {
-        console.error("Error calling cloud function:", error);
-        // Fallback simulation for demo purposes
-        return { success: false, simulated: true };
-    }
-};
-
-interface MentionEmailData {
-    toEmail: string;
-    toName: string;
-    comment: string;
-    taskTitle: string;
-    projectName: string;
-    mentionedBy: string;
-    taskLink: string;
-}
-
-export const sendMentionNotificationEmail = async (data: MentionEmailData) => {
-    if (!functions) {
-        console.log("Firebase Functions not initialized. Simulating mention email:", data);
-        return { success: true, simulated: true };
-    }
-
-    try {
-        const sendEmail = httpsCallable(functions, 'sendMentionNotificationEmail');
-        const result = await sendEmail(data);
-        console.log("Cloud Function called successfully:", result);
-        return result;
-    } catch (error) {
-        console.error("Error calling mention cloud function:", error);
-        return { success: false, simulated: true };
-    }
 };

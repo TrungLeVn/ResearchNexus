@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Collaborator } from '../types';
 import { MOCK_USERS } from '../constants';
-import { Beaker, Users, ArrowLeft, Mail, Loader2, AlertCircle } from 'lucide-react';
+import { Beaker, Users, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { addCollaboratorToProject } from '../services/firebase';
 
 interface LoginScreenProps {
@@ -34,7 +34,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
   }, [inviteProjectId]);
 
   const validateEmail = (email: string) => {
-      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      // Strict email regex validation
+      const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
       return re.test(email);
   };
 
@@ -46,8 +47,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, inviteProject
           setEmailError('Email is required');
           return;
       }
+      
       if (!validateEmail(guestEmail)) {
-          setEmailError('Please enter a valid email address (e.g., name@university.edu)');
+          setEmailError('Please enter a valid email address (e.g. user@domain.com)');
           return;
       }
       
