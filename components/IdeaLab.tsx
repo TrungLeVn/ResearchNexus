@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Idea, LinkResource } from '../types';
 import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive, Maximize2, X, BrainCircuit, Wand2, Save } from 'lucide-react';
 import { expandResearchIdea, structureIdeaContent, brainstormRelatedTopics } from '../services/gemini';
@@ -34,6 +34,15 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
     // AI Suggestions
     const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
 
+    // Sync internal state with prop changes to avoid stale data while modal is open
+    useEffect(() => {
+        if (idea) {
+            setTitle(idea.title);
+            setContent(idea.content);
+            setDescription(idea.description || '');
+        }
+    }, [idea]);
+
     const handleSave = () => {
         onUpdate({
             ...idea,
@@ -48,7 +57,8 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
         try {
             const structured = await structureIdeaContent(content);
             setContent(structured);
-            handleSave(); // Auto save after structure
+            // Auto-save after AI action
+            onUpdate({ ...idea, title, content: structured, description });
         } catch (e) {
             console.error(e);
         } finally {
@@ -60,8 +70,9 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
         setIsProcessing(true);
         try {
             const expanded = await expandResearchIdea(title, content);
-            setContent(content + "\n\n---\n\n" + expanded);
-            handleSave();
+            const newContent = content + "\n\n---\n\n" + expanded;
+            setContent(newContent);
+            onUpdate({ ...idea, title, content: newContent, description });
         } catch (e) {
             console.error(e);
         } finally {
@@ -89,20 +100,28 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
             url: newLinkUrl,
             type: newLinkUrl.includes('drive.google.com') ? 'drive' : 'web'
         };
-        onUpdate({
+        const updatedIdea = {
             ...idea,
+            title,
+            content,
+            description,
             relatedResources: [...idea.relatedResources, resource]
-        });
+        };
+        onUpdate(updatedIdea);
         setNewLinkUrl('');
         setNewLinkTitle('');
         setShowLinkInput(false);
     };
 
     const removeResource = (rId: string) => {
-        onUpdate({
+        const updatedIdea = {
             ...idea,
+            title,
+            content,
+            description,
             relatedResources: idea.relatedResources.filter(r => r.id !== rId)
-        });
+        };
+        onUpdate(updatedIdea);
     };
 
     return (
@@ -122,7 +141,7 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
                             onClick={() => { handleSave(); onClose(); }}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
                         >
-                            <Save className="w-4 h-4" /> Save
+                            <Save className="w-4 h-4" /> Save & Close
                         </button>
                         <div className="w-px h-6 bg-slate-300 mx-2"></div>
                         <button 
@@ -132,7 +151,7 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
                         >
                             <Trash2 className="w-5 h-5" />
                         </button>
-                        <button onClick={() => { handleSave(); onClose(); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600" title="Close">
+                        <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600" title="Close">
                             <X className="w-6 h-6" />
                         </button>
                     </div>
@@ -265,8 +284,24 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
 
 export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea, onDeleteIdea }) => {
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false); // Flag for new idea creation
   const [quickTitle, setQuickTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // This effect synchronizes an OPEN modal with external data changes (e.g., from another client).
+  // It is careful not to close the modal for newly created, unsaved ideas.
+  useEffect(() => {
+    if (selectedIdea && !isCreatingNew) {
+      const freshIdea = ideas.find(i => i.id === selectedIdea.id);
+      if (!freshIdea) {
+        // The idea is no longer in the main list, so it must have been deleted. Close the modal.
+        setSelectedIdea(null);
+      } else if (JSON.stringify(freshIdea) !== JSON.stringify(selectedIdea)) {
+        // The idea data has changed, so update the modal's state.
+        setSelectedIdea(freshIdea);
+      }
+    }
+  }, [ideas, selectedIdea, isCreatingNew]);
 
   const handleQuickAdd = () => {
       if (!quickTitle.trim()) return;
@@ -278,9 +313,30 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
           relatedResources: [],
           aiEnhanced: false
       };
-      onAddIdea(newIdea);
+      setIsCreatingNew(true); // Set flag to prevent useEffect from closing modal
+      setSelectedIdea(newIdea);
       setQuickTitle('');
-      setSelectedIdea(newIdea); // Auto open
+  };
+  
+  const handleCloseModal = () => {
+      setSelectedIdea(null);
+      setIsCreatingNew(false); // Reset flag when modal is closed
+  };
+  
+  const handleSaveOrUpdate = (ideaToSave: Idea) => {
+      if (isCreatingNew) {
+          onAddIdea(ideaToSave);
+          setIsCreatingNew(false); // The idea is now saved, so it's no longer "new"
+      } else {
+          onUpdateIdea(ideaToSave);
+      }
+  };
+
+  const handleDelete = (id: string) => {
+      if (!isCreatingNew) { // Only delete from DB if it's not a new, unsaved idea
+          onDeleteIdea(id);
+      }
+      handleCloseModal();
   };
 
   const filteredIdeas = ideas.filter(i => 
@@ -293,15 +349,9 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
         {selectedIdea && (
             <IdeaDetailModal 
                 idea={selectedIdea} 
-                onClose={() => setSelectedIdea(null)} 
-                onUpdate={(updated) => {
-                    onUpdateIdea(updated);
-                    setSelectedIdea(updated);
-                }}
-                onDelete={(id) => {
-                    onDeleteIdea(id);
-                    setSelectedIdea(null);
-                }}
+                onClose={handleCloseModal} 
+                onUpdate={handleSaveOrUpdate}
+                onDelete={handleDelete}
             />
         )}
 
@@ -350,7 +400,10 @@ export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea
                 {filteredIdeas.map(idea => (
                     <div 
                         key={idea.id}
-                        onClick={() => setSelectedIdea(idea)}
+                        onClick={() => {
+                            setIsCreatingNew(false); // This is an existing idea
+                            setSelectedIdea(idea);
+                        }}
                         className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-amber-200 hover:-translate-y-1 transition-all cursor-pointer group flex flex-col h-[220px]"
                     >
                         <div className="flex justify-between items-start mb-2">
