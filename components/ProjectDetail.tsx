@@ -345,9 +345,10 @@ interface ShareModalProps {
     onClose: () => void;
     onAddCollaborator: (c: Collaborator) => void;
     onRemoveCollaborator: (collaboratorId: string) => void;
+    onUpdateCollaboratorRole: (collaboratorId: string, newRole: 'Editor' | 'Viewer') => void;
 }
 
-const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, onAddCollaborator, onRemoveCollaborator }) => {
+const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, onAddCollaborator, onRemoveCollaborator, onUpdateCollaboratorRole }) => {
     const [email, setEmail] = useState('');
     const [name, setName] = useState('');
     const [role, setRole] = useState<'Editor' | 'Viewer'>('Editor');
@@ -468,7 +469,20 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
                                         <span className="text-slate-700 truncate max-w-[120px]" title={c.name}>{c.name}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{c.role}</span>
+                                        {currentUser.role === 'Owner' && c.role !== 'Owner' ? (
+                                            <select
+                                                value={c.role}
+                                                onChange={(e) => onUpdateCollaboratorRole(c.id, e.target.value as 'Editor' | 'Viewer')}
+                                                disabled={c.role === 'Guest'}
+                                                className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 focus:ring-1 focus:ring-indigo-500 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="Editor">Editor</option>
+                                                <option value="Viewer">Viewer</option>
+                                                {c.role === 'Guest' && <option value="Guest">Guest</option>}
+                                            </select>
+                                        ) : (
+                                            <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{c.role}</span>
+                                        )}
                                         {currentUser.role === 'Owner' && c.role !== 'Owner' && (
                                             <button 
                                                 onClick={() => onRemoveCollaborator(c.id)}
@@ -662,6 +676,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             const projectWithActivity = logActivity(projectWithCollabRemoved, message);
             onUpdateProject(projectWithActivity);
         }
+    };
+
+    const handleUpdateCollaboratorRole = (collaboratorId: string, newRole: 'Editor' | 'Viewer') => {
+        const collaboratorToUpdate = collaborators.find(c => c.id === collaboratorId);
+        if (!collaboratorToUpdate || collaboratorToUpdate.role === 'Owner' || collaboratorToUpdate.role === 'Guest') return;
+
+        const updatedCollaborators = collaborators.map(c => 
+            c.id === collaboratorId ? { ...c, role: newRole } : c
+        );
+
+        const projectWithRoleUpdated = { ...project, collaborators: updatedCollaborators };
+        const message = `changed ${collaboratorToUpdate.name}'s role to ${newRole}`;
+        const projectWithActivity = logActivity(projectWithRoleUpdated, message);
+        onUpdateProject(projectWithActivity);
     };
 
     const handleDeleteProjectConfirm = () => {
@@ -1043,7 +1071,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     <span>{notification.message}</span>
                 </div>
             )}
-            {showShareModal && <ShareModal project={project} currentUser={currentUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} />}
+            {showShareModal && <ShareModal project={project} currentUser={currentUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} onUpdateCollaboratorRole={handleUpdateCollaboratorRole} />}
             {selectedTask && (
                 <TaskDetailModal 
                     task={selectedTask}
