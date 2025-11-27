@@ -110,19 +110,6 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             setIsGeneratingPlan(false);
         }
     };
-
-    if (selectedProject && activeView === AdminViewState.PROJECTS) {
-        return (
-            <ProjectDetail
-                project={selectedProject}
-                currentUser={currentUser}
-                onUpdateProject={onUpdateProject}
-                onBack={() => onSelectProject(null)}
-                onDeleteProject={onDeleteProject!}
-                isGuestView={false}
-            />
-        );
-    }
     
     // Get years including empty ones created manually or existing in docs
     const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
@@ -158,13 +145,25 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 
             <div className="flex-1 overflow-y-auto relative">
                 {activeView === AdminViewState.PROJECTS && (
-                    <ProjectManager 
-                        projects={adminProjects}
-                        currentUser={currentUser}
-                        onSelectProject={onSelectProject}
-                        onAddProject={onAddProject}
-                        title="Admin Projects"
-                    />
+                    selectedProject ? (
+                        <ProjectDetail
+                            project={selectedProject}
+                            currentUser={currentUser}
+                            onUpdateProject={onUpdateProject}
+                            onBack={() => onSelectProject(null)}
+                            onDeleteProject={onDeleteProject!}
+                            isGuestView={false}
+                        />
+                    ) : (
+                        <ProjectManager
+                            projects={adminProjects}
+                            currentUser={currentUser}
+                            onSelectProject={onSelectProject}
+                            onAddProject={onAddProject}
+                            title="Admin Projects"
+                            projectCategory="admin"
+                        />
+                    )
                 )}
 
                 {activeView === AdminViewState.DOCS && (

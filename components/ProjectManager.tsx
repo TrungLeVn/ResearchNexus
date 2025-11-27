@@ -9,6 +9,7 @@ interface ProjectManagerProps {
   onAddProject?: (project: Project) => void;
   title?: string;
   isGuestView?: boolean;
+  projectCategory?: 'research' | 'admin';
 }
 
 const ProjectManager: React.FC<ProjectManagerProps> = ({
@@ -18,6 +19,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
   onAddProject,
   title = 'Research Projects',
   isGuestView = false,
+  projectCategory = 'research',
 }) => {
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
@@ -33,6 +35,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                     // FIX: `notes` must be an array of StickyNote, not a string. Initializing as an empty array.
                     progress: 0, tags: [], papers: [], files: [], notes: [],
                     collaborators: [currentUser], tasks: [],
+                    category: projectCategory,
                 };
                 onAddProject(newProject);
             }
