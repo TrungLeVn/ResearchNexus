@@ -9,7 +9,8 @@
 import { Project, ProjectStatus, Idea, Reminder, Collaborator, Course, MeetingNote } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
-    { id: 'c1', name: 'Assoc.Prof. Trung Le', email: 'trung.le@university.edu', role: 'Owner', initials: 'TL' }
+    { id: 'c1', name: 'Assoc.Prof. Trung Le', email: 'trung.le@university.edu', role: 'Owner', initials: 'TL' },
+    { id: 'c2', name: 'Dr. Ada Lovelace', email: 'ada.l@university.edu', role: 'Editor', initials: 'AL' }
 ];
 
 export const MOCK_PROJECTS: Project[] = [
@@ -26,7 +27,8 @@ export const MOCK_PROJECTS: Project[] = [
     ],
     category: 'research',
     collaborators: [
-        MOCK_USERS[0] // Only Owner
+        MOCK_USERS[0],
+        MOCK_USERS[1]
     ],
     tasks: [
         { 
@@ -35,7 +37,7 @@ export const MOCK_PROJECTS: Project[] = [
             status: 'in_progress', 
             priority: 'high', 
             dueDate: '2024-06-15', 
-            assigneeId: 'c1',
+            assigneeIds: ['c1', 'c2'],
             description: 'Use the latest version of the evolutionary algorithm to run a full benchmark on the ImageNet validation set. Record top-1 and top-5 accuracy.',
             comments: [
                 { id: 'tc1', authorId: 'c1', authorName: 'Assoc.Prof. Trung Le', authorInitials: 'TL', text: 'Make sure to use the correct GPU drivers for this.', timestamp: new Date(Date.now() - 86400000 * 2).toISOString() }
@@ -47,7 +49,7 @@ export const MOCK_PROJECTS: Project[] = [
             status: 'done', 
             priority: 'medium', 
             dueDate: '2024-05-20', 
-            assigneeId: 'c1',
+            assigneeIds: ['c1'],
             description: 'Write up the first version of the methodology chapter for the upcoming paper submission. Focus on clarity and reproducibility.'
         },
         { 
@@ -56,7 +58,7 @@ export const MOCK_PROJECTS: Project[] = [
             status: 'todo', 
             priority: 'low', 
             dueDate: '2024-06-20', 
-            assigneeId: 'c1',
+            assigneeIds: ['c1'],
             description: 'Refactor all Python scripts, add docstrings, and ensure the README is up to date for public release.'
         }
     ],
@@ -87,9 +89,9 @@ export const MOCK_PROJECTS: Project[] = [
       }
     ],
     activity: [
-        { id: 'a1', message: 'Project initialized', time: '1 month ago' },
-        { id: 'a2', message: 'Experiment logs uploaded', time: '2 weeks ago' },
-        { id: 'a3', message: 'Methodology draft completed', time: '1 week ago' }
+        { id: 'a3', message: 'completed task: \'Draft methodology section\'', timestamp: new Date(Date.now() - 86400000 * 7).toISOString(), authorId: 'c1' },
+        { id: 'a2', message: 'added file: \'Experiment Logs v1\'', timestamp: new Date(Date.now() - 86400000 * 14).toISOString(), authorId: 'c1' },
+        { id: 'a1', message: 'created the project.', timestamp: new Date(Date.now() - 86400000 * 30).toISOString(), authorId: 'c1' }
     ]
   },
   {
@@ -105,13 +107,13 @@ export const MOCK_PROJECTS: Project[] = [
         MOCK_USERS[0]
     ],
     tasks: [
-        { id: 't4', title: 'Literature review on wheat yields', status: 'in_progress', priority: 'medium', dueDate: '2024-07-01', assigneeId: 'c1' },
-        { id: 't5', title: 'Acquire historical weather data', status: 'todo', priority: 'high', dueDate: '2024-07-10', assigneeId: 'c1' }
+        { id: 't4', title: 'Literature review on wheat yields', status: 'in_progress', priority: 'medium', dueDate: '2024-07-01', assigneeIds: ['c1'] },
+        { id: 't5', title: 'Acquire historical weather data', status: 'todo', priority: 'high', dueDate: '2024-07-10', assigneeIds: ['c1'] }
     ],
     files: [],
     papers: [],
     activity: [
-        { id: 'a4', message: 'Project Created', time: '1 day ago' }
+        { id: 'a4', message: 'created the project.', timestamp: new Date().toISOString(), authorId: 'c1' }
     ]
   },
   {
@@ -125,9 +127,9 @@ export const MOCK_PROJECTS: Project[] = [
     notes: [],
     collaborators: [MOCK_USERS[0]],
     tasks: [
-        { id: 'at1', title: 'Book Keynote Speaker', status: 'done', priority: 'high', dueDate: '2024-05-01', assigneeId: 'c1' },
-        { id: 'at2', title: 'Finalize Catering Menu', status: 'in_progress', priority: 'medium', dueDate: '2024-06-01', assigneeId: 'c1' },
-        { id: 'at3', title: 'Send Call for Papers', status: 'todo', priority: 'high', dueDate: '2024-06-15', assigneeId: 'c1' }
+        { id: 'at1', title: 'Book Keynote Speaker', status: 'done', priority: 'high', dueDate: '2024-05-01', assigneeIds: ['c1'] },
+        { id: 'at2', title: 'Finalize Catering Menu', status: 'in_progress', priority: 'medium', dueDate: '2024-06-01', assigneeIds: ['c1'] },
+        { id: 'at3', title: 'Send Call for Papers', status: 'todo', priority: 'high', dueDate: '2024-06-15', assigneeIds: ['c1'] }
     ],
     files: [],
     papers: [],

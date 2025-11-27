@@ -5,6 +5,7 @@ import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sp
 import { suggestAdminPlan } from '../services/gemini';
 import { subscribeToAdminDocs, saveAdminDoc, deleteAdminDoc } from '../services/firebase';
 import { AIChat } from './AIChat';
+import { ProjectDetail } from './ProjectDetail';
 
 interface AdminModuleProps {
     activeView: AdminViewState;
@@ -110,22 +111,19 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
         }
     };
 
-    // If an admin project is selected and we are in projects tab, show the project manager view
     if (selectedProject && activeView === AdminViewState.PROJECTS) {
         return (
-            <ProjectManager 
-                projects={adminProjects}
-                selectedProject={selectedProject}
+            <ProjectDetail
+                project={selectedProject}
                 currentUser={currentUser}
-                onSelectProject={(p) => !p ? onSelectProject(null) : onSelectProject(p)}
                 onUpdateProject={onUpdateProject}
-                onDeleteProject={onDeleteProject}
-                onAddProject={onAddProject}
-                title="Admin Projects"
+                onBack={() => onSelectProject(null)}
+                onDeleteProject={onDeleteProject!}
+                isGuestView={false}
             />
         );
     }
-
+    
     // Get years including empty ones created manually or existing in docs
     const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
 
@@ -162,11 +160,8 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                 {activeView === AdminViewState.PROJECTS && (
                     <ProjectManager 
                         projects={adminProjects}
-                        selectedProject={null} // Force list view initially
                         currentUser={currentUser}
-                        onSelectProject={(p) => !p ? onSelectProject(null) : onSelectProject(p)}
-                        onUpdateProject={onUpdateProject}
-                        onDeleteProject={onDeleteProject}
+                        onSelectProject={onSelectProject}
                         onAddProject={onAddProject}
                         title="Admin Projects"
                     />

@@ -76,7 +76,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: string; // ISO Date string
-  assigneeId?: string;
+  assigneeIds?: string[];
   dependencies?: string[]; // Array of Task IDs that must be completed before this task
   comments?: TaskComment[];
 }
@@ -84,7 +84,8 @@ export interface Task {
 export interface ProjectActivity {
   id: string;
   message: string;
-  time: string;
+  timestamp: string; // ISO string for precise time
+  authorId: string; // Who performed the action
 }
 
 export interface Project {

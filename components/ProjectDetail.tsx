@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile } from '../types';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile, ProjectActivity } from '../types';
 import { 
     ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, StickyNote as NoteIcon, 
     Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2
+    Pencil, Database, Layers, LayoutDashboard, Activity, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -49,7 +49,7 @@ interface TaskCardProps {
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
-    const assignee = project.collaborators.find(c => c.id === task.assigneeId);
+    const assignees = project.collaborators.filter(c => task.assigneeIds?.includes(c.id));
 
     const priorityIcons: Record<TaskPriority, React.ReactNode> = {
         high: <Flame className="w-3.5 h-3.5 text-red-500" title="High Priority"/>,
@@ -72,11 +72,14 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
                         <span>{task.comments?.length || 0}</span>
                     </div>
                 </div>
-                {assignee && (
-                    <div title={assignee.name} className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-[10px] border-2 border-white">
-                        {assignee.initials}
-                    </div>
-                )}
+                <div className="flex items-center -space-x-2">
+                    {assignees.slice(0, 2).map(c => (
+                        <div key={c.id} title={c.name} className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-[10px] border-2 border-white">
+                            {c.initials}
+                        </div>
+                    ))}
+                    {assignees.length > 2 && <div className="w-6 h-6 rounded-full bg-slate-300 flex items-center justify-center font-bold text-slate-600 text-[10px] border-2 border-white">+{assignees.length - 2}</div>}
+                </div>
             </div>
         </div>
     );
@@ -95,6 +98,17 @@ interface TaskDetailModalProps {
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask }) => {
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [newComment, setNewComment] = useState('');
+    const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+    
+    const assignees = project.collaborators.filter(c => editedTask.assigneeIds?.includes(c.id));
+
+    const handleAssigneeToggle = (collaboratorId: string) => {
+        const currentIds = editedTask.assigneeIds || [];
+        const newIds = currentIds.includes(collaboratorId)
+            ? currentIds.filter(id => id !== collaboratorId)
+            : [...currentIds, collaboratorId];
+        setEditedTask({ ...editedTask, assigneeIds: newIds });
+    };
 
     const handleSave = () => {
         onUpdateTask(editedTask);
@@ -170,11 +184,37 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                             </select>
                         </div>
                         <div className="bg-slate-50 p-3 rounded-lg border">
-                            <label className="text-xs font-bold text-slate-400 uppercase">Assignee</label>
-                            <select value={editedTask.assigneeId || ''} onChange={e => setEditedTask({...editedTask, assigneeId: e.target.value})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
-                                <option value="">Unassigned</option>
-                                {project.collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
+                            <label className="text-xs font-bold text-slate-400 uppercase">Assignees</label>
+                            <div className="relative">
+                                <button onClick={() => setAssigneeDropdownOpen(!assigneeDropdownOpen)} className="w-full mt-1 p-2 border rounded-md text-sm bg-white text-left flex justify-between items-center h-10">
+                                    {assignees.length > 0 ? (
+                                        <div className="flex items-center gap-1 overflow-hidden">
+                                            {assignees.map(a => (
+                                                <div key={a.id} title={a.name} className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold shrink-0">{a.initials}</div>
+                                            ))}
+                                            <span className="truncate text-xs">{assignees.map(a => a.name).join(', ')}</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-slate-400">Unassigned</span>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 transition-transform shrink-0 ${assigneeDropdownOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {assigneeDropdownOpen && (
+                                    <div className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-40 overflow-y-auto">
+                                        {project.collaborators.map(c => (
+                                            <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer text-sm">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                                                    checked={editedTask.assigneeIds?.includes(c.id) || false}
+                                                    onChange={() => handleAssigneeToggle(c.id)}
+                                                />
+                                                {c.name}
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="bg-slate-50 p-3 rounded-lg border">
                             <label className="text-xs font-bold text-slate-400 uppercase">Due Date</label>
@@ -210,9 +250,19 @@ interface AddTaskModalProps {
 }
 const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, onSave }) => {
     const [title, setTitle] = useState('');
-    const [assigneeId, setAssigneeId] = useState<string>('');
+    const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
     const [priority, setPriority] = useState<TaskPriority>('medium');
     const [dueDate, setDueDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
+    const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+    
+    const selectedAssignees = project.collaborators.filter(c => assigneeIds.includes(c.id));
+
+    const handleAssigneeToggle = (collaboratorId: string) => {
+        const newIds = assigneeIds.includes(collaboratorId)
+            ? assigneeIds.filter(id => id !== collaboratorId)
+            : [...assigneeIds, collaboratorId];
+        setAssigneeIds(newIds);
+    };
 
     const handleSave = () => {
         if (!title.trim()) return;
@@ -222,7 +272,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
             status,
             priority,
             dueDate,
-            assigneeId: assigneeId || undefined,
+            assigneeIds,
             comments: [],
             description: ''
         };
@@ -238,10 +288,41 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
                 </div>
                 <div className="p-6 space-y-4">
                     <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title..." className="w-full border rounded-lg p-2 text-lg"/>
-                    <div className="grid grid-cols-3 gap-4">
-                        <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className="w-full p-2 border rounded-md text-sm bg-white"><option value="">Unassigned</option>{project.collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded-md text-sm"/>
-                        <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="w-full p-2 border rounded-md text-sm bg-white"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="relative col-span-1 sm:col-span-3">
+                            <label className="text-xs font-semibold text-slate-500 mb-1">Assignees</label>
+                            <button onClick={() => setAssigneeDropdownOpen(!assigneeDropdownOpen)} className="w-full p-2 border rounded-md text-sm bg-white text-left flex justify-between items-center h-10">
+                                {selectedAssignees.length > 0 ? (
+                                    <div className="flex items-center gap-1 overflow-hidden">
+                                        {selectedAssignees.map(a => (
+                                            <div key={a.id} title={a.name} className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold shrink-0">{a.initials}</div>
+                                        ))}
+                                        <span className="truncate text-xs">{selectedAssignees.map(a => a.name).join(', ')}</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-slate-400">Unassigned</span>
+                                )}
+                                <ChevronDown className={`w-4 h-4 transition-transform shrink-0 ${assigneeDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {assigneeDropdownOpen && (
+                                <div className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-40 overflow-y-auto">
+                                    {project.collaborators.map(c => (
+                                        <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer text-sm">
+                                            <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" checked={assigneeIds.includes(c.id)} onChange={() => handleAssigneeToggle(c.id)}/>
+                                            {c.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="col-span-1 sm:col-span-2">
+                             <label className="text-xs font-semibold text-slate-500 mb-1">Due Date</label>
+                             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded-md text-sm"/>
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-slate-500 mb-1">Priority</label>
+                            <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="w-full p-2 border rounded-md text-sm bg-white h-10"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+                        </div>
                     </div>
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
@@ -405,6 +486,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'notes' | 'team' | 'ai'>('dashboard');
     const [showShareModal, setShowShareModal] = useState(false);
+    const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
     
     // Task Modals State
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -421,19 +503,81 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     // State for Sticky Notes Board
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
 
+    // --- ACTIVITY LOGGING ---
+    const logActivity = (
+        proj: Project,
+        message: string
+    ): Project => {
+        const newActivity: ProjectActivity = {
+            id: `act_${Date.now()}`,
+            message,
+            timestamp: new Date().toISOString(),
+            authorId: currentUser.id,
+        };
+
+        const currentActivities = proj.activity || [];
+        const updatedActivities = [newActivity, ...currentActivities].slice(0, 50); // Keep last 50
+
+        return { ...proj, activity: updatedActivities };
+    };
+
+    const formatRelativeTime = (isoString: string): string => {
+        const date = new Date(isoString);
+        const now = new Date();
+        const seconds = Math.round((now.getTime() - date.getTime()) / 1000);
+        const minutes = Math.round(seconds / 60);
+        const hours = Math.round(minutes / 60);
+        const days = Math.round(hours / 24);
+
+        if (seconds < 60) return "just now";
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return `${days}d ago`;
+        return date.toLocaleDateString('en-CA');
+    };
+
+    const handleUpdateProjectStatus = (newStatus: ProjectStatus) => {
+        const projectWithNewStatus = { ...project, status: newStatus };
+        const message = `changed project status to ${newStatus}`;
+        const projectWithActivity = logActivity(projectWithNewStatus, message);
+        onUpdateProject(projectWithActivity);
+    };
+
     const handleUpdateSingleTask = (updatedTask: Task) => {
+        const oldTask = project.tasks.find(t => t.id === updatedTask.id);
+        let projectToUpdate = { ...project };
+
+        if (oldTask && oldTask.status !== updatedTask.status) {
+            const message = `moved task '${updatedTask.title}' to ${statusMap[updatedTask.status]}`;
+            projectToUpdate = logActivity(projectToUpdate, message);
+        }
+        
+        if (oldTask && (updatedTask.comments?.length || 0) > (oldTask.comments?.length || 0)) {
+            const message = `commented on task: '${updatedTask.title}'`;
+            projectToUpdate = logActivity(projectToUpdate, message);
+        }
+
         const updatedTasks = project.tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
-        onUpdateProject({ ...project, tasks: updatedTasks });
+        onUpdateProject({ ...projectToUpdate, tasks: updatedTasks });
     };
 
     const handleCreateTask = (newTask: Task) => {
-        onUpdateProject({ ...project, tasks: [...project.tasks, newTask] });
+        const projectWithNewTask = { ...project, tasks: [...project.tasks, newTask] };
+        const message = `added task: '${newTask.title}'`;
+        const projectWithActivity = logActivity(projectWithNewTask, message);
+        onUpdateProject(projectWithActivity);
         setAddingTaskForStatus(null);
     };
 
     const handleDeleteTask = (taskId: string) => {
+        const taskToDelete = project.tasks.find(t => t.id === taskId);
+        if (!taskToDelete) return;
+
         const updatedTasks = project.tasks.filter(t => t.id !== taskId);
-        onUpdateProject({ ...project, tasks: updatedTasks });
+        const projectWithTasksUpdated = { ...project, tasks: updatedTasks };
+        const message = `deleted task: '${taskToDelete.title}'`;
+        const projectWithActivity = logActivity(projectWithTasksUpdated, message);
+        onUpdateProject(projectWithActivity);
     };
 
     const handleAddCollaborator = (newCollab: Collaborator) => {
@@ -442,13 +586,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             return;
         }
         const updatedCollaborators = [...project.collaborators, newCollab];
-        onUpdateProject({ ...project, collaborators: updatedCollaborators });
+        const projectWithNewCollab = { ...project, collaborators: updatedCollaborators };
+        const message = `added ${newCollab.name} to the team`;
+        const projectWithActivity = logActivity(projectWithNewCollab, message);
+        onUpdateProject(projectWithActivity);
     };
 
     const handleRemoveCollaborator = (collaboratorId: string) => {
+        const collaboratorToRemove = project.collaborators.find(c => c.id === collaboratorId);
+        if (!collaboratorToRemove) return;
+
         if (window.confirm("Are you sure you want to remove this member?")) {
             const updatedCollaborators = project.collaborators.filter(c => c.id !== collaboratorId);
-            onUpdateProject({ ...project, collaborators: updatedCollaborators });
+            const projectWithCollabRemoved = { ...project, collaborators: updatedCollaborators };
+            const message = `removed ${collaboratorToRemove.name} from the team`;
+            const projectWithActivity = logActivity(projectWithCollabRemoved, message);
+            onUpdateProject(projectWithActivity);
         }
     };
 
@@ -472,7 +625,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             type: type,
             lastModified: new Date().toISOString().split('T')[0]
         };
-        onUpdateProject({...project, files: [...project.files, file]});
+
+        const projectWithNewFile = {...project, files: [...project.files, file]};
+        const message = `added file: '${file.name}'`;
+        const projectWithActivity = logActivity(projectWithNewFile, message);
+        onUpdateProject(projectWithActivity);
 
         // Reset respective forms
         if (type === 'draft') {
@@ -488,7 +645,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     };
 
     const handleDeleteFile = (id: string) => {
-        onUpdateProject({...project, files: project.files.filter(f => f.id !== id)});
+        const fileToDelete = project.files.find(f => f.id === id);
+        if (!fileToDelete) return;
+
+        const projectWithFileRemoved = {...project, files: project.files.filter(f => f.id !== id)};
+        const message = `deleted file: '${fileToDelete.name}'`;
+        const projectWithActivity = logActivity(projectWithFileRemoved, message);
+        onUpdateProject(projectWithActivity);
     };
 
     // --- STICKY NOTES LOGIC ---
@@ -500,7 +663,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             color: 'yellow',
             createdAt: new Date().toISOString()
         };
-        onUpdateProject({ ...project, notes: [newNote, ...(project.notes || [])] });
+        const projectWithNewNote = { ...project, notes: [newNote, ...(project.notes || [])] };
+        const message = `added a sticky note: '${newNote.title}'`;
+        const projectWithActivity = logActivity(projectWithNewNote, message);
+        onUpdateProject(projectWithActivity);
     };
 
     const updateStickyNote = (id: string, updates: Partial<StickyNote>) => {
@@ -511,9 +677,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     };
 
     const deleteStickyNote = (id: string) => {
+        const noteToDelete = (project.notes || []).find(n => n.id === id);
+        if (!noteToDelete) return;
+
         if (!window.confirm("Delete this note?")) return;
         const updatedNotes = (project.notes || []).filter(n => n.id !== id);
-        onUpdateProject({ ...project, notes: updatedNotes });
+        const projectWithNoteRemoved = { ...project, notes: updatedNotes };
+        const message = `deleted a sticky note: '${noteToDelete.title}'`;
+        const projectWithActivity = logActivity(projectWithNoteRemoved, message);
+        onUpdateProject(projectWithActivity);
         if (expandedNoteId === id) setExpandedNoteId(null);
     };
 
@@ -608,13 +780,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                 <h4 className="font-medium flex items-center gap-2 text-slate-800 mb-3"><Activity className="w-4 h-4 text-green-500"/> Recent Activity</h4>
                                 <div className="space-y-3">
-                                    {project.activity && project.activity.length > 0 ? [...project.activity].reverse().map(act => (
-                                        <div key={act.id} className="flex items-center gap-3 text-sm">
-                                            <div className="p-1.5 bg-slate-100 rounded-full"><CheckCircle2 className="w-3 h-3 text-slate-500"/></div>
-                                            <p className="text-slate-600 flex-1">{act.message}</p>
-                                            <p className="text-xs text-slate-400">{act.time}</p>
-                                        </div>
-                                    )) : <p className="text-xs text-slate-400 italic text-center py-4">No recent activity.</p>}
+                                    {project.activity && project.activity.length > 0 ? [...project.activity].map(act => {
+                                        const author = project.collaborators.find(c => c.id === act.authorId) || { name: 'Unknown', initials: '?' };
+                                        return (
+                                            <div key={act.id} className="flex items-start gap-3 text-sm">
+                                                <div className="w-7 h-7 mt-0.5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-xs shrink-0" title={author.name}>
+                                                    {author.initials}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-slate-700">
+                                                        <span className="font-semibold">{author.name}</span> {act.message}
+                                                    </p>
+                                                    <p className="text-xs text-slate-400 mt-0.5">{formatRelativeTime(act.timestamp)}</p>
+                                                </div>
+                                            </div>
+                                        )
+                                    }) : <p className="text-xs text-slate-400 italic text-center py-4">No recent activity.</p>}
                                 </div>
                             </div>
                         </div>
@@ -805,7 +986,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 <div className="flex items-center gap-4">
                     {!isGuestView && (<button onClick={onBack} className="p-2 rounded-xl hover:bg-slate-100" title="Back to Projects"><ChevronLeft className="w-5 h-5" /></button>)}
                     <div>
-                        <div className="flex items-center gap-3"><h2 className="text-xl font-bold text-slate-800">{project.title}</h2><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusClasses(project.status)}`}>{project.status}</span></div>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-bold text-slate-800">{project.title}</h2>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                                    className={`text-[10px] font-bold px-2 py-1.5 rounded-full uppercase tracking-wider flex items-center gap-1 ${getStatusClasses(project.status)}`}
+                                >
+                                    {project.status} <ChevronDown className="w-3 h-3"/>
+                                </button>
+                                {statusDropdownOpen && (
+                                    <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-20 w-32">
+                                        {Object.values(ProjectStatus).map(s => (
+                                            <button 
+                                                key={s} 
+                                                onClick={() => { handleUpdateProjectStatus(s); setStatusDropdownOpen(false); }}
+                                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50"
+                                            >
+                                                {s}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
