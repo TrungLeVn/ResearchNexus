@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Idea, LinkResource } from '../types';
-import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive } from 'lucide-react';
-import { expandResearchIdea } from '../services/gemini';
+import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive, Maximize2, X, BrainCircuit, Wand2, Save } from 'lucide-react';
+import { expandResearchIdea, structureIdeaContent, brainstormRelatedTopics } from '../services/gemini';
 import ReactMarkdown from 'react-markdown';
 
 interface IdeaLabProps {
@@ -11,307 +11,383 @@ interface IdeaLabProps {
   onDeleteIdea: (id: string) => void;
 }
 
-export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea, onDeleteIdea }) => {
-  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
-  const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  
-  // New Idea State
-  const [newIdeaTitle, setNewIdeaTitle] = useState('');
+// --- IDEA DETAIL MODAL ---
 
-  // Editing State
-  const [editForm, setEditForm] = useState<Partial<Idea>>({});
-  
-  // Link State
-  const [isAddingLink, setIsAddingLink] = useState(false);
-  const [newLink, setNewLink] = useState<{title: string, url: string}>({title: '', url: ''});
+interface IdeaDetailModalProps {
+    idea: Idea;
+    onClose: () => void;
+    onUpdate: (idea: Idea) => void;
+    onDelete: (id: string) => void;
+}
 
-  const handleCreateIdea = () => {
-    if (!newIdeaTitle.trim()) return;
-    const newIdea: Idea = {
-        id: Date.now().toString(),
-        title: newIdeaTitle,
-        description: 'No description yet.',
-        content: "Draft your research question here...",
-        relatedResources: [],
-        aiEnhanced: false
+const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpdate, onDelete }) => {
+    const [title, setTitle] = useState(idea.title);
+    const [content, setContent] = useState(idea.content);
+    const [description, setDescription] = useState(idea.description || '');
+    const [isProcessing, setIsProcessing] = useState(false);
+    
+    // New Resource State
+    const [newLinkUrl, setNewLinkUrl] = useState('');
+    const [newLinkTitle, setNewLinkTitle] = useState('');
+    const [showLinkInput, setShowLinkInput] = useState(false);
+
+    // AI Suggestions
+    const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
+
+    const handleSave = () => {
+        onUpdate({
+            ...idea,
+            title,
+            content,
+            description
+        });
     };
-    onAddIdea(newIdea);
-    setNewIdeaTitle('');
-    setSelectedIdea(newIdea);
-  };
 
-  const handleEnhanceIdea = async () => {
-    if (!selectedIdea) return;
-    setIsEnhancing(true);
-    try {
-        const expandedContent = await expandResearchIdea(selectedIdea.title, selectedIdea.content);
-        const updatedIdea = {
-            ...selectedIdea,
-            content: selectedIdea.content + "\n\n### AI Enhanced Proposal\n" + expandedContent,
-            aiEnhanced: true
+    const handleStructure = async () => {
+        setIsProcessing(true);
+        try {
+            const structured = await structureIdeaContent(content);
+            setContent(structured);
+            handleSave(); // Auto save after structure
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleExpand = async () => {
+        setIsProcessing(true);
+        try {
+            const expanded = await expandResearchIdea(title, content);
+            setContent(content + "\n\n---\n\n" + expanded);
+            handleSave();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleBrainstorm = async () => {
+        setIsProcessing(true);
+        try {
+            const topics = await brainstormRelatedTopics(title, content);
+            setSuggestedTopics(topics);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const addResource = () => {
+        if (!newLinkUrl) return;
+        const resource: LinkResource = {
+            id: Date.now().toString(),
+            title: newLinkTitle || newLinkUrl,
+            url: newLinkUrl,
+            type: newLinkUrl.includes('drive.google.com') ? 'drive' : 'web'
         };
-        onUpdateIdea(updatedIdea);
-        setSelectedIdea(updatedIdea);
-    } catch (e) {
-        console.error(e);
-    } finally {
-        setIsEnhancing(false);
-    }
-  };
+        onUpdate({
+            ...idea,
+            relatedResources: [...idea.relatedResources, resource]
+        });
+        setNewLinkUrl('');
+        setNewLinkTitle('');
+        setShowLinkInput(false);
+    };
 
-  const startEdit = () => {
-      if(!selectedIdea) return;
-      setEditForm({...selectedIdea});
-      setIsEditing(true);
-  };
+    const removeResource = (rId: string) => {
+        onUpdate({
+            ...idea,
+            relatedResources: idea.relatedResources.filter(r => r.id !== rId)
+        });
+    };
 
-  const saveEdit = () => {
-      if(!selectedIdea || !editForm.title) return;
-      const updated = { ...selectedIdea, ...editForm } as Idea;
-      onUpdateIdea(updated);
-      setSelectedIdea(updated);
-      setIsEditing(false);
-  };
-
-  const addResource = () => {
-      if(!selectedIdea || !newLink.title || !newLink.url) return;
-      const resource: LinkResource = {
-          id: Date.now().toString(),
-          title: newLink.title,
-          url: newLink.url,
-          type: newLink.url.includes('drive.google.com') ? 'drive' : 'web'
-      };
-      const updatedIdea = {
-          ...selectedIdea,
-          relatedResources: [...selectedIdea.relatedResources, resource]
-      };
-      onUpdateIdea(updatedIdea);
-      setSelectedIdea(updatedIdea);
-      setNewLink({title: '', url: ''});
-      setIsAddingLink(false);
-  };
-
-  const removeResource = (resourceId: string) => {
-      if(!selectedIdea) return;
-      const updatedIdea = {
-          ...selectedIdea,
-          relatedResources: selectedIdea.relatedResources.filter(r => r.id !== resourceId)
-      };
-      onUpdateIdea(updatedIdea);
-      setSelectedIdea(updatedIdea);
-  };
-
-  return (
-    <div className="flex h-full animate-in fade-in duration-500">
-        {/* Sidebar List */}
-        <div className="w-80 border-r border-slate-200 bg-white p-4 flex flex-col h-full">
-            <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <Lightbulb className="w-5 h-5 text-amber-500" />
-                Idea Lab
-            </h2>
-            
-            <div className="mb-4 flex gap-2">
-                <input 
-                    type="text" 
-                    value={newIdeaTitle}
-                    onChange={(e) => setNewIdeaTitle(e.target.value)}
-                    placeholder="New idea title..." 
-                    className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
-                    onKeyDown={(e) => e.key === 'Enter' && handleCreateIdea()}
-                />
-                <button 
-                    onClick={handleCreateIdea}
-                    className="p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
-                >
-                    <Plus className="w-4 h-4" />
-                </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2">
-                {ideas.map(idea => (
-                    <div 
-                        key={idea.id}
-                        onClick={() => { setSelectedIdea(idea); setIsEditing(false); }}
-                        className={`group relative p-3 rounded-lg cursor-pointer border transition-all ${
-                            selectedIdea?.id === idea.id 
-                            ? 'bg-amber-50 border-amber-200 ring-1 ring-amber-200' 
-                            : 'bg-white border-slate-200 hover:border-amber-200'
-                        }`}
-                    >
-                        <h3 className="font-medium text-slate-800 text-sm pr-6">{idea.title}</h3>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-1">{idea.description}</p>
-                        <div className="mt-2 flex items-center gap-2">
-                             {idea.aiEnhanced && <Sparkles className="w-3 h-3 text-indigo-500" />}
-                             <span className="text-[10px] text-slate-400">{idea.relatedResources.length} links</span>
-                        </div>
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                {/* Header */}
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <input 
+                        className="bg-transparent text-xl font-bold text-slate-800 outline-none w-full mr-4 placeholder:text-slate-400"
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        onBlur={handleSave}
+                        placeholder="Idea Title"
+                    />
+                    <div className="flex gap-2 items-center">
                         <button 
-                            onClick={(e) => { e.stopPropagation(); onDeleteIdea(idea.id); if(selectedIdea?.id === idea.id) setSelectedIdea(null); }}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 hover:text-red-600 rounded transition-all"
+                            onClick={() => { handleSave(); onClose(); }}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
                         >
-                            <Trash2 className="w-3 h-3" />
+                            <Save className="w-4 h-4" /> Save
+                        </button>
+                        <div className="w-px h-6 bg-slate-300 mx-2"></div>
+                        <button 
+                            onClick={() => { if(window.confirm('Delete this idea?')) onDelete(idea.id); }}
+                            className="p-2 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
+                            title="Delete"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => { handleSave(); onClose(); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-600" title="Close">
+                            <X className="w-6 h-6" />
                         </button>
                     </div>
-                ))}
-            </div>
-        </div>
+                </div>
 
-        {/* Main Editor Area */}
-        <div className="flex-1 bg-slate-50 flex flex-col h-full overflow-hidden">
-            {selectedIdea ? (
-                <div className="flex-1 flex flex-col h-full">
-                    {/* Header */}
-                    <header className="px-8 py-4 bg-white border-b border-slate-200 flex justify-between items-center">
+                <div className="flex-1 flex overflow-hidden">
+                    {/* Main Content Editor */}
+                    <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+                        <input 
+                            className="text-sm text-slate-500 mb-4 w-full outline-none border-b border-transparent focus:border-slate-200 pb-2 transition-colors"
+                            placeholder="Add a short description/summary..."
+                            value={description}
+                            onChange={e => setDescription(e.target.value)}
+                            onBlur={handleSave}
+                        />
+                        <textarea 
+                            className="flex-1 w-full resize-none outline-none text-base text-slate-700 leading-relaxed font-mono"
+                            placeholder="Start typing your research notes..."
+                            value={content}
+                            onChange={e => setContent(e.target.value)}
+                            onBlur={handleSave}
+                        />
+                    </div>
+
+                    {/* Right Sidebar: Tools & Resources */}
+                    <div className="w-80 bg-slate-50 border-l border-slate-200 p-4 flex flex-col gap-6 overflow-y-auto">
+                        
+                        {/* AI Tools */}
                         <div>
-                            {isEditing ? (
-                                <input 
-                                    className="text-2xl font-bold text-slate-800 border-b-2 border-indigo-500 outline-none"
-                                    value={editForm.title}
-                                    onChange={(e) => setEditForm({...editForm, title: e.target.value})}
-                                />
-                            ) : (
-                                <h1 className="text-2xl font-bold text-slate-800">{selectedIdea.title}</h1>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {isEditing ? (
-                                <>
-                                    <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                                    <button onClick={saveEdit} className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Save Changes</button>
-                                </>
-                            ) : (
-                                <>
-                                    <button onClick={startEdit} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg" title="Edit Idea">
-                                        <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button 
-                                        onClick={handleEnhanceIdea}
-                                        disabled={isEnhancing}
-                                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 text-sm"
-                                    >
-                                        {isEnhancing ? (
-                                            <>Processing...</>
-                                        ) : (
-                                            <><Sparkles className="w-4 h-4" /> Expand with Gemini</>
-                                        )}
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </header>
-
-                    <div className="flex-1 flex overflow-hidden">
-                        {/* Content */}
-                        <div className="flex-1 p-8 overflow-y-auto">
-                            <div className="max-w-3xl mx-auto space-y-6">
-                                {/* Description Box */}
-                                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Short Description</label>
-                                    {isEditing ? (
-                                        <textarea 
-                                            className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                            rows={2}
-                                            value={editForm.description}
-                                            onChange={(e) => setEditForm({...editForm, description: e.target.value})}
-                                        />
-                                    ) : (
-                                        <p className="text-slate-700">{selectedIdea.description}</p>
-                                    )}
-                                </div>
-
-                                {/* Content Box */}
-                                <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 min-h-[400px]">
-                                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 block">Research Notes & Expansion</label>
-                                     {isEditing ? (
-                                         <textarea 
-                                            className="w-full h-[400px] p-4 border border-slate-200 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                                            value={editForm.content}
-                                            onChange={(e) => setEditForm({...editForm, content: e.target.value})}
-                                         />
-                                     ) : (
-                                         <div className="prose prose-slate max-w-none">
-                                            <ReactMarkdown>{selectedIdea.content}</ReactMarkdown>
-                                         </div>
-                                     )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right Sidebar: Resources */}
-                        <div className="w-72 bg-white border-l border-slate-200 p-4 overflow-y-auto">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-semibold text-slate-800 text-sm">Resources</h3>
+                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">AI Brainstorming</h3>
+                            <div className="space-y-2">
                                 <button 
-                                    onClick={() => setIsAddingLink(!isAddingLink)}
-                                    className="p-1 hover:bg-slate-100 rounded text-slate-500"
+                                    onClick={handleStructure}
+                                    disabled={isProcessing}
+                                    className="w-full flex items-center gap-2 px-3 py-2 bg-white border border-indigo-100 rounded-lg text-sm text-indigo-700 hover:bg-indigo-50 transition-colors shadow-sm"
+                                >
+                                    <Wand2 className="w-4 h-4" /> Structure & Summarize
+                                </button>
+                                <button 
+                                    onClick={handleExpand}
+                                    disabled={isProcessing}
+                                    className="w-full flex items-center gap-2 px-3 py-2 bg-white border border-purple-100 rounded-lg text-sm text-purple-700 hover:bg-purple-50 transition-colors shadow-sm"
+                                >
+                                    <Sparkles className="w-4 h-4" /> Expand Proposal
+                                </button>
+                                <button 
+                                    onClick={handleBrainstorm}
+                                    disabled={isProcessing}
+                                    className="w-full flex items-center gap-2 px-3 py-2 bg-white border border-amber-100 rounded-lg text-sm text-amber-700 hover:bg-amber-50 transition-colors shadow-sm"
+                                >
+                                    <BrainCircuit className="w-4 h-4" /> Find Connections
+                                </button>
+                            </div>
+                            
+                            {/* Suggestions Result */}
+                            {suggestedTopics.length > 0 && (
+                                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                                    <p className="text-xs font-semibold text-amber-800 mb-2">Try exploring:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                        {suggestedTopics.map((topic, i) => (
+                                            <span key={i} className="text-[10px] px-2 py-1 bg-white rounded-full border border-amber-200 text-amber-700">
+                                                {topic}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Resources */}
+                        <div className="flex-1">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Resources</h3>
+                                <button 
+                                    onClick={() => setShowLinkInput(!showLinkInput)}
+                                    className="p-1 hover:bg-slate-200 rounded text-slate-500"
                                 >
                                     <Plus className="w-4 h-4" />
                                 </button>
                             </div>
 
-                            {isAddingLink && (
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 mb-4 space-y-2">
+                            {showLinkInput && (
+                                <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm mb-3 space-y-2">
                                     <input 
-                                        placeholder="Resource Title"
+                                        placeholder="Title (optional)"
                                         className="w-full px-2 py-1 text-xs border rounded"
-                                        value={newLink.title}
-                                        onChange={e => setNewLink({...newLink, title: e.target.value})}
+                                        value={newLinkTitle}
+                                        onChange={e => setNewLinkTitle(e.target.value)}
                                     />
                                     <input 
-                                        placeholder="URL (Drive/Web)"
+                                        placeholder="https://..."
                                         className="w-full px-2 py-1 text-xs border rounded"
-                                        value={newLink.url}
-                                        onChange={e => setNewLink({...newLink, url: e.target.value})}
+                                        value={newLinkUrl}
+                                        onChange={e => setNewLinkUrl(e.target.value)}
                                     />
-                                    <div className="flex gap-2">
-                                        <button onClick={addResource} className="flex-1 bg-indigo-600 text-white text-xs py-1 rounded">Add</button>
-                                        <button onClick={() => setIsAddingLink(false)} className="flex-1 bg-slate-200 text-slate-700 text-xs py-1 rounded">Cancel</button>
-                                    </div>
+                                    <button onClick={addResource} className="w-full bg-slate-800 text-white text-xs py-1 rounded hover:bg-slate-700">
+                                        Add Link
+                                    </button>
                                 </div>
                             )}
 
                             <div className="space-y-2">
-                                {selectedIdea.relatedResources.map(resource => (
-                                    <div key={resource.id} className="group p-3 rounded-lg border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all bg-white">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                {resource.type === 'drive' 
-                                                    ? <HardDrive className="w-3 h-3 text-blue-600" /> 
-                                                    : <LinkIcon className="w-3 h-3 text-slate-400" />
-                                                }
-                                                <span className="text-xs font-medium text-slate-700 truncate max-w-[150px]">{resource.title}</span>
-                                            </div>
-                                            <button 
-                                                onClick={() => removeResource(resource.id)}
-                                                className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                        <a href={resource.url} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-500 hover:underline flex items-center gap-1 mt-1">
-                                            Open Link <ExternalLink className="w-2 h-2" />
+                                {idea.relatedResources.map(res => (
+                                    <div key={res.id} className="group bg-white p-2 rounded-lg border border-slate-200 hover:border-indigo-300 transition-colors flex items-center justify-between">
+                                        <a href={res.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 flex-1 min-w-0">
+                                            {res.type === 'drive' ? <HardDrive className="w-3 h-3 text-blue-500" /> : <LinkIcon className="w-3 h-3 text-slate-400" />}
+                                            <span className="text-xs text-slate-700 truncate">{res.title}</span>
                                         </a>
+                                        <button 
+                                            onClick={() => removeResource(res.id)}
+                                            className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
                                     </div>
                                 ))}
-                                {selectedIdea.relatedResources.length === 0 && !isAddingLink && (
-                                    <div className="text-center py-6 text-slate-400 text-xs">
-                                        No linked papers or files.
-                                    </div>
+                                {idea.relatedResources.length === 0 && !showLinkInput && (
+                                    <p className="text-xs text-slate-400 italic">No links added yet.</p>
                                 )}
                             </div>
                         </div>
                     </div>
                 </div>
-            ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-                    <Lightbulb className="w-16 h-16 mb-4 text-slate-200" />
-                    <p className="text-lg">Select an idea or create a new one to start brainstorming.</p>
-                </div>
-            )}
+            </div>
+        </div>
+    );
+};
+
+// --- MAIN COMPONENT ---
+
+export const IdeaLab: React.FC<IdeaLabProps> = ({ ideas, onAddIdea, onUpdateIdea, onDeleteIdea }) => {
+  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
+  const [quickTitle, setQuickTitle] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleQuickAdd = () => {
+      if (!quickTitle.trim()) return;
+      const newIdea: Idea = {
+          id: Date.now().toString(),
+          title: quickTitle,
+          description: '',
+          content: '',
+          relatedResources: [],
+          aiEnhanced: false
+      };
+      onAddIdea(newIdea);
+      setQuickTitle('');
+      setSelectedIdea(newIdea); // Auto open
+  };
+
+  const filteredIdeas = ideas.filter(i => 
+      i.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      i.content.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 overflow-hidden relative">
+        {selectedIdea && (
+            <IdeaDetailModal 
+                idea={selectedIdea} 
+                onClose={() => setSelectedIdea(null)} 
+                onUpdate={(updated) => {
+                    onUpdateIdea(updated);
+                    setSelectedIdea(updated);
+                }}
+                onDelete={(id) => {
+                    onDeleteIdea(id);
+                    setSelectedIdea(null);
+                }}
+            />
+        )}
+
+        <header className="flex justify-between items-center mb-6 flex-shrink-0">
+            <div>
+                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <Lightbulb className="w-6 h-6 text-amber-500" />
+                    Idea Lab
+                </h1>
+                <p className="text-slate-500">A space for brainstorming, connecting dots, and research sparks.</p>
+            </div>
+             <div className="relative">
+                <input 
+                    type="text" 
+                    placeholder="Search ideas..." 
+                    className="pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none w-64"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+        </header>
+
+        {/* Quick Capture */}
+        <div className="w-full max-w-2xl mx-auto mb-8 shadow-sm flex-shrink-0">
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex items-center p-1 focus-within:ring-2 focus-within:ring-amber-100 focus-within:border-amber-300 transition-all">
+                <input 
+                    className="flex-1 px-4 py-3 outline-none text-slate-700 placeholder:text-slate-400"
+                    placeholder="What's on your mind? Capture a new idea..."
+                    value={quickTitle}
+                    onChange={e => setQuickTitle(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleQuickAdd()}
+                />
+                <button 
+                    onClick={handleQuickAdd}
+                    disabled={!quickTitle.trim()}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg font-medium text-sm hover:bg-slate-800 disabled:opacity-50 transition-colors mr-1"
+                >
+                    Create
+                </button>
+            </div>
+        </div>
+
+        {/* Masonry-like Grid */}
+        <div className="flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-10">
+                {filteredIdeas.map(idea => (
+                    <div 
+                        key={idea.id}
+                        onClick={() => setSelectedIdea(idea)}
+                        className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-amber-200 hover:-translate-y-1 transition-all cursor-pointer group flex flex-col h-[220px]"
+                    >
+                        <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-slate-800 leading-tight line-clamp-2">{idea.title}</h3>
+                            {idea.aiEnhanced && <Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0" />}
+                        </div>
+                        
+                        <div className="flex-1 overflow-hidden relative">
+                             <p className="text-sm text-slate-500 line-clamp-4 leading-relaxed">
+                                {idea.description || idea.content || <span className="italic opacity-50">No content yet...</span>}
+                             </p>
+                             {/* Fade out effect at bottom of text */}
+                             <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-white to-transparent"></div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-xs text-slate-400">
+                             <div className="flex items-center gap-3">
+                                <span className="flex items-center gap-1">
+                                    <LinkIcon className="w-3 h-3" /> {idea.relatedResources.length}
+                                </span>
+                             </div>
+                             <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="text-indigo-600 font-medium">Click to open</span>
+                             </div>
+                        </div>
+                    </div>
+                ))}
+                
+                {filteredIdeas.length === 0 && (
+                    <div className="col-span-full text-center py-20 text-slate-400 flex flex-col items-center">
+                        <Lightbulb className="w-12 h-12 mb-4 opacity-20" />
+                        <p>Your idea lab is empty.</p>
+                        <p className="text-sm">Start capturing your thoughts above.</p>
+                    </div>
+                )}
+            </div>
         </div>
     </div>
   );
 };
-
-// Helper component import
-import { X } from 'lucide-react';

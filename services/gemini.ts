@@ -235,6 +235,63 @@ export const expandResearchIdea = async (ideaTitle: string, currentContent: stri
 };
 
 /**
+ * Summarizes and Structures messy idea notes.
+ */
+export const structureIdeaContent = async (content: string): Promise<string> => {
+  try {
+    const ai = getGenAI();
+    const prompt = `
+      The following is a raw brain dump of a research idea. 
+      Please restructure it into a clean, readable Markdown format with these sections if applicable:
+      - **Core Concept** (1-2 sentences)
+      - **Key Objectives** (Bulleted list)
+      - **Notes & Thoughts** (Cleaned up text)
+      
+      RAW CONTENT:
+      ${content}
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    return response.text || content;
+  } catch (error) {
+    console.error("Gemini Structure Error:", error);
+    return content;
+  }
+};
+
+/**
+ * Brainstorms related topics for an idea.
+ */
+export const brainstormRelatedTopics = async (title: string, content: string): Promise<string[]> => {
+  try {
+    const ai = getGenAI();
+    const prompt = `
+      Based on this research idea:
+      Title: "${title}"
+      Context: "${content.substring(0, 500)}"
+      
+      Suggest 5 related research topics, fields, or keywords that I should explore to broaden my brainstorming.
+      Return STRICTLY as a JSON array of strings.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: { responseMimeType: 'application/json' }
+    });
+
+    return JSON.parse(response.text || '[]');
+  } catch (error) {
+    console.error("Gemini Brainstorm Error:", error);
+    return [];
+  }
+};
+
+/**
  * Summarizes a scientific abstract or text snippet.
  */
 export const summarizeText = async (text: string): Promise<string> => {
