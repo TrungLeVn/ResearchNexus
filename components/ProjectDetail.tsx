@@ -534,7 +534,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const files = project.files || [];
     const activity = project.activity || [];
 
-    const canEdit = !isGuestView && (currentUser.role === 'Owner' || currentUser.role === 'Editor');
+    // Calculate effective role based on project's collaborator list
+    const memberInProject = collaborators.find(c => c.email.toLowerCase() === currentUser.email.toLowerCase());
+    const effectiveRole = memberInProject ? memberInProject.role : currentUser.role;
+    
+    // Create a proxy user object with the effective role for consistent checks in child components
+    const effectiveUser = { ...currentUser, role: effectiveRole };
+
+    // Permission flags
+    const isOwner = !isGuestView && effectiveRole === 'Owner';
+    const canEdit = !isGuestView && (effectiveRole === 'Owner' || effectiveRole === 'Editor');
 
     const showNotification = (message: string) => {
         setNotification({ message, visible: true });
@@ -1027,7 +1036,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     <div className="p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-semibold text-slate-700 text-lg">Team Members</h3>
-                            {currentUser.role === 'Owner' && !isGuestView && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
+                            {isOwner && (<button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"><Plus className="w-4 h-4" /> Add Member</button>)}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {collaborators.map(c => (
@@ -1039,7 +1048,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                     </div>
                                     <span className="ml-auto text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-600 shrink-0">{c.role}</span>
                                     
-                                    {!isGuestView && currentUser.role === 'Owner' && c.role !== 'Owner' && (
+                                    {isOwner && c.role !== 'Owner' && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1070,12 +1079,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     <span>{notification.message}</span>
                 </div>
             )}
-            {showShareModal && <ShareModal project={project} currentUser={currentUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} onUpdateCollaboratorRole={handleUpdateCollaboratorRole} />}
+            {showShareModal && <ShareModal project={project} currentUser={effectiveUser} onClose={() => setShowShareModal(false)} onAddCollaborator={handleAddCollaborator} onRemoveCollaborator={handleRemoveCollaborator} onUpdateCollaboratorRole={handleUpdateCollaboratorRole} />}
             {selectedTask && (
                 <TaskDetailModal 
                     task={selectedTask}
                     project={project}
-                    currentUser={currentUser}
+                    currentUser={effectiveUser}
                     onClose={() => setSelectedTask(null)}
                     onUpdateTask={handleUpdateSingleTask}
                     onDeleteTask={handleDeleteTask}
@@ -1104,7 +1113,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 >
                                     {project.status} <ChevronDown className="w-3 h-3"/>
                                 </button>
-                                {statusDropdownOpen && currentUser.role === 'Owner' && !isGuestView && (
+                                {statusDropdownOpen && isOwner && (
                                     <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-20 w-32">
                                         {Object.values(ProjectStatus).map(s => (
                                             <button 
@@ -1122,7 +1131,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {currentUser.role === 'Owner' && !isGuestView && (<>
+                    {isOwner && (<>
                         <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"><Share2 className="w-4 h-4" /> Share</button>
                         <button onClick={handleDeleteProjectConfirm} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Delete Project"><Trash2 className="w-5 h-5" /></button>
                     </>)}
