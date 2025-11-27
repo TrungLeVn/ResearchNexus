@@ -542,8 +542,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const effectiveUser = { ...currentUser, role: effectiveRole };
 
     // Permission flags
-    const isOwner = !isGuestView && effectiveRole === 'Owner';
-    const canEdit = !isGuestView && (effectiveRole === 'Owner' || effectiveRole === 'Editor');
+    const isOwner = effectiveRole === 'Owner';
+    const canEdit = effectiveRole === 'Owner' || effectiveRole === 'Editor';
 
     const showNotification = (message: string) => {
         setNotification({ message, visible: true });
