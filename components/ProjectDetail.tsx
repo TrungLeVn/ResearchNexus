@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, StickyNote, Paper, ProjectFile } from '../types';
 import { 
     ChevronLeft, Plus, Users, Bot, ClipboardList, Book, File as FileIcon, StickyNote as NoteIcon, 
-    Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle 
+    Trash2, Share2, X, Copy, Check, Mail, Maximize2, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
+    Pencil, Database, Layers
 } from 'lucide-react';
 import { AIChat } from './AIChat';
 
@@ -411,8 +412,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     // State for new Papers/Files forms
     const [showAddPaper, setShowAddPaper] = useState(false);
     const [newPaper, setNewPaper] = useState({ title: '', authors: '', year: new Date().getFullYear(), url: '' });
-    const [showAddFile, setShowAddFile] = useState(false);
-    const [newFile, setNewFile] = useState({ name: '', type: 'draft' as 'draft' | 'code' | 'data' | 'other', url: '' });
+    const [showAddDraft, setShowAddDraft] = useState(false);
+    const [newDraft, setNewDraft] = useState({ name: '', url: '' });
+    const [showAddCodeData, setShowAddCodeData] = useState(false);
+    const [newCodeData, setNewCodeData] = useState({ name: '', url: '', type: 'code' as 'code' | 'data' });
+    const [showAddOther, setShowAddOther] = useState(false);
+    const [newOther, setNewOther] = useState({ name: '', url: '', type: 'slide' as 'slide' | 'document' | 'other' });
 
     // State for Sticky Notes Board
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
@@ -471,16 +476,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         onUpdateProject({...project, papers: project.papers.filter(p => p.id !== id)});
     };
 
-    const handleAddFile = () => {
-        if(!newFile.name || !newFile.url) return;
+    const handleAddFile = (
+        fileData: { name: string; url: string; },
+        type: ProjectFile['type']
+    ) => {
+        if(!fileData.name || !fileData.url) return;
+        
         const file: ProjectFile = {
             id: `file_${Date.now()}`,
-            ...newFile,
+            name: fileData.name,
+            url: fileData.url,
+            type: type,
             lastModified: new Date().toISOString().split('T')[0]
         };
         onUpdateProject({...project, files: [...project.files, file]});
-        setNewFile({ name: '', type: 'draft', url: '' });
-        setShowAddFile(false);
+
+        // Reset respective forms
+        if (type === 'draft') {
+            setNewDraft({ name: '', url: '' });
+            setShowAddDraft(false);
+        } else if (type === 'code' || type === 'data') {
+            setNewCodeData({ name: '', url: '', type: 'code' });
+            setShowAddCodeData(false);
+        } else { // slide, document, other
+            setNewOther({ name: '', url: '', type: 'slide' });
+            setShowAddOther(false);
+        }
     };
 
     const handleDeleteFile = (id: string) => {
@@ -560,51 +581,97 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     </div>
                 );
             case 'files':
-                 return (
-                    <div className="p-6 space-y-6">
-                        {/* Papers Section */}
+                const drafts = project.files.filter(f => f.type === 'draft');
+                const codeAndData = project.files.filter(f => f.type === 'code' || f.type === 'data');
+                const otherAssets = project.files.filter(f => ['slide', 'document', 'other'].includes(f.type));
+
+                return (
+                    <div className="p-6 space-y-6 h-full overflow-y-auto">
+                        {/* Reference Papers Section */}
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                             <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Book className="w-4 h-4 text-indigo-600"/> Papers</h4>
-                                <button onClick={() => setShowAddPaper(!showAddPaper)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Paper</button>
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Book className="w-4 h-4 text-indigo-600"/> Reference Papers</h4>
+                                {!isGuestView && <button onClick={() => setShowAddPaper(!showAddPaper)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Paper</button>}
                             </div>
-                            {showAddPaper && <div className="p-3 mb-3 bg-indigo-50 rounded-lg border border-indigo-100 grid grid-cols-2 gap-2 text-sm">
+                            {showAddPaper && !isGuestView && <div className="p-3 mb-3 bg-indigo-50 rounded-lg border border-indigo-100 grid grid-cols-2 gap-2 text-sm">
                                 <input placeholder="Title" value={newPaper.title} onChange={e => setNewPaper({...newPaper, title: e.target.value})} className="p-2 rounded border col-span-2"/>
                                 <input placeholder="Authors" value={newPaper.authors} onChange={e => setNewPaper({...newPaper, authors: e.target.value})} className="p-2 rounded border"/>
                                 <input type="number" placeholder="Year" value={newPaper.year} onChange={e => setNewPaper({...newPaper, year: parseInt(e.target.value)})} className="p-2 rounded border"/>
                                 <input placeholder="URL" value={newPaper.url} onChange={e => setNewPaper({...newPaper, url: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                <div className="col-span-2 flex gap-2"><button onClick={handleAddPaper} className="bg-indigo-600 text-white px-3 py-1 rounded">Save</button><button onClick={() => setShowAddPaper(false)} className="bg-slate-200 px-3 py-1 rounded">Cancel</button></div>
+                                <div className="col-span-2 flex gap-2"><button onClick={handleAddPaper} className="bg-indigo-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddPaper(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
                             </div>}
                             <div className="space-y-2">
                                 {project.papers.map(p => (<div key={p.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
                                     <div><a href={p.url} target="_blank" rel="noreferrer" className="font-medium hover:text-indigo-600">{p.title}</a><p className="text-xs text-slate-500">{p.authors} ({p.year})</p></div>
-                                    <button onClick={() => handleDeletePaper(p.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                    {!isGuestView && <button onClick={() => handleDeletePaper(p.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
                                 </div>))}
                                 {project.papers.length === 0 && !showAddPaper && <p className="text-xs text-slate-400 italic text-center py-4">No papers linked.</p>}
                             </div>
                         </div>
-                        {/* Files Section */}
+
+                        {/* Manuscript Drafts Section */}
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                             <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><FileIcon className="w-4 h-4 text-blue-600"/> Files</h4>
-                                <button onClick={() => setShowAddFile(!showAddFile)} className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add File</button>
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Pencil className="w-4 h-4 text-emerald-600"/> Manuscript Drafts</h4>
+                                {!isGuestView && <button onClick={() => setShowAddDraft(!showAddDraft)} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Draft</button>}
                             </div>
-                            {showAddFile && <div className="p-3 mb-3 bg-blue-50 rounded-lg border border-blue-100 grid grid-cols-2 gap-2 text-sm">
-                                <input placeholder="File Name" value={newFile.name} onChange={e => setNewFile({...newFile, name: e.target.value})} className="p-2 rounded border col-span-2"/>
-                                <select value={newFile.type} onChange={e => setNewFile({...newFile, type: e.target.value as any})} className="p-2 rounded border"><option>draft</option><option>code</option><option>data</option><option>other</option></select>
-                                <input placeholder="URL (e.g. Google Drive)" value={newFile.url} onChange={e => setNewFile({...newFile, url: e.target.value})} className="p-2 rounded border"/>
-                                <div className="col-span-2 flex gap-2"><button onClick={handleAddFile} className="bg-blue-600 text-white px-3 py-1 rounded">Save</button><button onClick={() => setShowAddFile(false)} className="bg-slate-200 px-3 py-1 rounded">Cancel</button></div>
+                            {showAddDraft && !isGuestView && <div className="p-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-100 grid grid-cols-1 gap-2 text-sm">
+                                <input placeholder="Draft Title (e.g., Chapter 1 v2)" value={newDraft.name} onChange={e => setNewDraft({...newDraft, name: e.target.value})} className="p-2 rounded border"/>
+                                <input placeholder="URL" value={newDraft.url} onChange={e => setNewDraft({...newDraft, url: e.target.value})} className="p-2 rounded border"/>
+                                <div className="flex gap-2"><button onClick={() => handleAddFile(newDraft, 'draft')} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddDraft(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
                             </div>}
                             <div className="space-y-2">
-                                {project.files.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
-                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-blue-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
-                                    <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500">{f.type}</span><button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button></div>
+                                {drafts.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-emerald-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                    {!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}
                                 </div>))}
-                                {project.files.length === 0 && !showAddFile && <p className="text-xs text-slate-400 italic text-center py-4">No files linked.</p>}
+                                {drafts.length === 0 && !showAddDraft && <p className="text-xs text-slate-400 italic text-center py-4">No drafts linked.</p>}
+                            </div>
+                        </div>
+
+                        {/* Code & Data Section */}
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Database className="w-4 h-4 text-sky-600"/> Code & Data</h4>
+                                {!isGuestView && <button onClick={() => setShowAddCodeData(!showAddCodeData)} className="text-xs font-medium text-sky-600 hover:text-sky-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Item</button>}
+                            </div>
+                            {showAddCodeData && !isGuestView && <div className="p-3 mb-3 bg-sky-50 rounded-lg border border-sky-100 grid grid-cols-2 gap-2 text-sm">
+                                <input placeholder="File Name (e.g., main.py)" value={newCodeData.name} onChange={e => setNewCodeData({...newCodeData, name: e.target.value})} className="p-2 rounded border col-span-2"/>
+                                <select value={newCodeData.type} onChange={e => setNewCodeData({...newCodeData, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="code">Code</option><option value="data">Data</option></select>
+                                <input placeholder="URL" value={newCodeData.url} onChange={e => setNewCodeData({...newCodeData, url: e.target.value})} className="p-2 rounded border"/>
+                                <div className="col-span-2 flex gap-2"><button onClick={() => handleAddFile(newCodeData, newCodeData.type)} className="bg-sky-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddCodeData(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
+                            </div>}
+                            <div className="space-y-2">
+                                {codeAndData.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-sky-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                    <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                </div>))}
+                                {codeAndData.length === 0 && !showAddCodeData && <p className="text-xs text-slate-400 italic text-center py-4">No code or data files linked.</p>}
+                            </div>
+                        </div>
+                        
+                        {/* Other Assets Section */}
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="font-medium flex items-center gap-2 text-slate-800"><Layers className="w-4 h-4 text-amber-600"/> Other Assets</h4>
+                                {!isGuestView && <button onClick={() => setShowAddOther(!showAddOther)} className="text-xs font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"><Plus className="w-3 h-3"/> Add Asset</button>}
+                            </div>
+                            {showAddOther && !isGuestView && <div className="p-3 mb-3 bg-amber-50 rounded-lg border border-amber-100 grid grid-cols-2 gap-2 text-sm">
+                                <input placeholder="File Name (e.g., Presentation Slides)" value={newOther.name} onChange={e => setNewOther({...newOther, name: e.target.value})} className="p-2 rounded border col-span-2"/>
+                                <select value={newOther.type} onChange={e => setNewOther({...newOther, type: e.target.value as any})} className="p-2 rounded border bg-white"><option value="slide">Slide Deck</option><option value="document">Document</option><option value="other">Other</option></select>
+                                <input placeholder="URL" value={newOther.url} onChange={e => setNewOther({...newOther, url: e.target.value})} className="p-2 rounded border"/>
+                                <div className="col-span-2 flex gap-2"><button onClick={() => handleAddFile(newOther, newOther.type)} className="bg-amber-600 text-white px-3 py-1 rounded text-xs">Save</button><button onClick={() => setShowAddOther(false)} className="bg-slate-200 px-3 py-1 rounded text-xs">Cancel</button></div>
+                            </div>}
+                            <div className="space-y-2">
+                                {otherAssets.map(f => (<div key={f.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center group">
+                                    <a href={f.url} target="_blank" rel="noreferrer" className="font-medium hover:text-amber-600 flex items-center gap-2"><ExternalLink className="w-3 h-3"/> {f.name}</a>
+                                    <div className="flex items-center gap-2"><span className="text-[10px] uppercase text-slate-500 bg-white px-1.5 py-0.5 rounded border">{f.type}</span>{!isGuestView && <button onClick={() => handleDeleteFile(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 className="w-4 h-4" /></button>}</div>
+                                </div>))}
+                                {otherAssets.length === 0 && !showAddOther && <p className="text-xs text-slate-400 italic text-center py-4">No other assets linked.</p>}
                             </div>
                         </div>
                     </div>
-                 );
+                );
             case 'notes':
                  const notes = project.notes || [];
                  return (

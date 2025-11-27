@@ -4,6 +4,8 @@
 
 
 
+
+
 import { Project, ProjectStatus, Idea, Reminder, Collaborator, Course, MeetingNote } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
@@ -60,7 +62,10 @@ export const MOCK_PROJECTS: Project[] = [
     ],
     files: [
         { id: 'f1', name: 'Experiment Logs v1', type: 'data', lastModified: '2024-05-10', url: 'https://drive.google.com/...' },
-        { id: 'f2', name: 'Evolutionary_Algo.py', type: 'code', lastModified: '2024-05-12', url: 'https://drive.google.com/...' }
+        { id: 'f2', name: 'Evolutionary_Algo.py', type: 'code', lastModified: '2024-05-12', url: 'https://drive.google.com/...' },
+        { id: 'f3', name: 'Manuscript Draft v2.docx', type: 'draft', lastModified: '2024-06-01', url: 'https://drive.google.com/...' },
+        { id: 'f4', name: 'Conference Slides.pptx', type: 'slide', lastModified: '2024-06-05', url: 'https://drive.google.com/...' },
+        { id: 'f5', name: 'Grant Application.pdf', type: 'document', lastModified: '2024-04-20', url: 'https://drive.google.com/...' }
     ],
     papers: [
       {
