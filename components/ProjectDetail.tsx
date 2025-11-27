@@ -473,8 +473,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ project, currentUser, onClose, 
                                             <select
                                                 value={c.role}
                                                 onChange={(e) => onUpdateCollaboratorRole(c.id, e.target.value as 'Editor' | 'Viewer')}
-                                                disabled={c.role === 'Guest'}
-                                                className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 focus:ring-1 focus:ring-indigo-500 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                                className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 focus:ring-1 focus:ring-indigo-500 outline-none"
                                             >
                                                 <option value="Editor">Editor</option>
                                                 <option value="Viewer">Viewer</option>
@@ -680,7 +679,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
     const handleUpdateCollaboratorRole = (collaboratorId: string, newRole: 'Editor' | 'Viewer') => {
         const collaboratorToUpdate = collaborators.find(c => c.id === collaboratorId);
-        if (!collaboratorToUpdate || collaboratorToUpdate.role === 'Owner' || collaboratorToUpdate.role === 'Guest') return;
+        if (!collaboratorToUpdate || collaboratorToUpdate.role === 'Owner') return;
 
         const updatedCollaborators = collaborators.map(c => 
             c.id === collaboratorId ? { ...c, role: newRole } : c
