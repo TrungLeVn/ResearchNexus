@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Project, ProjectStatus, Reminder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -66,6 +67,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
           });
       } catch (e) {
           console.error(e);
+          alert((e as Error).message);
       } finally {
           setIsGenerating(false);
       }

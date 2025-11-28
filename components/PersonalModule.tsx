@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot } from 'lucide-react';
 import { PersonalGoal, Habit, GoalMilestone, GoalLog } from '../types';
@@ -27,6 +28,7 @@ const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ onClose, onSave }) =>
             setGeneratedMilestones(steps);
         } catch (e) {
             console.error(e);
+            alert((e as Error).message);
         } finally {
             setIsGenerating(false);
         }
@@ -128,14 +130,14 @@ const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ onClose, onSave }) =>
                         )}
                     </div>
                 </div>
-                <div className="p-4 border-t border-slate-100 flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-600 text-sm hover:bg-slate-100 rounded-lg">Cancel</button>
+                <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-xl">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
                     <button 
                         onClick={handleConfirm}
-                        disabled={!title}
-                        className="px-4 py-2 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                        disabled={!title || generatedMilestones.length === 0}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                     >
-                        Start Goal
+                        Create Goal
                     </button>
                 </div>
             </div>
@@ -143,43 +145,28 @@ const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ onClose, onSave }) =>
     );
 };
 
-interface GoalDetailModalProps {
+interface GoalDetailViewProps {
     goal: PersonalGoal;
     onClose: () => void;
-    onUpdate: (updated: PersonalGoal) => void;
+    onUpdate: (goal: PersonalGoal) => void;
     onDelete: (id: string) => void;
 }
 
-const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ goal, onClose, onUpdate, onDelete }) => {
-    const [progress, setProgress] = useState(goal.progress);
+const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goal, onClose, onUpdate, onDelete }) => {
     const [newLog, setNewLog] = useState('');
-    const [showLogs, setShowLogs] = useState(false);
-
-    const handleSaveProgress = () => {
-        onUpdate({ ...goal, progress });
-    };
-
-    const toggleMilestone = (mId: string) => {
-        const updatedMilestones = goal.milestones.map(m => 
-            m.id === mId ? { ...m, completed: !m.completed } : m
-        );
-        // Auto-calc progress based on milestones if meaningful
+    
+    const toggleMilestone = (id: string) => {
+        const updatedMilestones = goal.milestones.map(m => m.id === id ? { ...m, completed: !m.completed } : m);
         const completedCount = updatedMilestones.filter(m => m.completed).length;
-        const autoProgress = Math.round((completedCount / updatedMilestones.length) * 100);
-        
-        onUpdate({ 
-            ...goal, 
-            milestones: updatedMilestones,
-            progress: updatedMilestones.length > 0 ? autoProgress : goal.progress
-        });
-        if(updatedMilestones.length > 0) setProgress(autoProgress);
+        const newProgress = updatedMilestones.length > 0 ? Math.round((completedCount / updatedMilestones.length) * 100) : 0;
+        onUpdate({ ...goal, milestones: updatedMilestones, progress: newProgress });
     };
 
     const addLog = () => {
         if (!newLog.trim()) return;
         const log: GoalLog = {
-            id: Date.now().toString(),
-            date: new Date().toLocaleDateString(),
+            id: `log-${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
             content: newLog
         };
         onUpdate({ ...goal, logs: [log, ...goal.logs] });
@@ -187,243 +174,74 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ goal, onClose, onUpda
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                 <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                goal.category === 'Fitness' ? 'bg-emerald-100 text-emerald-700' :
-                                goal.category === 'Learning' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'
-                            }`}>
-                                {goal.category}
-                            </span>
-                            <span className="text-xs text-slate-500">Started recently</span>
-                        </div>
-                        <h2 className="text-xl font-bold text-slate-800">{goal.title}</h2>
-                        <p className="text-sm text-slate-500">Target: {goal.target}</p>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">{goal.title}</h3>
+                    <div className="flex gap-2">
+                         <button 
+                             onClick={() => { if (window.confirm("Delete this goal?")) onDelete(goal.id); }}
+                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                         >
+                             <Trash2 className="w-4 h-4" />
+                         </button>
+                         <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                     </div>
-                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
-
-                <div className="p-6 overflow-y-auto space-y-8">
-                    {/* Progress Section */}
-                    <div>
-                        <div className="flex justify-between items-end mb-2">
-                            <label className="text-sm font-semibold text-slate-700">Current Progress</label>
-                            <span className="text-2xl font-bold text-indigo-600">{progress}%</span>
-                        </div>
-                        <input 
-                            type="range" 
-                            min="0" max="100" 
-                            value={progress}
-                            onChange={(e) => setProgress(parseInt(e.target.value))}
-                            onMouseUp={handleSaveProgress}
-                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                        />
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
+                    {/* Left: Milestones */}
+                    <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-slate-600">Milestones ({goal.milestones.filter(m=>m.completed).length}/{goal.milestones.length})</h4>
+                        {goal.milestones.map(m => (
+                            <div key={m.id} className="flex items-center gap-3">
+                                <button onClick={() => toggleMilestone(m.id)} className={`w-5 h-5 rounded border-2 flex items-center justify-center ${m.completed ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}>
+                                    {m.completed && <Check className="w-3 h-3 text-white" />}
+                                </button>
+                                <span className={`text-sm ${m.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{m.title}</span>
+                            </div>
+                        ))}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Milestones */}
-                        <div>
-                            <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                <CheckCircle className="w-4 h-4 text-emerald-500" /> Milestones
-                            </h3>
-                            <div className="space-y-2">
-                                {goal.milestones.map(m => (
-                                    <div 
-                                        key={m.id} 
-                                        onClick={() => toggleMilestone(m.id)}
-                                        className={`p-3 rounded-lg border cursor-pointer flex items-center gap-3 transition-all ${
-                                            m.completed 
-                                            ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
-                                            : 'bg-white border-slate-200 hover:border-indigo-300 text-slate-700'
-                                        }`}
-                                    >
-                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                                            m.completed ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
-                                        }`}>
-                                            {m.completed && <Check className="w-3 h-3 text-white" />}
-                                        </div>
-                                        <span className={`text-sm ${m.completed ? 'line-through opacity-70' : ''}`}>{m.title}</span>
-                                    </div>
-                                ))}
-                                {goal.milestones.length === 0 && (
-                                    <p className="text-xs text-slate-400 italic">No milestones set. Use AI to plan next time!</p>
-                                )}
-                            </div>
+                    {/* Right: Logs */}
+                    <div>
+                        <h4 className="text-sm font-semibold text-slate-600 mb-3">Progress Log</h4>
+                        <div className="flex gap-2">
+                             <input 
+                                value={newLog}
+                                onChange={e => setNewLog(e.target.value)}
+                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
+                                placeholder="Add a quick update..."
+                                onKeyDown={e => e.key === 'Enter' && addLog()}
+                             />
+                             <button onClick={addLog} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">Log</button>
                         </div>
-
-                        {/* Logs / Notes */}
-                        <div className="flex flex-col h-full">
-                            <div className="flex justify-between items-center mb-3">
-                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <FileEdit className="w-4 h-4 text-blue-500" /> Journal Logs
-                                </h3>
-                                <button onClick={() => setShowLogs(!showLogs)} className="text-xs text-indigo-600 hover:underline">
-                                    {showLogs ? 'Hide' : 'View All'}
-                                </button>
-                            </div>
-                            
-                            <div className="flex gap-2 mb-4">
-                                <input 
-                                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
-                                    placeholder="Add a quick note..."
-                                    value={newLog}
-                                    onChange={e => setNewLog(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && addLog()}
-                                />
-                                <button onClick={addLog} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600">
-                                    <Plus className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
-                                {goal.logs.map(log => (
-                                    <div key={log.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
-                                        <p className="text-slate-700 mb-1">{log.content}</p>
-                                        <p className="text-[10px] text-slate-400 text-right">{log.date}</p>
-                                    </div>
-                                ))}
-                                {goal.logs.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">No notes added.</p>}
-                            </div>
+                        <div className="mt-4 space-y-3 max-h-64 overflow-y-auto pr-2">
+                            {goal.logs.map(log => (
+                                <div key={log.id} className="text-sm bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                    <p className="font-medium text-slate-700">{log.content}</p>
+                                    <p className="text-xs text-slate-400 mt-1">{new Date(log.date).toLocaleDateString()}</p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
-
-                <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
-                     <button onClick={() => onDelete(goal.id)} className="text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-                        <Trash2 className="w-4 h-4" /> Delete Goal
-                     </button>
-                     <button onClick={onClose} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
-                        Done
-                     </button>
+                 <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50">
+                    <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-800 text-white rounded-lg">Close</button>
                 </div>
             </div>
         </div>
     );
 };
 
-// --- HABIT TRACKER ---
-
-const HabitTracker: React.FC<{ habits: Habit[], onToggle: (id: string, date: string) => void, onDelete: (id: string) => void, onAdd: (title: string) => void }> = ({ habits, onToggle, onDelete, onAdd }) => {
-    const [newHabit, setNewHabit] = useState('');
-    
-    // Generate last 7 days
-    const days = Array.from({length: 7}, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - 6 + i);
-        return d;
-    });
-
-    return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-indigo-600" /> Habit Tracker
-                </h2>
-                <div className="flex gap-2">
-                    <input 
-                        className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs w-48 outline-none focus:border-indigo-500"
-                        placeholder="New habit (e.g. Read 15m)"
-                        value={newHabit}
-                        onChange={e => setNewHabit(e.target.value)}
-                        onKeyDown={e => {
-                            if(e.key === 'Enter' && newHabit) {
-                                onAdd(newHabit);
-                                setNewHabit('');
-                            }
-                        }}
-                    />
-                    <button 
-                        onClick={() => { if(newHabit) { onAdd(newHabit); setNewHabit(''); }}}
-                        className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700"
-                    >
-                        <Plus className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[500px]">
-                    <thead>
-                        <tr>
-                            <th className="text-left text-xs font-semibold text-slate-400 pb-4 w-1/3">Habit</th>
-                            <th className="text-center text-xs font-semibold text-slate-400 pb-4 w-20">Streak</th>
-                            {days.map(d => (
-                                <th key={d.toString()} className="text-center pb-4">
-                                    <div className="flex flex-col items-center">
-                                        <span className="text-[10px] text-slate-400 uppercase">{d.toLocaleDateString('en-US', {weekday: 'short'})}</span>
-                                        <span className={`text-xs font-bold ${d.toDateString() === new Date().toDateString() ? 'text-indigo-600' : 'text-slate-600'}`}>
-                                            {d.getDate()}
-                                        </span>
-                                    </div>
-                                </th>
-                            ))}
-                            <th className="w-10"></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {habits.map(habit => (
-                            <tr key={habit.id} className="group">
-                                <td className="py-3 text-sm font-medium text-slate-700">{habit.title}</td>
-                                <td className="py-3 text-center">
-                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-xs font-bold">
-                                        <Sparkles className="w-3 h-3" /> {habit.streak}
-                                    </div>
-                                </td>
-                                {days.map(d => {
-                                    const dateStr = d.toISOString().split('T')[0];
-                                    const completed = habit.history.includes(dateStr);
-                                    return (
-                                        <td key={dateStr} className="py-3 text-center">
-                                            <button 
-                                                onClick={() => onToggle(habit.id, dateStr)}
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                                                    completed 
-                                                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 scale-100' 
-                                                    : 'bg-slate-100 text-slate-300 hover:bg-slate-200 scale-90'
-                                                }`}
-                                            >
-                                                <Check className="w-4 h-4" />
-                                            </button>
-                                        </td>
-                                    );
-                                })}
-                                <td className="py-3 text-center">
-                                    <button 
-                                        onClick={() => onDelete(habit.id)}
-                                        className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {habits.length === 0 && (
-                    <div className="text-center py-8 text-slate-400 text-sm">
-                        No habits tracked yet. Add one above!
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-
 // --- MAIN COMPONENT ---
-
 export const PersonalModule: React.FC = () => {
-    // State managed by Firebase
     const [goals, setGoals] = useState<PersonalGoal[]>([]);
     const [habits, setHabits] = useState<Habit[]>([]);
+    const [showCreateGoal, setShowCreateGoal] = useState(false);
     const [showChat, setShowChat] = useState(false);
-
-    const [isCreating, setIsCreating] = useState(false);
     const [selectedGoal, setSelectedGoal] = useState<PersonalGoal | null>(null);
-
-    // Subscribe to Data
+    const [newHabit, setNewHabit] = useState('');
+    
     useEffect(() => {
         const unsubGoals = subscribeToPersonalGoals(setGoals);
         const unsubHabits = subscribeToHabits(setHabits);
@@ -433,150 +251,164 @@ export const PersonalModule: React.FC = () => {
         };
     }, []);
 
-    const handleAddGoal = (goal: PersonalGoal) => {
+    const handleSaveGoal = (goal: PersonalGoal) => {
         savePersonalGoal(goal);
-        setIsCreating(false);
+        setShowCreateGoal(false);
     };
 
-    const handleUpdateGoal = (updated: PersonalGoal) => {
-        savePersonalGoal(updated);
-        // Optimistic UI update for selected modal
-        if (selectedGoal?.id === updated.id) setSelectedGoal(updated);
+    const handleUpdateGoal = (goal: PersonalGoal) => {
+        savePersonalGoal(goal);
+        // Also update selectedGoal if it's open
+        if (selectedGoal && selectedGoal.id === goal.id) {
+            setSelectedGoal(goal);
+        }
     };
-
+    
     const handleDeleteGoal = (id: string) => {
-        if(window.confirm("Delete this goal?")) {
-            deletePersonalGoal(id);
-            setSelectedGoal(null);
-        }
+        deletePersonalGoal(id);
+        setSelectedGoal(null);
     };
 
-    // Habit Logic
-    const toggleHabit = (id: string, dateStr: string) => {
-        const habit = habits.find(h => h.id === id);
-        if (!habit) return;
+    const handleAddHabit = () => {
+        if (!newHabit.trim()) return;
+        const habit: Habit = {
+            id: `habit-${Date.now()}`,
+            title: newHabit,
+            streak: 0,
+            history: []
+        };
+        saveHabit(habit);
+        setNewHabit('');
+    };
 
-        const exists = habit.history.includes(dateStr);
-        const newHistory = exists 
-            ? habit.history.filter(d => d !== dateStr) 
-            : [...habit.history, dateStr];
+    const handleTrackHabit = (habit: Habit) => {
+        const today = new Date().toISOString().split('T')[0];
+        if (habit.history.includes(today)) return; // Already tracked today
         
-        // Simple Streak Logic
-        const updatedHabit = {
-            ...habit,
-            history: newHistory,
-            streak: newHistory.length // Simplified calculation
-        };
-        saveHabit(updatedHabit);
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const newStreak = habit.history.includes(yesterday) ? habit.streak + 1 : 1;
+        
+        saveHabit({ ...habit, history: [...habit.history, today], streak: newStreak });
     };
 
-    const deleteHabitHandler = (id: string) => {
-        if(window.confirm("Delete this habit?")) {
-            deleteHabit(id);
-        }
+    const isHabitDoneToday = (habit: Habit) => {
+        const today = new Date().toISOString().split('T')[0];
+        return habit.history.includes(today);
     };
 
-    const addHabitHandler = (title: string) => {
-        const newHabit: Habit = { 
-            id: Date.now().toString(), 
-            title, 
-            streak: 0, 
-            history: [] 
-        };
-        saveHabit(newHabit);
+    const getCategoryIcon = (category: PersonalGoal['category']) => {
+        if (category === 'Fitness') return <Dumbbell className="w-5 h-5 text-red-500" />;
+        if (category === 'Learning') return <Book className="w-5 h-5 text-blue-500" />;
+        return <Star className="w-5 h-5 text-amber-500" />;
     };
-
+    
     return (
-        <div className="h-full overflow-y-auto p-8 animate-in fade-in duration-500 relative">
-            {isCreating && <CreateGoalModal onClose={() => setIsCreating(false)} onSave={handleAddGoal} />}
-            {selectedGoal && <GoalDetailModal goal={selectedGoal} onClose={() => setSelectedGoal(null)} onUpdate={handleUpdateGoal} onDelete={handleDeleteGoal} />}
-
-            <header className="mb-8 flex justify-between items-center">
+        <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
+            {showCreateGoal && <CreateGoalModal onClose={() => setShowCreateGoal(false)} onSave={handleSaveGoal} />}
+            {selectedGoal && <GoalDetailView goal={selectedGoal} onClose={() => setSelectedGoal(null)} onUpdate={handleUpdateGoal} onDelete={handleDeleteGoal} />}
+            
+            <header className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                        <Target className="w-6 h-6 text-rose-500" />
+                        <Target className="w-6 h-6 text-indigo-600" />
                         Personal Growth
                     </h1>
-                    <p className="text-slate-500">Track habits, fitness, and self-improvement goals.</p>
+                    <p className="text-slate-500">Track goals, build habits, and reflect on your progress.</p>
                 </div>
-                 {/* Chat Toggle Button */}
-                 <button 
-                    onClick={() => setShowChat(!showChat)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm shadow-sm transition-all ${showChat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
-                >
-                    <Bot className="w-4 h-4" />
-                    <span>Personal Coach</span>
-                </button>
+                 <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => setShowChat(!showChat)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm shadow-sm transition-all ${showChat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+                    >
+                        <Bot className="w-4 h-4" />
+                        <span>Growth AI</span>
+                    </button>
+                    <button 
+                        onClick={() => setShowCreateGoal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                        New Goal
+                    </button>
+                </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-                {goals.map(goal => (
-                    <div 
-                        key={goal.id} 
-                        onClick={() => setSelectedGoal(goal)}
-                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:shadow-md hover:border-indigo-300 transition-all group"
-                    >
-                        <div className="flex justify-between items-start mb-4">
-                            <div className={`p-3 rounded-lg ${
-                                goal.category === 'Fitness' ? 'bg-emerald-50 text-emerald-600' :
-                                goal.category === 'Learning' ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'
-                            }`}>
-                                {goal.category === 'Fitness' ? <Dumbbell className="w-6 h-6" /> :
-                                 goal.category === 'Learning' ? <Book className="w-6 h-6" /> : <Heart className="w-6 h-6" />}
-                            </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{goal.category}</span>
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
+                {/* Goals */}
+                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4">
+                     <h3 className="font-semibold text-slate-700 mb-4 px-2">Active Goals</h3>
+                     <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                         {goals.map(goal => (
+                             <div 
+                                 key={goal.id} 
+                                 onClick={() => setSelectedGoal(goal)}
+                                 className="p-4 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md cursor-pointer transition-all group"
+                             >
+                                 <div className="flex justify-between items-start">
+                                     <div className="flex items-center gap-3">
+                                         <div className="p-2 bg-white rounded-lg border">{getCategoryIcon(goal.category)}</div>
+                                         <div>
+                                            <h4 className="font-bold text-slate-800">{goal.title}</h4>
+                                            <p className="text-xs text-slate-500">{goal.target}</p>
+                                         </div>
+                                     </div>
+                                     <div className="flex items-center gap-2 text-sm text-slate-500">
+                                        <span className="font-medium">{goal.progress}%</span>
+                                        <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
+                                     </div>
+                                 </div>
+                                 <div className="w-full h-1.5 bg-slate-200 rounded-full mt-3 overflow-hidden">
+                                    <div className="h-full bg-emerald-500" style={{width: `${goal.progress}%`}}></div>
+                                 </div>
+                             </div>
+                         ))}
+                         {goals.length === 0 && <p className="text-center text-sm text-slate-400 py-8">No goals set yet.</p>}
+                     </div>
+                </div>
+
+                {/* Habits */}
+                <div className="flex flex-col gap-6">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4">
+                        <h3 className="font-semibold text-slate-700 mb-4 px-2">Habit Tracker</h3>
+                        <div className="space-y-3">
+                            {habits.map(habit => (
+                                <div key={habit.id} className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            onClick={() => handleTrackHabit(habit)}
+                                            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isHabitDoneToday(habit) ? 'bg-emerald-500 text-white' : 'bg-white border-2 border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'}`}
+                                        >
+                                            <Check className="w-5 h-5" />
+                                        </button>
+                                        <span className="font-medium text-slate-700">{habit.title}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-amber-500 font-bold text-sm">
+                                        <TrendingUp className="w-4 h-4" />
+                                        {habit.streak}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-indigo-600 transition-colors">{goal.title}</h3>
-                        <p className="text-sm text-slate-500 mb-6">Target: {goal.target}</p>
-                        
-                        <div className="mt-auto">
-                            <div className="flex justify-between text-xs font-medium text-slate-600 mb-2">
-                                <span>Progress</span>
-                                <span>{goal.progress}%</span>
-                            </div>
-                            <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
-                                <div 
-                                    className={`h-full rounded-full transition-all ${
-                                        goal.category === 'Fitness' ? 'bg-emerald-500' :
-                                        goal.category === 'Learning' ? 'bg-blue-500' : 'bg-rose-500'
-                                    }`} 
-                                    style={{width: `${goal.progress}%`}}
-                                ></div>
-                            </div>
-                            
-                            {/* Milestone Preview */}
-                            <div className="flex items-center gap-2 text-xs text-slate-400">
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>{goal.milestones.filter(m => m.completed).length}/{goal.milestones.length} milestones</span>
-                            </div>
+                        <div className="mt-4 flex gap-2 pt-4 border-t border-slate-100">
+                            <input 
+                                value={newHabit}
+                                onChange={e => setNewHabit(e.target.value)}
+                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
+                                placeholder="Add a new habit..."
+                                onKeyDown={e => e.key === 'Enter' && handleAddHabit()}
+                            />
+                            <button onClick={handleAddHabit} className="p-2 bg-slate-800 text-white rounded-lg"><Plus className="w-4 h-4"/></button>
                         </div>
                     </div>
-                ))}
-
-                {/* Add New Goal Card */}
-                <div 
-                    onClick={() => setIsCreating(true)}
-                    className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all cursor-pointer min-h-[250px]"
-                >
-                    <Star className="w-8 h-8 mb-2" />
-                    <span className="font-medium">Set New Goal</span>
-                    <span className="text-xs mt-1 opacity-75">AI Planning Available</span>
                 </div>
             </div>
-            
-            <HabitTracker 
-                habits={habits}
-                onToggle={toggleHabit}
-                onDelete={deleteHabitHandler}
-                onAdd={addHabitHandler}
-            />
 
             {/* Chat Slide-Over */}
             {showChat && (
                 <div className="absolute top-0 right-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                     <div className="flex justify-between items-center p-4 border-b border-slate-100">
                         <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                            <Bot className="w-4 h-4 text-indigo-600" /> Personal Coach
+                            <Bot className="w-4 h-4 text-indigo-600" /> Growth Coach
                         </h3>
                         <button onClick={() => setShowChat(false)} className="text-slate-400 hover:text-slate-600">
                             <X className="w-5 h-5" />

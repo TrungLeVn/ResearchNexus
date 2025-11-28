@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { Idea, LinkResource } from '../types';
 import { Lightbulb, Sparkles, Plus, Trash2, Edit2, Link as LinkIcon, ExternalLink, HardDrive, Maximize2, X, BrainCircuit, Wand2, Save, Loader2 } from 'lucide-react';
@@ -58,11 +59,16 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
         setIsProcessing(true);
         try {
             const structured = await structureIdeaContent(content);
-            setContent(structured);
-            // Auto-save after AI action
-            onUpdate({ ...idea, title, content: structured, description, aiEnhanced: true });
+            if (structured.startsWith("Error:")) {
+                alert(structured);
+            } else {
+                setContent(structured);
+                // Auto-save after AI action
+                onUpdate({ ...idea, title, content: structured, description, aiEnhanced: true });
+            }
         } catch (e) {
             console.error(e);
+            alert("An unexpected client-side error occurred during structuring.");
         } finally {
             setIsProcessing(false);
         }
@@ -72,11 +78,16 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
         setIsProcessing(true);
         try {
             const expanded = await expandResearchIdea(title, content);
-            const newContent = content + "\n\n---\n\n" + expanded;
-            setContent(newContent);
-            onUpdate({ ...idea, title, content: newContent, description, aiEnhanced: true });
+            if (expanded.startsWith("Error:")) {
+                alert(expanded);
+            } else {
+                const newContent = content + "\n\n---\n\n" + expanded;
+                setContent(newContent);
+                onUpdate({ ...idea, title, content: newContent, description, aiEnhanced: true });
+            }
         } catch (e) {
             console.error(e);
+            alert("An unexpected client-side error occurred during expansion.");
         } finally {
             setIsProcessing(false);
         }
@@ -89,6 +100,7 @@ const IdeaDetailModal: React.FC<IdeaDetailModalProps> = ({ idea, onClose, onUpda
             setSuggestedTopics(topics);
         } catch (e) {
             console.error(e);
+            alert((e as Error).message);
         } finally {
             setIsProcessing(false);
         }

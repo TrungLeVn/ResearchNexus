@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Project, AcademicYearDoc, Reminder, AdminViewState } from '../types';
 import { ProjectManager } from './ProjectManager';
@@ -106,6 +107,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             alert(`Added ${suggestions.length} admin tasks to your global reminders.`);
         } catch (e) {
             console.error(e);
+            alert((e as Error).message);
         } finally {
             setIsGeneratingPlan(false);
         }
