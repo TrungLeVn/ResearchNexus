@@ -5,7 +5,7 @@ import {
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
     Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
-    ClipboardList, Megaphone, Table, Loader2
+    ClipboardList, Megaphone, Table, Loader2, AlertTriangle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -168,7 +168,7 @@ interface TaskDetailModalProps {
     onClose: () => void;
     onUpdateTask: (updatedTask: Task) => void;
     onDeleteTask: (taskId: string) => void;
-    onSendNotification: (msg: string) => void;
+    onSendNotification: (msg: string, type?: 'success' | 'error') => void;
 }
 
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask, onSendNotification }) => {
@@ -188,12 +188,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
 
         if (addedIds.length > 0) {
             console.log("Found new assignees, triggering email notifications...");
-            // Use Promise.all to ensure emails are sent (or at least attempted) before closing
-            await Promise.all(addedIds.map(async (id) => {
+            
+            const results = await Promise.all(addedIds.map(async (id) => {
                 const user = collaborators.find(c => c.id === id);
                 if (user && user.id !== currentUser.id) { 
                      const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-                     await sendEmailNotification(
+                     return await sendEmailNotification(
                         user.email,
                         user.name,
                         `New Task Assigned: ${editedTask.title}`,
@@ -201,8 +201,16 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                         taskLink
                     );
                 }
+                return { success: true }; // Self-assign or not found
             }));
-            onSendNotification(`Notified ${addedIds.length} new assignee(s)`);
+
+            // Check if any email failed
+            const failed = results.find(r => !r.success);
+            if (failed) {
+                alert(`Warning: Notification failed. ${failed.message}`);
+            } else {
+                onSendNotification(`Notified ${addedIds.length} new assignee(s)`);
+            }
         }
         
         onUpdateTask(editedTask);
@@ -254,7 +262,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
         );
 
         if (mentionedUsers.length > 0) {
-            await Promise.all(mentionedUsers.map(c => {
+            const results = await Promise.all(mentionedUsers.map(c => {
                  const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
                  return sendEmailNotification(
                     c.email,
@@ -264,6 +272,9 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                     taskLink
                 );
             }));
+
+             const failed = results.find(r => !r.success);
+             if(failed) alert(`Notification Error: ${failed.message}`);
         }
 
         setNewComment('');
@@ -386,13 +397,19 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
         
         if (assigneeIds.length > 0) {
             console.log("Sending email notifications to assignees...");
-            await Promise.all(assigneeIds.map(async (id) => {
+            const results = await Promise.all(assigneeIds.map(async (id) => {
                 const user = collaborators.find(c => c.id === id);
                 if (user) {
                      const taskLink = `${window.location.origin}?pid=${project.id}&tid=${newTask.id}`;
-                     await sendEmailNotification(user.email, user.name, `New Task: ${title}`, `You have been assigned to a new task in <strong>${project.title}</strong>.`, taskLink);
+                     return await sendEmailNotification(user.email, user.name, `New Task: ${title}`, `You have been assigned to a new task in <strong>${project.title}</strong>.`, taskLink);
                 }
+                return { success: true };
             }));
+
+            const failed = results.find(r => !r.success);
+            if (failed) {
+                 alert(`Task created, but email failed: ${failed.message}`);
+            }
         }
         onSave(newTask);
         setIsSaving(false);

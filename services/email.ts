@@ -2,17 +2,22 @@
  * Client-side service to trigger email notifications via Vercel Serverless Function.
  */
 
+export interface EmailResult {
+    success: boolean;
+    message?: string;
+}
+
 export const sendEmailNotification = async (
     toEmail: string,
     toName: string,
     subject: string,
     content: string,
     link?: string
-) => {
+): Promise<EmailResult> => {
     // Prevent sending emails to dummy mock data if needed, or validate email format
     if (!toEmail || !toEmail.includes('@')) {
         console.warn("Invalid email address, skipping notification:", toEmail);
-        return false;
+        return { success: false, message: "Invalid email format" };
     }
     
     // Log the attempt
@@ -56,20 +61,22 @@ export const sendEmailNotification = async (
         // Check if response is JSON (API) or HTML (404 Page)
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.indexOf("application/json") === -1) {
-             console.error("[Email Service] Server returned non-JSON response. Likely 404/500 HTML page. Are you running a local backend?");
-             console.warn("Emails only work when deployed to Vercel or running a local serverless environment.");
-             return false;
+             const errorMsg = "API Route Missing. If running locally, use 'vercel dev' instead of 'npm run dev'.";
+             console.error(`[Email Service] ${errorMsg}`);
+             return { success: false, message: errorMsg };
         }
 
         if (!response.ok) {
             const errData = await response.json();
-            throw new Error(errData.error || 'Failed to send email');
+            const detailedError = errData.error || 'Unknown Server Error';
+            console.error(`[Email Service] Server Error: ${detailedError}`);
+            return { success: false, message: `SendGrid Error: ${detailedError}` };
         }
 
         console.log(`[Email Service] Email sent successfully to ${toEmail}`);
-        return true;
-    } catch (error) {
+        return { success: true };
+    } catch (error: any) {
         console.error("[Email Service] Failed to trigger email notification:", error);
-        return false;
+        return { success: false, message: error.message || "Network/Fetch Error" };
     }
 };
