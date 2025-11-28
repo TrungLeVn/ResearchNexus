@@ -12,8 +12,11 @@ export const sendEmailNotification = async (
     // Prevent sending emails to dummy mock data if needed, or validate email format
     if (!toEmail || !toEmail.includes('@')) {
         console.warn("Invalid email address, skipping notification:", toEmail);
-        return;
+        return false;
     }
+    
+    // Log the attempt
+    console.log(`[Email Service] Attempting to send email to ${toEmail}...`);
 
     try {
         const html = `
@@ -49,16 +52,24 @@ export const sendEmailNotification = async (
                 html: html
             })
         });
+        
+        // Check if response is JSON (API) or HTML (404 Page)
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") === -1) {
+             console.error("[Email Service] Server returned non-JSON response. Likely 404/500 HTML page. Are you running a local backend?");
+             console.warn("Emails only work when deployed to Vercel or running a local serverless environment.");
+             return false;
+        }
 
         if (!response.ok) {
             const errData = await response.json();
             throw new Error(errData.error || 'Failed to send email');
         }
 
-        console.log(`Email sent successfully to ${toEmail}`);
+        console.log(`[Email Service] Email sent successfully to ${toEmail}`);
         return true;
     } catch (error) {
-        console.error("Failed to trigger email notification:", error);
+        console.error("[Email Service] Failed to trigger email notification:", error);
         return false;
     }
 };

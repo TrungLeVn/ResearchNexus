@@ -5,7 +5,7 @@ import {
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
     Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
-    ClipboardList, Megaphone, Table
+    ClipboardList, Megaphone, Table, Loader2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -176,20 +176,24 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
     const [newComment, setNewComment] = useState('');
     const [showMentionList, setShowMentionList] = useState(false);
     const [mentionQuery, setMentionQuery] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const commentInputRef = useRef<HTMLInputElement>(null);
     const collaborators = project.collaborators || [];
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        setIsSaving(true);
         const oldIds = task.assigneeIds || [];
         const newIds = editedTask.assigneeIds || [];
         const addedIds = newIds.filter(id => !oldIds.includes(id));
 
         if (addedIds.length > 0) {
-            addedIds.forEach(id => {
+            console.log("Found new assignees, triggering email notifications...");
+            // Use Promise.all to ensure emails are sent (or at least attempted) before closing
+            await Promise.all(addedIds.map(async (id) => {
                 const user = collaborators.find(c => c.id === id);
                 if (user && user.id !== currentUser.id) { 
                      const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-                     sendEmailNotification(
+                     await sendEmailNotification(
                         user.email,
                         user.name,
                         `New Task Assigned: ${editedTask.title}`,
@@ -197,10 +201,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                         taskLink
                     );
                 }
-            });
+            }));
             onSendNotification(`Notified ${addedIds.length} new assignee(s)`);
         }
+        
         onUpdateTask(editedTask);
+        setIsSaving(false);
         onClose();
     };
 
@@ -228,7 +234,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
 
     const filteredCollaborators = collaborators.filter(c => c.name.toLowerCase().includes(mentionQuery.toLowerCase()));
 
-    const handleAddComment = () => {
+    const handleAddComment = async () => {
         if (!newComment.trim()) return;
         const comment: TaskComment = {
             id: `comm_${Date.now()}`,
@@ -242,18 +248,24 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
         setEditedTask(updatedTask);
         onUpdateTask(updatedTask); 
         
-        collaborators.forEach(c => {
-            if (newComment.includes(`@${c.name}`) && c.id !== currentUser.id) {
-                const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-                sendEmailNotification(
+        // Notify mentioned users
+        const mentionedUsers = collaborators.filter(c => 
+            newComment.includes(`@${c.name}`) && c.id !== currentUser.id
+        );
+
+        if (mentionedUsers.length > 0) {
+            await Promise.all(mentionedUsers.map(c => {
+                 const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
+                 return sendEmailNotification(
                     c.email,
                     c.name,
                     `You were mentioned in ${project.title}`,
                     `${currentUser.name} mentioned you in a comment on task "<strong>${updatedTask.title}</strong>":<br/><i>"${newComment}"</i>`,
                     taskLink
                 );
-            }
-        });
+            }));
+        }
+
         setNewComment('');
         setShowMentionList(false);
     };
@@ -340,7 +352,9 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
                     <button onClick={() => { if (window.confirm("Delete task?")) { onDeleteTask(task.id); onClose(); } }} className="text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><Trash2 className="w-4 h-4"/> Delete Task</button>
-                    <button onClick={handleSave} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">Save & Close</button>
+                    <button onClick={handleSave} disabled={isSaving} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-70 flex items-center gap-2">
+                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Save & Close
+                    </button>
                 </div>
             </div>
         </div>
@@ -358,25 +372,30 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
     const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
     const [priority, setPriority] = useState<TaskPriority>('medium');
     const [dueDate, setDueDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
+    const [isSaving, setIsSaving] = useState(false);
     
     const collaborators = project.collaborators || [];
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!title.trim()) return;
+        setIsSaving(true);
         const newTask: Task = {
             id: `task_${Date.now()}`,
             title, status, priority, dueDate, assigneeIds, comments: [], description: ''
         };
+        
         if (assigneeIds.length > 0) {
-            assigneeIds.forEach(id => {
+            console.log("Sending email notifications to assignees...");
+            await Promise.all(assigneeIds.map(async (id) => {
                 const user = collaborators.find(c => c.id === id);
                 if (user) {
                      const taskLink = `${window.location.origin}?pid=${project.id}&tid=${newTask.id}`;
-                     sendEmailNotification(user.email, user.name, `New Task: ${title}`, `You have been assigned to a new task in <strong>${project.title}</strong>.`, taskLink);
+                     await sendEmailNotification(user.email, user.name, `New Task: ${title}`, `You have been assigned to a new task in <strong>${project.title}</strong>.`, taskLink);
                 }
-            });
+            }));
         }
         onSave(newTask);
+        setIsSaving(false);
     };
 
     return (
@@ -413,7 +432,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
                     <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                    <button onClick={handleSave} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Task</button>
+                    <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-70 flex items-center gap-2">
+                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Add Task
+                    </button>
                 </div>
             </div>
         </div>
