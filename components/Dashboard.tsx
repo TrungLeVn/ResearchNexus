@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Project, ProjectStatus, Reminder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Clock, CheckCircle2, FileText, AlertCircle, TrendingUp, Calendar, Plus, Sparkles, Bell, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle2, TrendingUp, Calendar, Plus, Sparkles, Bell, Trash2, Hash, Layers } from 'lucide-react';
 import { suggestProjectSchedule } from '../services/gemini';
 
 interface DashboardProps {
@@ -14,28 +14,40 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAddReminder, onToggleReminder, onDeleteReminder }) => {
   const [isGenerating, setIsGenerating] = useState(false);
-  const activeProjects = projects.filter(p => p.status === ProjectStatus.ACTIVE);
-  const completedProjects = projects.filter(p => p.status === ProjectStatus.COMPLETED).length;
-  const totalPapers = projects.reduce((acc, curr) => acc + curr.papers.length, 0);
   
-  // Data for Charts
-  const progressData = projects.map(p => ({
-    name: p.title.substring(0, 10) + '...',
-    progress: p.progress
-  }));
+  const activeProjects = projects.filter(p => p.status === ProjectStatus.ACTIVE);
+  const totalProjects = projects.length;
+  
+  // Stats Calculation
+  const avgProgress = activeProjects.length > 0 
+    ? Math.round(activeProjects.reduce((acc: number, p) => acc + p.progress, 0) / activeProjects.length) 
+    : 0;
 
-  const statusData = [
-    { name: 'Active', value: activeProjects.length, color: '#6366f1' },
-    { name: 'Planning', value: projects.filter(p => p.status === ProjectStatus.PLANNING).length, color: '#0ea5e9' },
-    { name: 'Review', value: projects.filter(p => p.status === ProjectStatus.REVIEW).length, color: '#f59e0b' },
-    { name: 'Completed', value: completedProjects, color: '#10b981' },
-  ];
+  // Tag/Topic Analysis
+  const allTags = projects.flatMap(p => p.tags || []);
+  const uniqueTopics = [...new Set(allTags)].length;
+  
+  const tagDistribution = Object.entries(
+    allTags.reduce((acc: Record<string, number>, tag) => {
+        acc[tag] = (acc[tag] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>)
+  )
+  .map(([name, count]) => ({ name, count: count as number }))
+  .sort((a, b) => b.count - a.count)
+  .slice(0, 6); // Top 6 topics
+
+  // Data for Charts
+  const progressData = activeProjects.map(p => ({
+    name: p.title.length > 15 ? p.title.substring(0, 15) + '...' : p.title,
+    progress: p.progress,
+    fullTitle: p.title
+  }));
 
   const handleSmartPlan = async () => {
       if (activeProjects.length === 0) return;
       setIsGenerating(true);
       
-      // Just take the first active project for demo purposes
       const project = activeProjects[0]; 
       
       try {
@@ -64,7 +76,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
       <header className="mb-8 flex justify-between items-end">
         <div>
             <h1 className="text-2xl font-bold text-slate-800">Research Overview</h1>
-            <p className="text-slate-500">Track your progress across multiple domains.</p>
+            <p className="text-slate-500">High-level view of your active projects and research themes.</p>
         </div>
         <button 
             onClick={handleSmartPlan}
@@ -76,8 +88,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
         </button>
       </header>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Redesigned */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-500 font-medium">Total Projects</p>
+            <h3 className="text-2xl font-bold text-slate-800">{totalProjects}</h3>
+          </div>
+          <div className="p-3 bg-slate-100 rounded-lg">
+            <Layers className="w-6 h-6 text-slate-600" />
+          </div>
+        </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-500 font-medium">Active Projects</p>
@@ -89,28 +110,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
-            <p className="text-sm text-slate-500 font-medium">Papers Collected</p>
-            <h3 className="text-2xl font-bold text-blue-600">{totalPapers}</h3>
+            <p className="text-sm text-slate-500 font-medium">Active Topics</p>
+            <h3 className="text-2xl font-bold text-pink-600">{uniqueTopics}</h3>
           </div>
-          <div className="p-3 bg-blue-50 rounded-lg">
-            <FileText className="w-6 h-6 text-blue-600" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-500 font-medium">Pending Review</p>
-            <h3 className="text-2xl font-bold text-amber-500">
-              {projects.filter(p => p.status === ProjectStatus.REVIEW).length}
-            </h3>
-          </div>
-          <div className="p-3 bg-amber-50 rounded-lg">
-            <AlertCircle className="w-6 h-6 text-amber-500" />
+          <div className="p-3 bg-pink-50 rounded-lg">
+            <Hash className="w-6 h-6 text-pink-600" />
           </div>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
-            <p className="text-sm text-slate-500 font-medium">Completed</p>
-            <h3 className="text-2xl font-bold text-emerald-600">{completedProjects}</h3>
+            <p className="text-sm text-slate-500 font-medium">Avg. Velocity</p>
+            <h3 className="text-2xl font-bold text-emerald-600">{avgProgress}%</h3>
           </div>
           <div className="p-3 bg-emerald-50 rounded-lg">
             <CheckCircle2 className="w-6 h-6 text-emerald-600" />
@@ -121,41 +131,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Charts - 2 Columns */}
         <div className="lg:col-span-2 space-y-6">
-            {/* Progress Chart */}
+            {/* Active Project Progress */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Project Progress</h3>
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={progressData}>
-                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip 
-                    cursor={{ fill: '#f1f5f9' }}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="progress" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-            </ResponsiveContainer>
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Active Projects Status</h3>
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={progressData}>
+                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis fontSize={12} tickLine={false} axisLine={false} unit="%" />
+                    <Tooltip 
+                        cursor={{ fill: '#f1f5f9' }}
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        formatter={(value: number) => [`${value}%`, 'Progress']}
+                        labelFormatter={(label, payload) => {
+                            if (payload && payload.length > 0) {
+                                return payload[0].payload.fullTitle;
+                            }
+                            return label;
+                        }}
+                    />
+                    <Bar dataKey="progress" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
 
-            {/* Status Distribution */}
+            {/* Topic Landscape (Tag Cloud replacement) */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Status Distribution</h3>
-            <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                <Pie
-                    data={statusData}
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                >
-                    {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                </Pie>
-                <Tooltip />
-                </PieChart>
-            </ResponsiveContainer>
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Topic Landscape</h3>
+                {tagDistribution.length > 0 ? (
+                     <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={tagDistribution} layout="vertical">
+                            <XAxis type="number" hide />
+                            <YAxis dataKey="name" type="category" width={100} fontSize={12} tickLine={false} axisLine={false} />
+                            <Tooltip 
+                                cursor={{ fill: '#f1f5f9' }}
+                                contentStyle={{ borderRadius: '8px', border: 'none' }}
+                            />
+                            <Bar dataKey="count" fill="#ec4899" radius={[0, 4, 4, 0]} barSize={20} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                        No tags found across projects.
+                    </div>
+                )}
             </div>
         </div>
 

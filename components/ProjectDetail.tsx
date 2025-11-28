@@ -1,15 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity, Paper, StickyNote } from '../types';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity } from '../types';
 import { 
-    ChevronLeft, Plus, Users, Bot, ClipboardList, File as FileIcon, 
-    Trash2, Share2, X, Copy, Check, Mail, ExternalLink, Flame, ArrowUp, ArrowDown, Calendar, Send, MessageCircle, 
-    Pencil, Database, Layers, LayoutDashboard, Activity, ChevronDown, Sparkles, Loader2, FileText, AtSign,
-    BookOpen, StickyNote as NoteIcon, Download, Code, FileCode, FileImage, Archive, Grid
+    ChevronLeft, Plus, Users, File as FileIcon, 
+    Trash2, X, Check, Calendar, Send, MessageCircle, 
+    LayoutDashboard, Activity, ChevronDown, Flag,
+    Code, FileText, Database, Settings
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import ReactMarkdown from 'react-markdown';
 import { AIChat } from './AIChat';
-import { generateProjectBriefing } from '../services/gemini';
 import { sendEmailNotification } from '../services/email';
 
 interface ProjectDetailProps {
@@ -27,25 +25,6 @@ const statusMap: Record<TaskStatus, string> = {
     done: 'Done'
 };
 
-const getStatusClasses = (status: ProjectStatus) => {
-    switch (status) {
-        case ProjectStatus.ACTIVE:
-            return 'bg-blue-100 text-blue-700';
-        case ProjectStatus.PLANNING:
-            return 'bg-sky-100 text-sky-700';
-        case ProjectStatus.REVIEW:
-            return 'bg-amber-100 text-amber-700';
-        case ProjectStatus.COMPLETED:
-            return 'bg-emerald-100 text-emerald-700';
-        case ProjectStatus.PAUSED:
-            return 'bg-slate-100 text-slate-600';
-        case ProjectStatus.ARCHIVED:
-            return 'bg-gray-100 text-gray-600';
-        default:
-            return 'bg-slate-100 text-slate-600';
-    }
-};
-
 interface TaskCardProps {
     task: Task;
     project: Project;
@@ -55,11 +34,11 @@ interface TaskCardProps {
 const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
     const assignees = (project.collaborators || []).filter(c => task.assigneeIds?.includes(c.id));
 
-    const priorityIcons: Record<TaskPriority, React.ReactNode> = {
-        high: <span title="High Priority"><Flame className="w-3.5 h-3.5 text-red-500"/></span>,
-        medium: <span title="Medium Priority"><ArrowUp className="w-3.5 h-3.5 text-amber-500"/></span>,
-        low: <span title="Low Priority"><ArrowDown className="w-3.5 h-3.5 text-green-500"/></span>,
-    };
+    const priorityColor = {
+        high: 'text-red-500',
+        medium: 'text-amber-500',
+        low: 'text-green-500'
+    }[task.priority];
     
     return (
         <div onClick={onClick} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm group hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer">
@@ -70,7 +49,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
                         <Calendar className="w-3 h-3" />
                         <span>{new Date(task.dueDate).toLocaleDateString('en-CA')}</span>
                     </div>
-                    {priorityIcons[task.priority]}
+                    <Flag className={`w-3 h-3 ${priorityColor}`} />
                     <div className="flex items-center gap-1">
                         <MessageCircle className="w-3 h-3" />
                         <span>{task.comments?.length || 0}</span>
@@ -248,6 +227,14 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                             <label className="text-xs font-bold text-slate-400 uppercase">Due Date</label>
                             <input type="date" value={editedTask.dueDate} onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})} className="w-full mt-1 p-2 border rounded-md text-sm"/>
                         </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Priority</label>
+                            <select value={editedTask.priority} onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
@@ -323,6 +310,14 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
                         <div>
                              <label className="text-xs font-semibold text-slate-500 mb-1">Due Date</label>
                              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded-md text-sm"/>
+                        </div>
+                        <div className="col-span-2">
+                             <label className="text-xs font-semibold text-slate-500 mb-1">Priority</label>
+                             <select value={priority} onChange={e => setPriority(e.target.value as any)} className="w-full p-2 border rounded-md text-sm bg-white">
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                             </select>
                         </div>
                     </div>
                 </div>
@@ -409,9 +404,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         }
     }, [tasks]);
 
-    // Derived Metrics
-    const completedTasks = tasks.filter(t => t.status === 'done').length;
-    const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+    // Data Calculation
+    const progress = project.progress;
     
     const pieData = [
         { name: 'To Do', value: tasks.filter(t => t.status === 'todo').length, color: '#0ea5e9' },
@@ -419,7 +413,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         { name: 'Done', value: tasks.filter(t => t.status === 'done').length, color: '#10b981' }
     ].filter(d => d.value > 0);
 
-    // --- RENDER FUNCTIONS ---
+    const handleProgressChange = (newProgress: number) => {
+        onUpdateProject({ ...project, progress: newProgress });
+    };
+
+    const handleProjectStatusChange = (newStatus: string) => {
+        onUpdateProject({ ...project, status: newStatus as ProjectStatus });
+    };
+
+    // Render Logic
 
     const renderDashboard = () => (
         <div className="p-6 h-full overflow-y-auto animate-in fade-in duration-300">
@@ -435,8 +437,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                              <Activity className="w-5 h-5" />
                          </div>
                      </div>
-                     <div className="w-full h-1.5 bg-slate-100 rounded-full mt-4 overflow-hidden">
-                         <div className="h-full bg-indigo-600 rounded-full" style={{width: `${progress}%`}}></div>
+                     <div className="mt-4">
+                        {currentUser.role === 'Owner' && !isGuestView ? (
+                             <input 
+                                type="range" 
+                                min="0" max="100" 
+                                value={progress}
+                                onChange={(e) => handleProgressChange(parseInt(e.target.value))}
+                                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                title="Drag to update progress"
+                             />
+                        ) : (
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-indigo-600 rounded-full" style={{width: `${progress}%`}}></div>
+                            </div>
+                        )}
+                        <p className="text-[10px] text-slate-400 mt-1 text-right">{currentUser.role === 'Owner' ? 'Drag to update' : 'Read-only'}</p>
                      </div>
                  </div>
 
@@ -444,7 +460,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                      <div className="flex justify-between items-start">
                          <div>
                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tasks</p>
-                             <h3 className="text-2xl font-bold text-slate-800 mt-1">{completedTasks} <span className="text-sm font-normal text-slate-400">/ {tasks.length}</span></h3>
+                             <h3 className="text-2xl font-bold text-slate-800 mt-1">{tasks.filter(t => t.status === 'done').length} <span className="text-sm font-normal text-slate-400">/ {tasks.length}</span></h3>
                          </div>
                          <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                              <Check className="w-5 h-5" />
@@ -507,30 +523,34 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                      </div>
                  </div>
 
-                 {/* Upcoming Deadlines */}
-                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                 {/* Key Milestones Widget */}
+                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
                      <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-                         <Calendar className="w-5 h-5 text-rose-500" />
-                         Upcoming Deadlines
+                         <Flag className="w-5 h-5 text-rose-500" />
+                         Key Milestones
                      </h3>
-                     <div className="space-y-4">
+                     <div className="space-y-4 flex-1 overflow-y-auto max-h-[250px] pr-2">
                          {tasks
-                            .filter(t => t.status !== 'done')
+                            .filter(t => t.priority === 'high' && t.status !== 'done')
                             .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                            .slice(0, 5)
                             .map(t => (
-                                <div key={t.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                    <div className={`w-1 h-8 rounded-full ${t.priority === 'high' ? 'bg-rose-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'}`}></div>
-                                    <div className="flex-1">
-                                        <h4 className="text-sm font-medium text-slate-800 line-clamp-1">{t.title}</h4>
-                                        <p className="text-xs text-slate-500">{new Date(t.dueDate).toLocaleDateString()}</p>
+                                <div key={t.id} onClick={() => setEditingTask(t)} className="flex items-start gap-3 p-3 bg-rose-50 rounded-lg border border-rose-100 cursor-pointer hover:bg-rose-100 transition-colors">
+                                    <div className="bg-white p-1.5 rounded-md shadow-sm">
+                                        <Calendar className="w-4 h-4 text-rose-500" />
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{statusMap[t.status]}</span>
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-bold text-slate-800 line-clamp-1">{t.title}</h4>
+                                        <p className="text-xs text-rose-600 font-medium">Due: {new Date(t.dueDate).toLocaleDateString()}</p>
+                                    </div>
                                 </div>
                             ))
                          }
-                         {tasks.filter(t => t.status !== 'done').length === 0 && (
-                             <p className="text-sm text-slate-400 text-center py-4">No pending tasks.</p>
+                         {tasks.filter(t => t.priority === 'high' && t.status !== 'done').length === 0 && (
+                             <div className="text-center py-8 text-slate-400">
+                                 <Flag className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                 <p className="text-sm">No active milestones.</p>
+                                 <p className="text-xs opacity-70">Mark tasks as "High Priority" to see them here.</p>
+                             </div>
                          )}
                      </div>
                  </div>
@@ -586,9 +606,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                         ))}
                         <button 
                             onClick={() => setAddingTaskStatus(status)}
-                            className="w-full py-2 text-xs text-slate-500 hover:bg-slate-200 rounded-lg border border-transparent hover:border-slate-300 transition-all flex items-center justify-center gap-1"
+                            className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-400 text-sm hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-1"
                         >
-                            <Plus className="w-3 h-3" /> Add Task
+                            <Plus className="w-4 h-4" /> Add Task
                         </button>
                     </div>
                 </div>
@@ -596,255 +616,198 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         </div>
     );
 
-    const renderFiles = () => {
-        const handleAddFile = (type: ProjectFile['type'] = 'document') => {
-            const name = prompt("File Name:");
-            if (!name) return;
-            const url = prompt("File URL:");
-            if (!url) return;
+    const renderTeam = () => (
+        <div className="p-6 h-full overflow-y-auto">
+             <div className="flex justify-between items-center mb-6">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                     <Users className="w-5 h-5 text-indigo-600" />
+                     Team Members
+                 </h3>
+                 {!isGuestView && currentUser.role === 'Owner' && (
+                     <button 
+                        onClick={() => {
+                            const email = prompt("Enter email to invite:");
+                            if(email) alert(`Invitation sent to ${email} (Mock)`);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+                     >
+                         <Plus className="w-4 h-4" /> Add Member
+                     </button>
+                 )}
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                 {project.collaborators.map(c => (
+                     <div key={c.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                         <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 border-2 border-white shadow-sm">
+                             {c.initials}
+                         </div>
+                         <div className="flex-1 min-w-0">
+                             <p className="font-bold text-slate-800 truncate">{c.name}</p>
+                             <p className="text-xs text-slate-500 truncate">{c.email}</p>
+                         </div>
+                         <div>
+                             {currentUser.role === 'Owner' && c.id !== currentUser.id ? (
+                                 <select 
+                                     value={c.role}
+                                     onChange={(e) => {
+                                         const newRole = e.target.value as any;
+                                         const updatedCollabs = project.collaborators.map(col => col.id === c.id ? {...col, role: newRole} : col);
+                                         onUpdateProject({...project, collaborators: updatedCollabs});
+                                     }}
+                                     className="text-xs font-medium px-2 py-1 rounded bg-slate-100 border-none outline-none cursor-pointer hover:bg-slate-200 text-slate-700"
+                                 >
+                                     <option value="Owner">Owner</option>
+                                     <option value="Editor">Editor</option>
+                                     <option value="Viewer">Viewer</option>
+                                     <option value="Guest">Guest</option>
+                                 </select>
+                             ) : (
+                                 <span className={`text-xs font-medium px-2 py-1 rounded ${
+                                     c.role === 'Owner' ? 'bg-purple-100 text-purple-700' :
+                                     c.role === 'Editor' ? 'bg-blue-100 text-blue-700' :
+                                     'bg-slate-100 text-slate-600'
+                                 }`}>
+                                     {c.role}
+                                 </span>
+                             )}
+                         </div>
+                     </div>
+                 ))}
+             </div>
+        </div>
+    );
 
-            const newFile: ProjectFile = {
-                id: `file-${Date.now()}`,
-                name, url, type,
-                lastModified: new Date().toISOString()
-            };
-            onUpdateProject({ ...project, files: [...project.files, newFile] });
-        };
-
-        const deleteFile = (id: string) => {
-            if(confirm("Delete file?")) {
-                onUpdateProject({ ...project, files: project.files.filter(f => f.id !== id) });
-            }
-        };
-
-        // Categorize Files
-        const drafts = project.files.filter(f => ['draft', 'document', 'slide'].includes(f.type));
-        const codeData = project.files.filter(f => ['code', 'data'].includes(f.type));
-        const otherAssets = project.files.filter(f => !['draft', 'document', 'slide', 'code', 'data'].includes(f.type));
-
-        return (
-            <div className="p-6 h-full overflow-y-auto space-y-8">
-                {/* Section 1: Drafts & Papers */}
-                <div>
-                    <div className="flex justify-between items-center mb-4">
-                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-indigo-600" /> Drafts & Papers
-                         </h3>
-                         <button onClick={() => handleAddFile('draft')} className="text-xs flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
-                             <Plus className="w-3 h-3" /> Add Draft
-                         </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {drafts.length > 0 ? drafts.map(f => <FileCard key={f.id} file={f} onDelete={deleteFile} />) : <p className="text-sm text-slate-400 italic">No drafts uploaded.</p>}
-                    </div>
-                </div>
-
-                {/* Section 2: Code & Data */}
-                <div>
-                    <div className="flex justify-between items-center mb-4">
-                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <Code className="w-5 h-5 text-emerald-600" /> Code & Data
-                         </h3>
-                         <button onClick={() => handleAddFile('code')} className="text-xs flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
-                             <Plus className="w-3 h-3" /> Add Code/Data
-                         </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {codeData.length > 0 ? codeData.map(f => <FileCard key={f.id} file={f} onDelete={deleteFile} />) : <p className="text-sm text-slate-400 italic">No code or data assets.</p>}
-                    </div>
-                </div>
-
-                {/* Section 3: Other Assets */}
-                <div>
-                    <div className="flex justify-between items-center mb-4">
-                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <Archive className="w-5 h-5 text-amber-500" /> Other Assets
-                         </h3>
-                         <button onClick={() => handleAddFile('other')} className="text-xs flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
-                             <Plus className="w-3 h-3" /> Add Asset
-                         </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {otherAssets.length > 0 ? otherAssets.map(f => <FileCard key={f.id} file={f} onDelete={deleteFile} />) : <p className="text-sm text-slate-400 italic">No other assets.</p>}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    const renderTeam = () => {
-        const handleInvite = () => {
-             const name = prompt("Name:");
-             const email = prompt("Email:");
-             if(name && email) {
-                 const newCollab: Collaborator = {
-                     id: `c-${Date.now()}`,
-                     name, email, role: 'Editor', initials: name.substring(0,2).toUpperCase()
-                 };
-                 onUpdateProject({ ...project, collaborators: [...project.collaborators, newCollab] });
-             }
-        }
-
-        const handleUpdateRole = (memberId: string, newRole: Collaborator['role']) => {
-            const updatedCollaborators = project.collaborators.map(c => 
-                c.id === memberId ? { ...c, role: newRole } : c
-            );
-            onUpdateProject({ ...project, collaborators: updatedCollaborators });
-        };
-        
-        return (
-            <div className="p-6 h-full overflow-y-auto">
-                <div className="max-w-4xl mx-auto">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-slate-800">Project Team</h2>
-                        <button onClick={handleInvite} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                            <Plus className="w-4 h-4" /> Invite Member
-                        </button>
-                    </div>
-                    
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <table className="w-full">
-                            <thead className="bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Member</th>
-                                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Role</th>
-                                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Email</th>
-                                    <th className="py-3 px-4"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {project.collaborators.map(c => (
-                                    <tr key={c.id} className="hover:bg-slate-50 group">
-                                        <td className="py-3 px-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">{c.initials}</div>
-                                                <span className="font-medium text-slate-800">{c.name} {c.id === currentUser.id && '(You)'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-3 px-4">
-                                            {currentUser.role === 'Owner' && c.id !== currentUser.id ? (
-                                                <select 
-                                                    value={c.role}
-                                                    onChange={(e) => handleUpdateRole(c.id, e.target.value as Collaborator['role'])}
-                                                    className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer hover:bg-slate-200 transition-colors"
-                                                >
-                                                    <option value="Owner">Owner</option>
-                                                    <option value="Editor">Editor</option>
-                                                    <option value="Viewer">Viewer</option>
-                                                    <option value="Guest">Guest</option>
-                                                </select>
-                                            ) : (
-                                                <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600">{c.role}</span>
-                                            )}
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-slate-500">{c.email}</td>
-                                        <td className="py-3 px-4 text-right">
-                                            {c.id !== currentUser.id && (
-                                                <button 
-                                                    onClick={() => { if(confirm("Remove member?")) onUpdateProject({...project, collaborators: project.collaborators.filter(mem => mem.id !== c.id)}) }}
-                                                    className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    const renderFiles = () => (
+        <div className="p-6 h-full overflow-y-auto">
+             <div className="flex justify-between items-center mb-6">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                     <FileIcon className="w-5 h-5 text-indigo-600" />
+                     Project Files
+                 </h3>
+                 <button 
+                    onClick={() => {
+                        const name = prompt("File Name:");
+                        if(name) {
+                            const newFile: ProjectFile = {
+                                id: Date.now().toString(),
+                                name,
+                                type: 'document',
+                                lastModified: new Date().toISOString(),
+                                url: '#'
+                            };
+                            onUpdateProject({...project, files: [...project.files, newFile]});
+                        }
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+                 >
+                     <Plus className="w-4 h-4" /> Upload File
+                 </button>
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                 {project.files.map(f => (
+                     <FileCard 
+                        key={f.id} 
+                        file={f} 
+                        onDelete={(id) => onUpdateProject({...project, files: project.files.filter(file => file.id !== id)})} 
+                     />
+                 ))}
+                 {project.files.length === 0 && (
+                     <p className="col-span-full text-center text-slate-400 py-8 italic">No files uploaded yet.</p>
+                 )}
+             </div>
+        </div>
+    );
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {editingTask && <TaskDetailModal task={editingTask} project={project} currentUser={currentUser} onClose={() => setEditingTask(null)} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onSendNotification={showNotification} />}
-            {addingTaskStatus && <AddTaskModal status={addingTaskStatus} project={project} onClose={() => setAddingTaskStatus(null)} onSave={handleAddTask} />}
-            
-            {/* Notification Toast */}
-            {notificationMsg && (
-                <div className="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2 animate-in slide-in-from-bottom-2 z-50">
-                    <Mail className="w-4 h-4" />
-                    {notificationMsg}
-                </div>
-            )}
+        <div className="flex flex-col h-full bg-slate-50 animate-in slide-in-from-right duration-300">
+             {/* Header */}
+             <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+                 <div className="flex items-center gap-4">
+                     {!isGuestView && (
+                         <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
+                             <ChevronLeft className="w-5 h-5" />
+                         </button>
+                     )}
+                     <div>
+                         <h2 className="text-xl font-bold text-slate-800">{project.title}</h2>
+                         <div className="flex items-center gap-3 text-xs text-slate-500">
+                             {currentUser.role === 'Owner' && !isGuestView ? (
+                                 <select 
+                                    value={project.status} 
+                                    onChange={(e) => handleProjectStatusChange(e.target.value)}
+                                    className="bg-slate-100 px-2 py-0.5 rounded outline-none cursor-pointer hover:bg-slate-200"
+                                 >
+                                    <option value={ProjectStatus.PLANNING}>Planning</option>
+                                    <option value={ProjectStatus.ACTIVE}>Active</option>
+                                    <option value={ProjectStatus.REVIEW}>Review</option>
+                                    <option value={ProjectStatus.COMPLETED}>Completed</option>
+                                    <option value={ProjectStatus.PAUSED}>Paused</option>
+                                    <option value={ProjectStatus.ARCHIVED}>Archived</option>
+                                 </select>
+                             ) : (
+                                 <span className="bg-slate-100 px-2 py-0.5 rounded">{project.status}</span>
+                             )}
+                             <span>•</span>
+                             <span>Updated {new Date().toLocaleDateString()}</span>
+                         </div>
+                     </div>
+                 </div>
 
-            {/* Header */}
-            <header className="bg-white border-b border-slate-200 px-6 pt-4 flex flex-col gap-4 shadow-sm z-10 sticky top-0">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        {!isGuestView && (
-                            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-                                <ChevronLeft className="w-6 h-6" />
-                            </button>
-                        )}
-                        <div>
-                            <div className="flex items-center gap-3">
-                                <h1 className="text-xl font-bold text-slate-800">{project.title}</h1>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusClasses(project.status)}`}>
-                                    {project.status}
-                                </span>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 max-w-md">{project.description}</p>
-                        </div>
-                    </div>
-                </div>
+                 <div className="flex bg-slate-100 p-1 rounded-lg">
+                     <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Dashboard</button>
+                     <button onClick={() => setActiveTab('tasks')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'tasks' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Tasks</button>
+                     <button onClick={() => setActiveTab('files')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'files' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Files</button>
+                     <button onClick={() => setActiveTab('team')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'team' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Team</button>
+                     <button onClick={() => setActiveTab('ai')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'ai' ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>AI Chat</button>
+                 </div>
 
-                {/* Tab Navigation */}
-                <div className="flex gap-6">
-                     <button 
-                        onClick={() => setActiveTab('dashboard')}
-                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <LayoutDashboard className="w-4 h-4" /> Dashboard
-                        {activeTab === 'dashboard' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
-                     </button>
-                     <button 
-                        onClick={() => setActiveTab('tasks')}
-                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'tasks' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <ClipboardList className="w-4 h-4" /> Tasks
-                        {activeTab === 'tasks' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
-                     </button>
-                     <button 
-                        onClick={() => setActiveTab('files')}
-                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'files' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <FileIcon className="w-4 h-4" /> Files
-                        {activeTab === 'files' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
-                     </button>
-                     <button 
-                        onClick={() => setActiveTab('team')}
-                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'team' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <Users className="w-4 h-4" /> Team
-                        {activeTab === 'team' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
-                     </button>
-                     <button 
-                        onClick={() => setActiveTab('ai')}
-                        className={`pb-3 text-sm font-medium flex items-center gap-2 transition-colors relative ${activeTab === 'ai' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <Bot className="w-4 h-4" /> AI Assistant
-                        {activeTab === 'ai' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full"></div>}
-                     </button>
-                </div>
-            </header>
+                 <div className="flex items-center gap-2">
+                     {!isGuestView && currentUser.role === 'Owner' && (
+                         <button onClick={() => { if(window.confirm('Delete project?')) onDeleteProject(project.id); }} className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg" title="Delete Project">
+                             <Trash2 className="w-5 h-5" />
+                         </button>
+                     )}
+                 </div>
+             </header>
 
-            <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 overflow-hidden relative">
-                    {activeTab === 'dashboard' && renderDashboard()}
-                    {activeTab === 'tasks' && renderTasks()}
-                    {activeTab === 'files' && renderFiles()}
-                    {activeTab === 'team' && renderTeam()}
-                    {activeTab === 'ai' && (
-                        <div className="h-full p-6">
-                            <AIChat project={project} />
-                        </div>
-                    )}
-                </div>
-            </div>
+             {/* Content */}
+             <div className="flex-1 overflow-hidden relative">
+                 {activeTab === 'dashboard' && renderDashboard()}
+                 {activeTab === 'tasks' && renderTasks()}
+                 {activeTab === 'files' && renderFiles()}
+                 {activeTab === 'team' && renderTeam()}
+                 {activeTab === 'ai' && <div className="p-6 h-full"><AIChat project={project} /></div>}
+             </div>
+
+             {/* Modals */}
+             {editingTask && (
+                 <TaskDetailModal 
+                     task={editingTask} 
+                     project={project}
+                     currentUser={currentUser}
+                     onClose={() => setEditingTask(null)}
+                     onUpdateTask={handleUpdateTask}
+                     onDeleteTask={handleDeleteTask}
+                     onSendNotification={showNotification}
+                 />
+             )}
+             {addingTaskStatus && (
+                 <AddTaskModal 
+                     status={addingTaskStatus}
+                     project={project}
+                     onClose={() => setAddingTaskStatus(null)}
+                     onSave={handleAddTask}
+                 />
+             )}
+             
+             {/* Notification Toast */}
+             {notificationMsg && (
+                 <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2 animate-in slide-in-from-bottom duration-300 z-50">
+                     <Check className="w-4 h-4 text-emerald-400" />
+                     {notificationMsg}
+                 </div>
+             )}
         </div>
     );
 };
