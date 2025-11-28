@@ -1,4 +1,4 @@
-import { GoogleGenAI, Chat } from "@google/genai";
+import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Project, Idea, Reminder, Course, PersonalGoal, Habit, JournalEntry, AcademicYearDoc } from "../types";
 
 // Singleton instance variable
@@ -187,6 +187,7 @@ export const sendChatMessage = async (
         systemInstruction = generateSystemInstruction(project);
     }
 
+    // Using gemini-3-pro-preview for complex reasoning and chat
     const chat: Chat = ai.chats.create({
       model: 'gemini-3-pro-preview',
       config: {
@@ -275,13 +276,18 @@ export const brainstormRelatedTopics = async (title: string, content: string): P
       Context: "${content.substring(0, 500)}"
       
       Suggest 5 related research topics, fields, or keywords that I should explore to broaden my brainstorming.
-      Return STRICTLY as a JSON array of strings.
     `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: { responseMimeType: 'application/json' }
+      config: { 
+          responseMimeType: 'application/json',
+          responseSchema: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+          }
+      }
     });
 
     return JSON.parse(response.text || '[]');
@@ -320,18 +326,25 @@ export const suggestProjectSchedule = async (projectTitle: string, status: strin
         const prompt = `
         I have a research project titled "${projectTitle}" which is currently in the "${status}" phase.
         Suggest 3 key milestones or tasks I should set as reminders for the next 2 weeks.
-        
-        Return the result STRICTLY as a JSON array of objects with these properties:
-        - "title": string (The task name)
-        - "daysFromNow": number (How many days from today, between 1 and 14)
-        - "type": string (One of: "task", "deadline", "meeting")
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
-                responseMimeType: 'application/json'
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            daysFromNow: { type: Type.NUMBER },
+                            type: { type: Type.STRING, enum: ["task", "deadline", "meeting"] }
+                        },
+                        required: ["title", "daysFromNow", "type"]
+                    }
+                }
             }
         });
 
@@ -354,15 +367,26 @@ export const suggestTeachingPlan = async (currentCourses: string[]): Promise<{ t
         I am a professor teaching these courses: ${currentCourses.join(', ')}.
         It is currently the middle of the semester.
         Suggest 3 administrative or teaching tasks I should not forget (e.g. grading, preparing next lecture, office hours).
-        
-        Return STRICTLY as JSON array:
-        [{ "title": "string", "daysFromNow": number, "type": "task" }]
         `;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            daysFromNow: { type: Type.NUMBER },
+                            type: { type: Type.STRING, enum: ["task", "deadline"] }
+                        },
+                        required: ["title", "daysFromNow", "type"]
+                    }
+                }
+            }
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { return []; }
@@ -377,15 +401,26 @@ export const suggestAdminPlan = async (): Promise<{ title: string; daysFromNow: 
         const prompt = `
         I have administrative duties as an Associate Professor.
         Suggest 3 generic but critical admin tasks (e.g. check department emails, sign forms, review committee notes).
-        
-        Return STRICTLY as JSON array:
-        [{ "title": "string", "daysFromNow": number, "type": "task" }]
         `;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            daysFromNow: { type: Type.NUMBER },
+                            type: { type: Type.STRING, enum: ["task", "deadline"] }
+                        },
+                        required: ["title", "daysFromNow", "type"]
+                    }
+                }
+            }
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { return []; }
@@ -400,15 +435,26 @@ export const suggestPersonalPlan = async (goals: string[]): Promise<{ title: str
         const prompt = `
         My personal goals are: ${goals.join(', ')}.
         Suggest 3 small, actionable steps I can take this week to make progress.
-        
-        Return STRICTLY as JSON array:
-        [{ "title": "string", "daysFromNow": number, "type": "task" }]
         `;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            daysFromNow: { type: Type.NUMBER },
+                            type: { type: Type.STRING, enum: ["task", "deadline"] }
+                        },
+                        required: ["title", "daysFromNow", "type"]
+                    }
+                }
+            }
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { return []; }
@@ -425,15 +471,18 @@ export const generateGoalMilestones = async (goal: string, target: string): Prom
         My specific target/metric is: "${target}".
         
         Please generate 5-7 concrete, actionable milestones or steps to achieve this.
-        
-        Return STRICTLY as a JSON array of strings.
-        Example: ["Buy running shoes", "Run 5km without stopping", "Register for race"]
         `;
         
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                }
+            }
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { 
@@ -451,15 +500,25 @@ export const suggestJournalPlan = async (date: string): Promise<{ text: string, 
         const prompt = `
         It is ${date}. Generate a productive daily checklist for an academic.
         Include 1 research task, 1 teaching task, 1 health task.
-        
-        Return STRICTLY as JSON array:
-        [{ "text": "string", "done": false }]
         `;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            text: { type: Type.STRING },
+                            done: { type: Type.BOOLEAN }
+                        },
+                        required: ["text", "done"]
+                    }
+                }
+            }
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { return []; }
@@ -475,14 +534,25 @@ export const generateDailyTasksFromDescription = async (description: string, dat
         It is ${date}. The user has described their daily focus as: "${description}".
         
         Break this down into 3-6 specific, actionable checklist items (checkpoints).
-        Return STRICTLY as a JSON array of objects:
-        [{ "text": "string", "done": false }]
         `;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: { responseMimeType: 'application/json' }
+            config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            text: { type: Type.STRING },
+                            done: { type: Type.BOOLEAN }
+                        },
+                        required: ["text", "done"]
+                    }
+                }
+            }
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { 
@@ -505,21 +575,35 @@ export const generateProjectDetails = async (title: string, description: string)
         Please act as a senior research principal and generate:
         1. 4-6 Key Milestones/Tasks to get started (e.g. Literature Review, Data Collection) with suggested priorities (high/medium/low) and realistic timelines relative to today.
         2. 3 Critical Research Questions that this project should answer.
-        
-        Return STRICTLY JSON format:
-        {
-            "tasks": [
-                { "title": "Task Name", "priority": "high", "daysFromNow": 5 }
-            ],
-            "questions": [ "Question 1", "Question 2" ]
-        }
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
-                responseMimeType: 'application/json'
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        tasks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    priority: { type: Type.STRING, enum: ["high", "medium", "low"] },
+                                    daysFromNow: { type: Type.NUMBER }
+                                },
+                                required: ["title", "priority", "daysFromNow"]
+                            }
+                        },
+                        questions: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING }
+                        }
+                    },
+                    required: ["tasks", "questions"]
+                }
             }
         });
 
