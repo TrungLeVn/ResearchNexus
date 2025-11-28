@@ -4,7 +4,7 @@ import {
     ChevronLeft, Plus, Users, File as FileIcon, 
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
-    Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box
+    Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -17,6 +17,7 @@ interface ProjectDetailProps {
   onBack: () => void;
   onDeleteProject: (projectId: string) => void;
   isGuestView?: boolean;
+  existingTags?: string[]; // Global tags for suggestions
 }
 
 const statusMap: Record<TaskStatus, string> = {
@@ -572,7 +573,100 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) =>
     );
 };
 
-export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
+// --- TAG MANAGER MODAL ---
+interface TagManagerModalProps {
+    currentTags: string[];
+    allTags: string[]; // Global suggestions
+    onClose: () => void;
+    onUpdate: (newTags: string[]) => void;
+}
+
+const TagManagerModal: React.FC<TagManagerModalProps> = ({ currentTags, allTags, onClose, onUpdate }) => {
+    const [inputValue, setInputValue] = useState('');
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (!inputValue) {
+            setSuggestions([]);
+            return;
+        }
+        const lowerInput = inputValue.toLowerCase();
+        // Filter global tags that contain input AND are not already selected
+        const matches = allTags.filter(t => 
+            t.toLowerCase().includes(lowerInput) && !currentTags.includes(t)
+        );
+        setSuggestions(matches);
+    }, [inputValue, allTags, currentTags]);
+
+    const addTag = (tag: string) => {
+        onUpdate([...currentTags, tag]);
+        setInputValue('');
+        setSuggestions([]);
+    };
+
+    const removeTag = (tag: string) => {
+        onUpdate(currentTags.filter(t => t !== tag));
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-pink-500" /> Manage Topics
+                    </h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+                <div className="p-6">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {currentTags.map(tag => (
+                            <span key={tag} className="flex items-center gap-1 bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-sm font-medium">
+                                {tag}
+                                <button onClick={() => removeTag(tag)} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
+                            </span>
+                        ))}
+                        {currentTags.length === 0 && <span className="text-slate-400 text-sm italic">No topics added.</span>}
+                    </div>
+                    
+                    <div className="relative">
+                        <input 
+                            autoFocus
+                            placeholder="Type new topic..."
+                            className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+                            value={inputValue}
+                            onChange={e => setInputValue(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && inputValue.trim()) {
+                                    addTag(inputValue.trim());
+                                }
+                            }}
+                        />
+                        {/* Suggestions Dropdown */}
+                        {suggestions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
+                                {suggestions.map(s => (
+                                    <button 
+                                        key={s}
+                                        onClick={() => addTag(s)}
+                                        className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-slate-700 block"
+                                    >
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">Press Enter to add.</p>
+                </div>
+                 <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50 rounded-b-xl">
+                    <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-800">Done</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false, existingTags = [] }) => {
     const [tasks, setTasks] = useState<Task[]>(project.tasks);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [addingTaskStatus, setAddingTaskStatus] = useState<TaskStatus | null>(null);
@@ -580,6 +674,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     
     // File State
     const [isAddingFile, setIsAddingFile] = useState<null | 'draft' | 'code' | 'other'>(null);
+    const [isManagingTags, setIsManagingTags] = useState(false);
 
     // View State
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
@@ -603,6 +698,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         setTasks(newTasks);
         onUpdateProject({ ...project, tasks: newTasks });
         setAddingTaskStatus(null);
+    };
+
+    const handleShare = () => {
+        const shareUrl = `${window.location.origin}?pid=${project.id}`;
+        navigator.clipboard.writeText(shareUrl);
+        showNotification("Project link copied to clipboard!");
     };
 
     // --- DRAG AND DROP HANDLERS ---
@@ -677,6 +778,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
     const renderDashboard = () => (
         <div className="p-6 h-full overflow-y-auto animate-in fade-in duration-300">
+             {/* Header Section with Description & Tags */}
+             <div className="mb-8">
+                <p className="text-slate-600 mb-4 text-lg">{project.description || "No description provided."}</p>
+                <div className="flex flex-wrap gap-2 items-center">
+                    {(project.tags || []).map(tag => (
+                        <span key={tag} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-sm font-medium border border-pink-100">
+                            #{tag}
+                        </span>
+                    ))}
+                    {!isGuestView && (
+                        <button 
+                            onClick={() => setIsManagingTags(true)} 
+                            className="px-3 py-1 bg-white border border-dashed border-slate-300 text-slate-400 rounded-full text-sm hover:border-pink-300 hover:text-pink-500 flex items-center gap-1 transition-colors"
+                        >
+                            <Plus className="w-3 h-3" /> Topic
+                        </button>
+                    )}
+                </div>
+             </div>
+
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                  {/* Stat Cards */}
                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
@@ -1082,6 +1203,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                  </div>
 
                  <div className="flex items-center gap-2">
+                     <button 
+                        onClick={handleShare}
+                        className="p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 rounded-lg transition-colors"
+                        title="Share Project Link"
+                    >
+                         <Share2 className="w-5 h-5" />
+                     </button>
                      {!isGuestView && currentUser.role === 'Owner' && (
                          <button onClick={() => { if(window.confirm('Delete project?')) onDeleteProject(project.id); }} className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg" title="Delete Project">
                              <Trash2 className="w-5 h-5" />
@@ -1100,6 +1228,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
              </div>
 
              {/* Modals */}
+             {isManagingTags && (
+                 <TagManagerModal 
+                    currentTags={project.tags || []} 
+                    allTags={existingTags} 
+                    onClose={() => setIsManagingTags(false)} 
+                    onUpdate={(newTags) => onUpdateProject({...project, tags: newTags})} 
+                 />
+             )}
              {isAddingFile && (
                  <AddFileModal 
                     type={isAddingFile} 

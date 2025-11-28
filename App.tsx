@@ -342,6 +342,7 @@ const App: React.FC = () => {
                     onUpdateProject={handleUpdateProject}
                     onBack={() => {}} // No back action for guests
                     onDeleteProject={() => {}} // Guests can't delete
+                    existingTags={[]}
                 />
             </main>
         </div>
@@ -351,6 +352,9 @@ const App: React.FC = () => {
   // Filter Data for Owner
   const researchProjects = projects.filter(p => p.category === 'research' || !p.category);
   const adminProjects = projects.filter(p => p.category === 'admin');
+  
+  // Calculate all Global Tags for Suggestions
+  const allGlobalTags = Array.from(new Set(projects.flatMap(p => p.tags || []))).sort();
 
   // --- RENDER LOGIC ---
 
@@ -375,6 +379,7 @@ const App: React.FC = () => {
                       onBack={() => setSelectedProject(null)}
                       isGuestView={false}
                       onDeleteProject={handleDeleteProject}
+                      existingTags={allGlobalTags}
                   />
               ) : (
                   <ProjectManager 
