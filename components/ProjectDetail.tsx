@@ -74,6 +74,91 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick, onDragStart
     );
 };
 
+// --- MULTI-SELECT ASSIGNEE COMPONENT ---
+interface AssigneeSelectorProps {
+    collaborators: Collaborator[];
+    selectedIds: string[];
+    onChange: (ids: string[]) => void;
+}
+
+const AssigneeSelector: React.FC<AssigneeSelectorProps> = ({ collaborators, selectedIds, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleSelection = (id: string) => {
+        if (selectedIds.includes(id)) {
+            onChange(selectedIds.filter(sid => sid !== id));
+        } else {
+            onChange([...selectedIds, id]);
+        }
+    };
+
+    return (
+        <div className="relative" ref={containerRef}>
+            <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Assignees</label>
+            <div 
+                onClick={() => setIsOpen(!isOpen)} 
+                className="w-full min-h-[42px] p-2 border border-slate-200 rounded-lg bg-white flex items-center justify-between cursor-pointer hover:border-indigo-400 transition-colors"
+            >
+                <div className="flex items-center gap-1 flex-wrap">
+                    {selectedIds.length === 0 && <span className="text-slate-400 text-sm">Select members...</span>}
+                    {selectedIds.map(id => {
+                        const user = collaborators.find(c => c.id === id);
+                        if (!user) return null;
+                        return (
+                            <div key={id} className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
+                                <div className="w-4 h-4 rounded-full bg-indigo-200 flex items-center justify-center text-[8px] font-bold">
+                                    {user.initials}
+                                </div>
+                                <span className="text-xs font-medium">{user.name.split(' ')[0]}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+                <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </div>
+            
+            {isOpen && (
+                <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-xl mt-2 shadow-xl max-h-48 overflow-y-auto animate-in fade-in zoom-in-95">
+                     <div className="p-2 space-y-1">
+                        {collaborators.map(c => {
+                            const isSelected = selectedIds.includes(c.id);
+                            return (
+                                <div 
+                                    key={c.id} 
+                                    onClick={() => toggleSelection(c.id)}
+                                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                                >
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
+                                        {isSelected && <Check className="w-3 h-3 text-white" />}
+                                    </div>
+                                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                                        {c.initials}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className={`text-sm ${isSelected ? 'text-indigo-900 font-medium' : 'text-slate-700'}`}>{c.name}</span>
+                                        <span className="text-[10px] text-slate-400">{c.role}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                     </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 interface TaskDetailModalProps {
     task: Task;
     project: Project;
@@ -178,12 +263,20 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                     <input value={editedTask.title} onChange={e => setEditedTask({...editedTask, title: e.target.value})} className="text-lg font-bold text-slate-800 bg-transparent outline-none w-full" />
                     <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
-                <div className="flex-1 p-6 grid grid-cols-3 gap-6 overflow-y-auto">
-                    <div className="col-span-2 space-y-4">
+                <div className="flex-1 p-6 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto">
+                    <div className="md:col-span-2 space-y-4">
                         <div>
                             <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
                             <textarea value={editedTask.description} onChange={e => setEditedTask({...editedTask, description: e.target.value})} className="w-full mt-1 p-2 border rounded-md h-24 text-sm" placeholder="Add task details..."/>
                         </div>
+                        
+                        {/* Add Assignee Selector Here */}
+                        <AssigneeSelector 
+                            collaborators={collaborators}
+                            selectedIds={editedTask.assigneeIds || []}
+                            onChange={(ids) => setEditedTask({...editedTask, assigneeIds: ids})}
+                        />
+
                         <div>
                             <label className="text-xs font-bold text-slate-400 uppercase">Comments</label>
                             <div className="mt-2 space-y-3 max-h-64 overflow-y-auto pr-2">
@@ -220,7 +313,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                             </div>
                         </div>
                     </div>
-                    <div className="col-span-1 space-y-4">
+                    <div className="md:col-span-1 space-y-4">
                         <div className="bg-slate-50 p-3 rounded-lg border">
                             <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
                             <select value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value as TaskStatus})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
@@ -263,7 +356,6 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
     const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
     const [priority, setPriority] = useState<TaskPriority>('medium');
     const [dueDate, setDueDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
-    const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
     
     const collaborators = project.collaborators || [];
 
@@ -294,32 +386,22 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
                 </div>
                 <div className="p-6 space-y-4">
                     <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title..." className="w-full border rounded-lg p-2 text-lg"/>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="relative">
-                            <label className="text-xs font-semibold text-slate-500 mb-1">Assignees</label>
-                            <button onClick={() => setAssigneeDropdownOpen(!assigneeDropdownOpen)} className="w-full p-2 border rounded-md text-sm bg-white text-left h-10 flex items-center justify-between">
-                                <span className="truncate">{assigneeIds.length ? `${assigneeIds.length} selected` : 'Unassigned'}</span>
-                                <ChevronDown className="w-4 h-4"/>
-                            </button>
-                            {assigneeDropdownOpen && (
-                                <div className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-40 overflow-y-auto">
-                                    {collaborators.map(c => (
-                                        <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer text-sm">
-                                            <input type="checkbox" className="w-4 h-4 rounded text-indigo-600" checked={assigneeIds.includes(c.id)} onChange={() => {
-                                                setAssigneeIds(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])
-                                            }}/> {c.name}
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="col-span-2 md:col-span-1">
+                             <AssigneeSelector 
+                                collaborators={collaborators}
+                                selectedIds={assigneeIds}
+                                onChange={setAssigneeIds}
+                             />
                         </div>
                         <div>
-                             <label className="text-xs font-semibold text-slate-500 mb-1">Due Date</label>
-                             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded-md text-sm"/>
+                             <label className="text-xs font-semibold text-slate-500 mb-1 block">Due Date</label>
+                             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 border rounded-md text-sm h-[42px]"/>
                         </div>
                         <div className="col-span-2">
-                             <label className="text-xs font-semibold text-slate-500 mb-1">Priority</label>
-                             <select value={priority} onChange={e => setPriority(e.target.value as any)} className="w-full p-2 border rounded-md text-sm bg-white">
+                             <label className="text-xs font-semibold text-slate-500 mb-1 block">Priority</label>
+                             <select value={priority} onChange={e => setPriority(e.target.value as any)} className="w-full p-2 border rounded-md text-sm bg-white h-[42px]">
                                 <option value="low">Low</option>
                                 <option value="medium">Medium</option>
                                 <option value="high">High</option>
