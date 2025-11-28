@@ -207,9 +207,9 @@ export const sendChatMessage = async (
         systemInstruction = generateSystemInstruction(project);
     }
 
-    // Using gemini-3-pro-preview for complex reasoning and chat
+    // Using gemini-2.5-flash to avoid free-tier rate limits.
     const chat: Chat = ai.chats.create({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-2.5-flash',
       config: {
         systemInstruction: systemInstruction,
       },
