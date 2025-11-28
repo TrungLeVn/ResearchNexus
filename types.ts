@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -44,6 +36,7 @@ export interface LinkResource {
 export interface ProjectFile {
   id: string;
   name: string;
+  description?: string; // New field for short description
   type: 'draft' | 'code' | 'data' | 'slide' | 'document' | 'other';
   lastModified: string;
   url?: string; // Google Drive Link

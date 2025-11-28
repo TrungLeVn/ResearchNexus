@@ -4,7 +4,7 @@ import {
     ChevronLeft, Plus, Users, File as FileIcon, 
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
-    Code, FileText, Database, Settings
+    Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -336,25 +336,153 @@ interface FileCardProps {
 }
 
 const FileCard: React.FC<FileCardProps> = ({ file, onDelete }) => (
-    <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3 group relative hover:shadow-md transition-all">
-        <div className={`p-2 rounded-lg ${
-            file.type === 'code' ? 'bg-slate-800 text-white' : 
-            file.type === 'data' ? 'bg-emerald-100 text-emerald-600' :
-            'bg-indigo-50 text-indigo-600'
-        }`}>
-            {file.type === 'code' ? <Code className="w-4 h-4" /> : 
-             file.type === 'data' ? <Database className="w-4 h-4" /> :
-             <FileText className="w-4 h-4" />}
+    <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-2 group relative hover:shadow-md transition-all h-full">
+        <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-lg shrink-0 ${
+                file.type === 'code' ? 'bg-slate-800 text-white' : 
+                file.type === 'data' ? 'bg-emerald-100 text-emerald-600' :
+                file.type === 'draft' || file.type === 'document' ? 'bg-indigo-50 text-indigo-600' :
+                'bg-amber-50 text-amber-600'
+            }`}>
+                {file.type === 'code' ? <Code className="w-5 h-5" /> : 
+                 file.type === 'data' ? <Database className="w-5 h-5" /> :
+                 file.type === 'other' ? <Box className="w-5 h-5" /> :
+                 <FileText className="w-5 h-5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate mb-1" title={file.name}>{file.name}</p>
+                <a href={file.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                    <Link className="w-3 h-3" /> Open in Drive
+                </a>
+            </div>
         </div>
-        <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-800 truncate" title={file.name}>{file.name}</p>
-            <a href={file.url} target="_blank" rel="noreferrer" className="text-xs text-slate-400 hover:text-indigo-600 truncate block">Open Link</a>
+        
+        {file.description && (
+            <div className="mt-1 bg-slate-50 p-2 rounded text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                {file.description}
+            </div>
+        )}
+        
+        <div className="mt-auto pt-2 flex justify-between items-center text-[10px] text-slate-400">
+             <span>{new Date(file.lastModified).toLocaleDateString()}</span>
+             <button onClick={() => onDelete(file.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all">
+                <Trash2 className="w-3.5 h-3.5" />
+            </button>
         </div>
-        <button onClick={() => onDelete(file.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500">
-            <Trash2 className="w-4 h-4" />
-        </button>
     </div>
 );
+
+// --- NEW FILE UPLOAD MODAL ---
+interface AddFileModalProps {
+    type: 'draft' | 'code' | 'other';
+    onClose: () => void;
+    onSave: (name: string, description: string, url: string, type: ProjectFile['type']) => void;
+}
+
+const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) => {
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [url, setUrl] = useState('');
+    const [specificType, setSpecificType] = useState<ProjectFile['type']>(type === 'draft' ? 'draft' : type === 'code' ? 'code' : 'other');
+
+    const handleConfirm = () => {
+        if (!name || !url) return;
+        onSave(name, description, url, specificType);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        {type === 'draft' && <FileText className="w-4 h-4 text-indigo-600" />}
+                        {type === 'code' && <Database className="w-4 h-4 text-emerald-600" />}
+                        {type === 'other' && <Box className="w-4 h-4 text-amber-600" />}
+                        Add {type === 'draft' ? 'Draft/Paper' : type === 'code' ? 'Code/Data' : 'Asset'}
+                    </h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">File Name</label>
+                        <input 
+                            autoFocus
+                            className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="e.g. Experiment Results v2"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                        />
+                    </div>
+                    
+                    {/* Sub-type selection for specific categories */}
+                    {type === 'draft' && (
+                        <div>
+                             <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
+                             <select 
+                                value={specificType} 
+                                onChange={(e) => setSpecificType(e.target.value as any)}
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                             >
+                                 <option value="draft">Draft Manuscript</option>
+                                 <option value="document">General Doc</option>
+                                 <option value="slide">Presentation Slide</option>
+                             </select>
+                        </div>
+                    )}
+                    {type === 'code' && (
+                        <div>
+                             <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
+                             <select 
+                                value={specificType} 
+                                onChange={(e) => setSpecificType(e.target.value as any)}
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                             >
+                                 <option value="code">Source Code</option>
+                                 <option value="data">Dataset / Logs</option>
+                             </select>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Google Drive URL</label>
+                        <div className="relative">
+                            <Link className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                            <input 
+                                className="w-full border border-slate-300 rounded-lg pl-9 pr-2 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                placeholder="https://docs.google.com/..."
+                                value={url}
+                                onChange={e => setUrl(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Short Description</label>
+                        <div className="relative">
+                            <AlignLeft className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                            <textarea 
+                                className="w-full border border-slate-300 rounded-lg pl-9 pr-2 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none min-h-[80px]"
+                                placeholder="Briefly describe this file..."
+                                value={description}
+                                onChange={e => setDescription(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-xl">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
+                    <button 
+                        onClick={handleConfirm}
+                        disabled={!name || !url}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                        Save File
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false }) => {
     const [tasks, setTasks] = useState<Task[]>(project.tasks);
@@ -362,6 +490,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [addingTaskStatus, setAddingTaskStatus] = useState<TaskStatus | null>(null);
     const [notificationMsg, setNotificationMsg] = useState('');
     
+    // File State
+    const [isAddingFile, setIsAddingFile] = useState<null | 'draft' | 'code' | 'other'>(null);
+
     // View State
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
 
@@ -384,6 +515,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         setTasks(newTasks);
         onUpdateProject({ ...project, tasks: newTasks });
         setAddingTaskStatus(null);
+    };
+
+    const handleAddFile = (name: string, description: string, url: string, type: ProjectFile['type']) => {
+        const newFile: ProjectFile = {
+            id: Date.now().toString(),
+            name,
+            description,
+            type,
+            lastModified: new Date().toISOString(),
+            url
+        };
+        onUpdateProject({ ...project, files: [...project.files, newFile] });
+        setIsAddingFile(null);
     };
 
     const showNotification = (msg: string) => {
@@ -678,46 +822,102 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         </div>
     );
 
-    const renderFiles = () => (
-        <div className="p-6 h-full overflow-y-auto">
-             <div className="flex justify-between items-center mb-6">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
+    const renderFiles = () => {
+        // Group files
+        const drafts = project.files.filter(f => ['draft', 'document', 'slide'].includes(f.type));
+        const code = project.files.filter(f => ['code', 'data'].includes(f.type));
+        const assets = project.files.filter(f => f.type === 'other');
+
+        return (
+            <div className="p-6 h-full overflow-y-auto animate-in fade-in duration-300">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
                      <FileIcon className="w-5 h-5 text-indigo-600" />
-                     Project Files
-                 </h3>
-                 <button 
-                    onClick={() => {
-                        const name = prompt("File Name:");
-                        if(name) {
-                            const newFile: ProjectFile = {
-                                id: Date.now().toString(),
-                                name,
-                                type: 'document',
-                                lastModified: new Date().toISOString(),
-                                url: '#'
-                            };
-                            onUpdateProject({...project, files: [...project.files, newFile]});
-                        }
-                    }}
-                    className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-                 >
-                     <Plus className="w-4 h-4" /> Upload File
-                 </button>
-             </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                 {project.files.map(f => (
-                     <FileCard 
-                        key={f.id} 
-                        file={f} 
-                        onDelete={(id) => onUpdateProject({...project, files: project.files.filter(file => file.id !== id)})} 
-                     />
-                 ))}
-                 {project.files.length === 0 && (
-                     <p className="col-span-full text-center text-slate-400 py-8 italic">No files uploaded yet.</p>
-                 )}
-             </div>
-        </div>
-    );
+                     Project Assets
+                </h3>
+
+                {/* Widgets Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <button 
+                        onClick={() => setIsAddingFile('draft')}
+                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group"
+                    >
+                        <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                            <FileText className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-bold text-slate-800">Drafts & Papers</h4>
+                        <p className="text-xs text-slate-500 mt-1">Add manuscripts, docs, slides.</p>
+                        <div className="mt-4 text-xs font-medium text-indigo-600 flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Add File
+                        </div>
+                    </button>
+
+                    <button 
+                        onClick={() => setIsAddingFile('code')}
+                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left group"
+                    >
+                        <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <Database className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-bold text-slate-800">Code & Data</h4>
+                        <p className="text-xs text-slate-500 mt-1">Upload code, datasets, logs.</p>
+                        <div className="mt-4 text-xs font-medium text-emerald-600 flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Add File
+                        </div>
+                    </button>
+
+                    <button 
+                        onClick={() => setIsAddingFile('other')}
+                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition-all text-left group"
+                    >
+                        <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                            <FolderOpen className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-bold text-slate-800">Other Assets</h4>
+                        <p className="text-xs text-slate-500 mt-1">Images, PDFs, misc resources.</p>
+                        <div className="mt-4 text-xs font-medium text-amber-600 flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Add File
+                        </div>
+                    </button>
+                </div>
+
+                {/* File Lists */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Drafts Column */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                        <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                             Drafts & Docs <span className="px-1.5 py-0.5 bg-indigo-100 rounded-full">{drafts.length}</span>
+                        </h4>
+                        <div className="space-y-3">
+                            {drafts.map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
+                            {drafts.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No documents yet.</p>}
+                        </div>
+                    </div>
+
+                    {/* Code Column */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                        <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                             Code & Data <span className="px-1.5 py-0.5 bg-emerald-100 rounded-full">{code.length}</span>
+                        </h4>
+                        <div className="space-y-3">
+                            {code.map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
+                            {code.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No code files yet.</p>}
+                        </div>
+                    </div>
+
+                    {/* Assets Column */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                         <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                             Other Assets <span className="px-1.5 py-0.5 bg-amber-100 rounded-full">{assets.length}</span>
+                        </h4>
+                        <div className="space-y-3">
+                            {assets.map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
+                            {assets.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No other assets.</p>}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="flex flex-col h-full bg-slate-50 animate-in slide-in-from-right duration-300">
@@ -781,6 +981,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
              </div>
 
              {/* Modals */}
+             {isAddingFile && (
+                 <AddFileModal 
+                    type={isAddingFile} 
+                    onClose={() => setIsAddingFile(null)} 
+                    onSave={handleAddFile} 
+                 />
+             )}
              {editingTask && (
                  <TaskDetailModal 
                      task={editingTask} 
