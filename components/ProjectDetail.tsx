@@ -4,7 +4,8 @@ import {
     ChevronLeft, Plus, Users, File as FileIcon, 
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
-    Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash
+    Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
+    ClipboardList, Megaphone, Table
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -464,15 +465,28 @@ const FileCard: React.FC<FileCardProps> = ({ file, onDelete }) => (
 // --- NEW FILE UPLOAD MODAL ---
 interface AddFileModalProps {
     type: 'draft' | 'code' | 'other';
+    projectCategory?: 'research' | 'admin';
     onClose: () => void;
     onSave: (name: string, description: string, url: string, type: ProjectFile['type']) => void;
 }
 
-const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) => {
+const AddFileModal: React.FC<AddFileModalProps> = ({ type, projectCategory = 'research', onClose, onSave }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [url, setUrl] = useState('');
     const [specificType, setSpecificType] = useState<ProjectFile['type']>(type === 'draft' ? 'draft' : type === 'code' ? 'code' : 'other');
+    
+    // Determine labels based on category
+    const isAdmin = projectCategory === 'admin';
+    
+    const getModalTitle = () => {
+        if (isAdmin) {
+             if (type === 'draft') return "Add Official Document";
+             if (type === 'code') return "Add Logistics / Finance";
+             if (type === 'other') return "Add Media / Asset";
+        }
+        return type === 'draft' ? 'Add Draft/Paper' : type === 'code' ? 'Add Code/Data' : 'Add Asset';
+    };
 
     const handleConfirm = () => {
         if (!name || !url) return;
@@ -485,9 +499,9 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) =>
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
                         {type === 'draft' && <FileText className="w-4 h-4 text-indigo-600" />}
-                        {type === 'code' && <Database className="w-4 h-4 text-emerald-600" />}
-                        {type === 'other' && <Box className="w-4 h-4 text-amber-600" />}
-                        Add {type === 'draft' ? 'Draft/Paper' : type === 'code' ? 'Code/Data' : 'Asset'}
+                        {type === 'code' && (isAdmin ? <Table className="w-4 h-4 text-emerald-600" /> : <Database className="w-4 h-4 text-emerald-600" />)}
+                        {type === 'other' && (isAdmin ? <Megaphone className="w-4 h-4 text-amber-600" /> : <Box className="w-4 h-4 text-amber-600" />)}
+                        {getModalTitle()}
                     </h3>
                     <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
@@ -497,7 +511,7 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) =>
                         <input 
                             autoFocus
                             className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                            placeholder="e.g. Experiment Results v2"
+                            placeholder={isAdmin ? "e.g. Workshop Budget v1" : "e.g. Experiment Results v2"}
                             value={name}
                             onChange={e => setName(e.target.value)}
                         />
@@ -512,9 +526,19 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) =>
                                 onChange={(e) => setSpecificType(e.target.value as any)}
                                 className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
                              >
-                                 <option value="draft">Draft Manuscript</option>
-                                 <option value="document">General Doc</option>
-                                 <option value="slide">Presentation Slide</option>
+                                 {isAdmin ? (
+                                    <>
+                                        <option value="document">Official Document</option>
+                                        <option value="draft">Proposal/Draft</option>
+                                        <option value="slide">Meeting Minutes</option>
+                                    </>
+                                 ) : (
+                                    <>
+                                        <option value="draft">Draft Manuscript</option>
+                                        <option value="document">General Doc</option>
+                                        <option value="slide">Presentation Slide</option>
+                                    </>
+                                 )}
                              </select>
                         </div>
                     )}
@@ -526,8 +550,30 @@ const AddFileModal: React.FC<AddFileModalProps> = ({ type, onClose, onSave }) =>
                                 onChange={(e) => setSpecificType(e.target.value as any)}
                                 className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
                              >
-                                 <option value="code">Source Code</option>
-                                 <option value="data">Dataset / Logs</option>
+                                 {isAdmin ? (
+                                     <>
+                                         <option value="data">Spreadsheet / Budget</option>
+                                         <option value="code">Schedule / Plan</option>
+                                     </>
+                                 ) : (
+                                     <>
+                                         <option value="code">Source Code</option>
+                                         <option value="data">Dataset / Logs</option>
+                                     </>
+                                 )}
+                             </select>
+                        </div>
+                    )}
+                     {type === 'other' && isAdmin && (
+                        <div>
+                             <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
+                             <select 
+                                value={specificType} 
+                                onChange={(e) => setSpecificType(e.target.value as any)}
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                             >
+                                 <option value="other">Image / Asset</option>
+                                 <option value="slide">Presentation</option>
                              </select>
                         </div>
                     )}
@@ -825,7 +871,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <div className="h-full bg-indigo-600 rounded-full" style={{width: `${progress}%`}}></div>
                             </div>
                         )}
-                        <p className="text-[10px] text-slate-400 mt-1 text-right">{currentUser.role === 'Owner' ? 'Drag to update' : 'Read-only'}</p>
+                        <p className="text-xs text-slate-400 mt-1 text-right">{currentUser.role === 'Owner' ? 'Drag to update' : 'Read-only'}</p>
                      </div>
                  </div>
 
@@ -1063,95 +1109,152 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     );
 
     const renderFiles = () => {
-        // Group files
+        const isAdmin = project.category === 'admin';
+        
+        // Group files differently based on project category
         const drafts = project.files.filter(f => ['draft', 'document', 'slide'].includes(f.type));
         const code = project.files.filter(f => ['code', 'data'].includes(f.type));
         const assets = project.files.filter(f => f.type === 'other');
+
+        // Admin mapping for groups
+        const adminDocs = project.files.filter(f => ['document', 'draft'].includes(f.type));
+        const adminLogistics = project.files.filter(f => ['data', 'code'].includes(f.type));
+        const adminMedia = project.files.filter(f => ['slide', 'other'].includes(f.type));
 
         return (
             <div className="p-6 h-full overflow-y-auto animate-in fade-in duration-300">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
                      <FileIcon className="w-5 h-5 text-indigo-600" />
-                     Project Assets
+                     {isAdmin ? 'Project Documents & Assets' : 'Project Assets'}
                 </h3>
 
                 {/* Widgets Row */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <button 
-                        onClick={() => setIsAddingFile('draft')}
-                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group"
-                    >
-                        <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <FileText className="w-6 h-6" />
-                        </div>
-                        <h4 className="font-bold text-slate-800">Drafts & Papers</h4>
-                        <p className="text-xs text-slate-500 mt-1">Add manuscripts, docs, slides.</p>
-                        <div className="mt-4 text-xs font-medium text-indigo-600 flex items-center gap-1">
-                            <Plus className="w-3 h-3" /> Add File
-                        </div>
-                    </button>
+                    {isAdmin ? (
+                        <>
+                            {/* ADMIN WIDGETS */}
+                            <button 
+                                onClick={() => setIsAddingFile('draft')}
+                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group"
+                            >
+                                <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                    <FileText className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-slate-800">Official Documents</h4>
+                                <p className="text-xs text-slate-500 mt-1">Proposals, Minutes, Decisions.</p>
+                                <div className="mt-4 text-xs font-medium text-indigo-600 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add Doc
+                                </div>
+                            </button>
 
-                    <button 
-                        onClick={() => setIsAddingFile('code')}
-                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left group"
-                    >
-                        <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <Database className="w-6 h-6" />
-                        </div>
-                        <h4 className="font-bold text-slate-800">Code & Data</h4>
-                        <p className="text-xs text-slate-500 mt-1">Upload code, datasets, logs.</p>
-                        <div className="mt-4 text-xs font-medium text-emerald-600 flex items-center gap-1">
-                            <Plus className="w-3 h-3" /> Add File
-                        </div>
-                    </button>
+                            <button 
+                                onClick={() => setIsAddingFile('code')}
+                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left group"
+                            >
+                                <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                    <ClipboardList className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-slate-800">Logistics & Finance</h4>
+                                <p className="text-xs text-slate-500 mt-1">Budgets, Schedules, Lists.</p>
+                                <div className="mt-4 text-xs font-medium text-emerald-600 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add Sheet
+                                </div>
+                            </button>
 
-                    <button 
-                        onClick={() => setIsAddingFile('other')}
-                        className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition-all text-left group"
-                    >
-                        <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                            <FolderOpen className="w-6 h-6" />
-                        </div>
-                        <h4 className="font-bold text-slate-800">Other Assets</h4>
-                        <p className="text-xs text-slate-500 mt-1">Images, PDFs, misc resources.</p>
-                        <div className="mt-4 text-xs font-medium text-amber-600 flex items-center gap-1">
-                            <Plus className="w-3 h-3" /> Add File
-                        </div>
-                    </button>
+                            <button 
+                                onClick={() => setIsAddingFile('other')}
+                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition-all text-left group"
+                            >
+                                <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                                    <Megaphone className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-slate-800">Media & Marketing</h4>
+                                <p className="text-xs text-slate-500 mt-1">Posters, Invitations, Slides.</p>
+                                <div className="mt-4 text-xs font-medium text-amber-600 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add Asset
+                                </div>
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            {/* RESEARCH WIDGETS */}
+                            <button 
+                                onClick={() => setIsAddingFile('draft')}
+                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left group"
+                            >
+                                <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                    <FileText className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-slate-800">Drafts & Papers</h4>
+                                <p className="text-xs text-slate-500 mt-1">Add manuscripts, docs, slides.</p>
+                                <div className="mt-4 text-xs font-medium text-indigo-600 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add File
+                                </div>
+                            </button>
+
+                            <button 
+                                onClick={() => setIsAddingFile('code')}
+                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left group"
+                            >
+                                <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                    <Database className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-slate-800">Code & Data</h4>
+                                <p className="text-xs text-slate-500 mt-1">Upload code, datasets, logs.</p>
+                                <div className="mt-4 text-xs font-medium text-emerald-600 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add File
+                                </div>
+                            </button>
+
+                            <button 
+                                onClick={() => setIsAddingFile('other')}
+                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition-all text-left group"
+                            >
+                                <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                                    <FolderOpen className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-slate-800">Other Assets</h4>
+                                <p className="text-xs text-slate-500 mt-1">Images, PDFs, misc resources.</p>
+                                <div className="mt-4 text-xs font-medium text-amber-600 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add File
+                                </div>
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 {/* File Lists */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Drafts Column */}
+                    {/* Column 1 */}
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                         <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-4 flex items-center gap-2">
-                             Drafts & Docs <span className="px-1.5 py-0.5 bg-indigo-100 rounded-full">{drafts.length}</span>
+                             {isAdmin ? 'Official Docs' : 'Drafts & Docs'} <span className="px-1.5 py-0.5 bg-indigo-100 rounded-full">{(isAdmin ? adminDocs : drafts).length}</span>
                         </h4>
                         <div className="space-y-3">
-                            {drafts.map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
-                            {drafts.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No documents yet.</p>}
+                            {(isAdmin ? adminDocs : drafts).map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
+                            {(isAdmin ? adminDocs : drafts).length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No documents yet.</p>}
                         </div>
                     </div>
 
-                    {/* Code Column */}
+                    {/* Column 2 */}
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                         <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-4 flex items-center gap-2">
-                             Code & Data <span className="px-1.5 py-0.5 bg-emerald-100 rounded-full">{code.length}</span>
+                             {isAdmin ? 'Logistics & Finance' : 'Code & Data'} <span className="px-1.5 py-0.5 bg-emerald-100 rounded-full">{(isAdmin ? adminLogistics : code).length}</span>
                         </h4>
                         <div className="space-y-3">
-                            {code.map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
-                            {code.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No code files yet.</p>}
+                            {(isAdmin ? adminLogistics : code).map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
+                            {(isAdmin ? adminLogistics : code).length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No files yet.</p>}
                         </div>
                     </div>
 
-                    {/* Assets Column */}
+                    {/* Column 3 */}
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                          <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-4 flex items-center gap-2">
-                             Other Assets <span className="px-1.5 py-0.5 bg-amber-100 rounded-full">{assets.length}</span>
+                             {isAdmin ? 'Media & Assets' : 'Other Assets'} <span className="px-1.5 py-0.5 bg-amber-100 rounded-full">{(isAdmin ? adminMedia : assets).length}</span>
                         </h4>
                         <div className="space-y-3">
-                            {assets.map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
-                            {assets.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No other assets.</p>}
+                            {(isAdmin ? adminMedia : assets).map(f => <FileCard key={f.id} file={f} onDelete={(id) => onUpdateProject({...project, files: project.files.filter(fi => fi.id !== id)})} />)}
+                            {(isAdmin ? adminMedia : assets).length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No assets.</p>}
                         </div>
                     </div>
                 </div>
@@ -1238,7 +1341,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
              )}
              {isAddingFile && (
                  <AddFileModal 
-                    type={isAddingFile} 
+                    type={isAddingFile}
+                    projectCategory={project.category}
                     onClose={() => setIsAddingFile(null)} 
                     onSave={handleAddFile} 
                  />
