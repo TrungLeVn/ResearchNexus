@@ -790,6 +790,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         showNotification("Project link copied to clipboard!");
     };
 
+    const handleRemoveMember = (memberId: string) => {
+        if (window.confirm("Are you sure you want to remove this member from the project?")) {
+            const updatedCollaborators = project.collaborators.filter(c => c.id !== memberId);
+            onUpdateProject({ ...project, collaborators: updatedCollaborators });
+        }
+    };
+
     // --- DRAG AND DROP HANDLERS ---
     const handleDragStart = (e: React.DragEvent, taskId: string) => {
         e.dataTransfer.setData("taskId", taskId);
@@ -1114,8 +1121,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                              <p className="font-bold text-slate-800 truncate">{c.name}</p>
                              <p className="text-xs text-slate-500 truncate">{c.email}</p>
                          </div>
-                         <div>
+                         <div className="flex items-center gap-2">
                              {currentUser.role === 'Owner' && c.id !== currentUser.id ? (
+                                <>
                                  <select 
                                      value={c.role}
                                      onChange={(e) => {
@@ -1130,6 +1138,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                      <option value="Viewer">Viewer</option>
                                      <option value="Guest">Guest</option>
                                  </select>
+                                 <button 
+                                    onClick={() => handleRemoveMember(c.id)}
+                                    className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                    title="Remove Member"
+                                 >
+                                     <Trash2 className="w-4 h-4" />
+                                 </button>
+                                </>
                              ) : (
                                  <span className={`text-xs font-medium px-2 py-1 rounded ${
                                      c.role === 'Owner' ? 'bg-purple-100 text-purple-700' :
