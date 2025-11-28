@@ -14,8 +14,8 @@ export default async function handler(req, res) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
   // CRITICAL: This email must be verified in SendGrid (Settings > Sender Authentication)
-  // If SENDGRID_FROM_EMAIL is not set, it defaults to a placeholder which WILL FAIL if not verified.
-  const from = process.env.SENDGRID_FROM_EMAIL || 'noreply@researchnexus.app';
+  // Changed default to specific user email as requested.
+  const from = process.env.SENDGRID_FROM_EMAIL || 'trunglehai.hvnh@gmail.com';
 
   const msg = {
     to,
