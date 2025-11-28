@@ -4,14 +4,34 @@ import { Project, Idea, Reminder, Course, PersonalGoal, Habit, JournalEntry, Aca
 // Singleton instance variable
 let aiInstance: GoogleGenAI | null = null;
 
+// Centralized Error Handler
+const handleGeminiError = (error: unknown, context: string): string => {
+    console.error(`Gemini Error in ${context}:`, error);
+    if (error instanceof Error) {
+        if (error.message.includes("API Key is missing")) {
+            return "Error: API_KEY is missing. Please set it in your Vercel Environment Variables and redeploy.";
+        }
+        if (error.message.toLowerCase().includes("api key not valid")) {
+            return "Error: The provided API Key is not valid. Please verify it in your Vercel settings and ensure it has the Gemini API enabled in Google AI Studio.";
+        }
+        if (error.message.toLowerCase().includes("fetch failed")) {
+            return "Error: Network request failed. Please check your internet connection and Vercel's network configuration.";
+        }
+        // Google often returns detailed messages in a 400 or 500 error.
+        return `Error in ${context}: ${error.message}`;
+    }
+    return `An unknown error occurred in ${context}.`;
+};
+
+
 // Lazy initialization function
 const getGenAI = (): GoogleGenAI => {
   if (!aiInstance) {
-    // Access process.env directly as polyfilled by vite.config.ts
-    const apiKey = process.env.API_KEY;
+    // Access process.env directly, checking for multiple common names
+    const apiKey = process.env.API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("API_KEY is missing. Please set it in Vercel Environment Variables.");
-      throw new Error("API Key is missing in environment variables");
+      console.error("API_KEY is missing. Please set API_KEY, GOOGLE_API_KEY, or GEMINI_API_KEY in Vercel Environment Variables.");
+      throw new Error("API Key is missing. Check Vercel settings and ensure either API_KEY, GOOGLE_API_KEY, or GEMINI_API_KEY is set, then redeploy.");
     }
     aiInstance = new GoogleGenAI({ apiKey });
   }
@@ -199,8 +219,7 @@ export const sendChatMessage = async (
     const result = await chat.sendMessage({ message: newMessage });
     return result.text || "I'm sorry, I couldn't generate a response.";
   } catch (error) {
-    console.error("Gemini Chat Error:", error);
-    return "Error: Unable to connect to AI. Please check if your API Key is configured in Vercel settings.";
+    return handleGeminiError(error, "Chat");
   }
 };
 
@@ -230,8 +249,7 @@ export const expandResearchIdea = async (ideaTitle: string, currentContent: stri
 
     return response.text || "Could not expand idea.";
   } catch (error) {
-    console.error("Gemini Idea Expansion Error:", error);
-    throw error;
+    throw new Error(handleGeminiError(error, "Idea Expansion"));
   }
 };
 
@@ -259,8 +277,7 @@ export const structureIdeaContent = async (content: string): Promise<string> => 
 
     return response.text || content;
   } catch (error) {
-    console.error("Gemini Structure Error:", error);
-    return content;
+    throw new Error(handleGeminiError(error, "Structuring Notes"));
   }
 };
 
@@ -292,8 +309,7 @@ export const brainstormRelatedTopics = async (title: string, content: string): P
 
     return JSON.parse(response.text || '[]');
   } catch (error) {
-    console.error("Gemini Brainstorm Error:", error);
-    return [];
+    throw new Error(handleGeminiError(error, "Brainstorming"));
   }
 };
 
@@ -310,8 +326,7 @@ export const summarizeText = async (text: string): Promise<string> => {
 
     return response.text || "No summary available.";
   } catch (error) {
-    console.error("Gemini Summarize Error:", error);
-    return "Error generating summary.";
+    return handleGeminiError(error, "Summarization");
   }
 };
 
@@ -352,8 +367,7 @@ export const suggestProjectSchedule = async (projectTitle: string, status: strin
         if (!text) return [];
         return JSON.parse(text);
     } catch (error) {
-        console.error("Gemini Schedule Error:", error);
-        return [];
+        throw new Error(handleGeminiError(error, "Project Schedule"));
     }
 }
 
@@ -389,7 +403,9 @@ export const suggestTeachingPlan = async (currentCourses: string[]): Promise<{ t
             }
         });
         return JSON.parse(response.text || '[]');
-    } catch (error) { return []; }
+    } catch (error) { 
+        throw new Error(handleGeminiError(error, "Teaching Plan"));
+    }
 }
 
 /**
@@ -423,7 +439,9 @@ export const suggestAdminPlan = async (): Promise<{ title: string; daysFromNow: 
             }
         });
         return JSON.parse(response.text || '[]');
-    } catch (error) { return []; }
+    } catch (error) { 
+        throw new Error(handleGeminiError(error, "Admin Plan"));
+    }
 }
 
 /**
@@ -457,7 +475,9 @@ export const suggestPersonalPlan = async (goals: string[]): Promise<{ title: str
             }
         });
         return JSON.parse(response.text || '[]');
-    } catch (error) { return []; }
+    } catch (error) { 
+        throw new Error(handleGeminiError(error, "Personal Plan"));
+    }
 }
 
 /**
@@ -486,8 +506,7 @@ export const generateGoalMilestones = async (goal: string, target: string): Prom
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { 
-        console.error("Gemini Goal Plan Error:", error);
-        return ["Define start date", "Track first week progress", "Review mid-term results"]; 
+        throw new Error(handleGeminiError(error, "Goal Milestones"));
     }
 }
 
@@ -521,7 +540,9 @@ export const suggestJournalPlan = async (date: string): Promise<{ text: string, 
             }
         });
         return JSON.parse(response.text || '[]');
-    } catch (error) { return []; }
+    } catch (error) { 
+        throw new Error(handleGeminiError(error, "Journal Plan"));
+    }
 }
 
 /**
@@ -556,8 +577,7 @@ export const generateDailyTasksFromDescription = async (description: string, dat
         });
         return JSON.parse(response.text || '[]');
     } catch (error) { 
-        console.error("Gemini Daily Task Gen Error:", error);
-        return []; 
+        throw new Error(handleGeminiError(error, "Daily Tasks"));
     }
 }
 
@@ -611,11 +631,7 @@ export const generateProjectDetails = async (title: string, description: string)
         if (!text) throw new Error("No response from AI");
         return JSON.parse(text);
     } catch (error) {
-        console.error("Gemini Project Gen Error:", error);
-        return { 
-            tasks: [{ title: "Initial Literature Review", priority: "high", daysFromNow: 3 }], 
-            questions: ["What is the primary impact of this research?"] 
-        };
+        throw new Error(handleGeminiError(error, "Project Details"));
     }
 }
 
@@ -647,8 +663,7 @@ export const generateCourseImage = async (courseName: string): Promise<string | 
         }
         return null;
     } catch (error) {
-        console.error("Gemini Image Gen Error:", error);
-        return null;
+        throw new Error(handleGeminiError(error, "Course Image"));
     }
 };
 
@@ -690,7 +705,6 @@ export const generateProjectBriefing = async (project: Project): Promise<string>
 
         return response.text || "Could not generate project briefing.";
     } catch (error) {
-        console.error("Gemini Project Briefing Error:", error);
-        return "Error: Could not connect to AI to generate briefing.";
+        return handleGeminiError(error, "Project Briefing");
     }
 };

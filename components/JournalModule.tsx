@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Save, Plus, Trash2, ChevronLeft, ChevronRight, Sparkles, Loader2, Bot, X, StickyNote as NoteIcon, Briefcase, Lightbulb, PenTool, Maximize2, MoreHorizontal } from 'lucide-react';
 import { JournalEntry, StickyNote, Idea, AcademicYearDoc } from '../types';
