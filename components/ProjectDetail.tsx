@@ -684,6 +684,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                  onUpdateProject({ ...project, collaborators: [...project.collaborators, newCollab] });
              }
         }
+
+        const handleUpdateRole = (memberId: string, newRole: Collaborator['role']) => {
+            const updatedCollaborators = project.collaborators.map(c => 
+                c.id === memberId ? { ...c, role: newRole } : c
+            );
+            onUpdateProject({ ...project, collaborators: updatedCollaborators });
+        };
         
         return (
             <div className="p-6 h-full overflow-y-auto">
@@ -715,7 +722,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                             </div>
                                         </td>
                                         <td className="py-3 px-4">
-                                            <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600">{c.role}</span>
+                                            {currentUser.role === 'Owner' && c.id !== currentUser.id ? (
+                                                <select 
+                                                    value={c.role}
+                                                    onChange={(e) => handleUpdateRole(c.id, e.target.value as Collaborator['role'])}
+                                                    className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer hover:bg-slate-200 transition-colors"
+                                                >
+                                                    <option value="Owner">Owner</option>
+                                                    <option value="Editor">Editor</option>
+                                                    <option value="Viewer">Viewer</option>
+                                                    <option value="Guest">Guest</option>
+                                                </select>
+                                            ) : (
+                                                <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600">{c.role}</span>
+                                            )}
                                         </td>
                                         <td className="py-3 px-4 text-sm text-slate-500">{c.email}</td>
                                         <td className="py-3 px-4 text-right">
