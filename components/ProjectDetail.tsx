@@ -29,9 +29,10 @@ interface TaskCardProps {
     task: Task;
     project: Project;
     onClick: () => void;
+    onDragStart: (e: React.DragEvent, taskId: string) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick, onDragStart }) => {
     const assignees = (project.collaborators || []).filter(c => task.assigneeIds?.includes(c.id));
 
     const priorityColor = {
@@ -41,8 +42,13 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick }) => {
     }[task.priority];
     
     return (
-        <div onClick={onClick} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm group hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer">
-            <p className="text-sm font-medium text-slate-800 line-clamp-2 mb-3">{task.title}</p>
+        <div 
+            draggable
+            onDragStart={(e) => onDragStart(e, task.id)}
+            onClick={onClick} 
+            className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm group hover:shadow-md hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing"
+        >
+            <p className="text-sm font-medium text-slate-800 line-clamp-2 mb-3 select-none">{task.title}</p>
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                     <div className="flex items-center gap-1">
@@ -517,6 +523,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         setAddingTaskStatus(null);
     };
 
+    // --- DRAG AND DROP HANDLERS ---
+    const handleDragStart = (e: React.DragEvent, taskId: string) => {
+        e.dataTransfer.setData("taskId", taskId);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault(); // Necessary to allow dropping
+    };
+
+    const handleDrop = (e: React.DragEvent, newStatus: TaskStatus) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData("taskId");
+        const taskToMove = tasks.find(t => t.id === taskId);
+        
+        if (taskToMove && taskToMove.status !== newStatus) {
+            const updatedTask = { ...taskToMove, status: newStatus };
+            handleUpdateTask(updatedTask);
+        }
+    };
+
     const handleAddFile = (name: string, description: string, url: string, type: ProjectFile['type']) => {
         const newFile: ProjectFile = {
             id: Date.now().toString(),
@@ -733,7 +759,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const renderTasks = () => (
         <div className="h-full overflow-x-auto overflow-y-hidden p-6 flex gap-6">
              {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => (
-                <div key={status} className="w-80 flex flex-col h-full flex-shrink-0">
+                <div 
+                    key={status} 
+                    className="w-80 flex flex-col h-full flex-shrink-0"
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, status)}
+                >
                     <div className="flex justify-between items-center mb-4 px-1">
                         <h3 className="font-bold text-slate-700 flex items-center gap-2">
                             {status === 'todo' && <div className="w-2 h-2 rounded-full bg-sky-500"></div>}
@@ -744,9 +775,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                         </h3>
                         <button onClick={() => setAddingTaskStatus(status)} className="p-1 hover:bg-slate-200 rounded text-slate-500"><Plus className="w-4 h-4"/></button>
                     </div>
-                    <div className="flex-1 bg-slate-100/50 rounded-xl p-3 border border-slate-200 overflow-y-auto space-y-3">
+                    <div className="flex-1 bg-slate-100/50 rounded-xl p-3 border border-slate-200 overflow-y-auto space-y-3 transition-colors hover:bg-slate-100/80">
                         {tasks.filter(t => t.status === status).map(task => (
-                            <TaskCard key={task.id} task={task} project={project} onClick={() => setEditingTask(task)} />
+                            <TaskCard 
+                                key={task.id} 
+                                task={task} 
+                                project={project} 
+                                onClick={() => setEditingTask(task)}
+                                onDragStart={handleDragStart}
+                            />
                         ))}
                         <button 
                             onClick={() => setAddingTaskStatus(status)}
