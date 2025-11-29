@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Project, Collaborator, ProjectStatus } from '../types';
-import { ChevronLeft, Plus, Users, X, Briefcase, GraduationCap, Eye, PenTool } from 'lucide-react';
+import { ChevronLeft, Plus, Users, X, Briefcase, GraduationCap, Eye, PenTool, Hash } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface ProjectManagerProps {
@@ -28,6 +28,10 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [newDescription, setNewDescription] = useState('');
   const [newStatus, setNewStatus] = useState<ProjectStatus>(ProjectStatus.PLANNING);
   const [descriptionMode, setDescriptionMode] = useState<'write' | 'preview'>('write');
+  
+  // New state for tags
+  const [newTags, setNewTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
 
   const handleCreateProject = () => {
      if (!newTitle.trim() || !onAddProject) return;
@@ -37,18 +41,38 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
         title: newTitle, 
         description: newDescription, 
         status: newStatus,
-        progress: 0, tags: [], papers: [], files: [], notes: [],
+        progress: 0, 
+        tags: newTags, // Add tags to new project
+        papers: [], files: [], notes: [],
         collaborators: [currentUser], tasks: [],
         category: projectCategory as 'research' | 'admin',
     };
     onAddProject(newProject);
     
-    // Reset
+    // Reset all fields
     setNewTitle('');
     setNewDescription('');
     setNewStatus(ProjectStatus.PLANNING);
     setDescriptionMode('write');
+    setNewTags([]);
+    setTagInput('');
     setShowCreateModal(false);
+  };
+  
+  // Tag handling logic
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && tagInput.trim()) {
+          e.preventDefault();
+          const tagToAdd = tagInput.trim();
+          if (!newTags.includes(tagToAdd)) {
+              setNewTags([...newTags, tagToAdd]);
+          }
+          setTagInput('');
+      }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+      setNewTags(newTags.filter(tag => tag !== tagToRemove));
   };
 
   return (
@@ -57,7 +81,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
                         {projectCategory === 'admin' ? <Briefcase className="w-5 h-5 text-indigo-600"/> : <GraduationCap className="w-5 h-5 text-indigo-600"/>}
@@ -65,7 +89,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </h3>
                     <button onClick={() => setShowCreateModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Project Title <span className="text-red-500">*</span></label>
                         <input 
@@ -120,6 +144,28 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {/* NEW TAGS INPUT */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Topics / Tags</label>
+                        <div className="flex flex-wrap items-center gap-2 p-2 border border-slate-300 rounded-lg min-h-[42px] focus-within:ring-2 focus-within:ring-indigo-500">
+                            {newTags.map(tag => (
+                                <span key={tag} className="flex items-center gap-1 bg-pink-100 text-pink-700 px-2 py-1 rounded-full text-xs font-medium animate-in fade-in zoom-in-95">
+                                    {tag}
+                                    <button onClick={() => removeTag(tag)} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
+                                </span>
+                            ))}
+                            <input 
+                                className="flex-1 bg-transparent outline-none text-sm min-w-[120px]"
+                                placeholder="Add a tag..."
+                                value={tagInput}
+                                onChange={e => setTagInput(e.target.value)}
+                                onKeyDown={handleTagInputKeyDown}
+                            />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1 pl-1">Press Enter to add a tag.</p>
+                    </div>
+
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
                     <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
