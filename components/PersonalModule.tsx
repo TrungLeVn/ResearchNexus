@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot, ChevronLeft } from 'lucide-react';
+import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot, ChevronLeft, CalendarDays, BarChart2 } from 'lucide-react';
 import { PersonalGoal, Habit, GoalMilestone, GoalLog } from '../types';
 import { generateGoalMilestones } from '../services/gemini';
 import { subscribeToPersonalGoals, subscribeToHabits, savePersonalGoal, deletePersonalGoal, saveHabit, deleteHabit } from '../services/firebase';
@@ -262,25 +262,54 @@ const calculateStreak = (history: string[]) => {
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     
     // If not done today AND not done yesterday, streak is 0
-    if (!sorted.includes(today) && !sorted.includes(yesterday)) return 0;
-
-    let streak = 0;
-    let current = new Date(); // Start checking from today
+    // But logically, if I did it yesterday, streak is active even if I haven't done it TODAY yet.
+    // However, usually streak displays "Current Streak". If I miss today, it doesn't break UNTIL tomorrow.
+    // Simple logic: consecutive days starting from latest entry going back.
     
-    // If today is not done, start checking from yesterday
-    if (!sorted.includes(today)) {
-        current.setDate(current.getDate() - 1);
-    }
-
-    while (true) {
-        const dateStr = current.toISOString().split('T')[0];
-        if (sorted.includes(dateStr)) {
+    let streak = 1;
+    let currentIdx = 0;
+    
+    // Check gaps
+    for (let i = 0; i < sorted.length - 1; i++) {
+        const curr = new Date(sorted[i]);
+        const prev = new Date(sorted[i+1]);
+        const diffTime = Math.abs(curr.getTime() - prev.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        
+        if (diffDays === 1) {
             streak++;
-            current.setDate(current.getDate() - 1);
         } else {
             break;
         }
     }
+    
+    // Check if the latest entry is too old (broken streak)
+    const lastEntry = new Date(sorted[0]);
+    const diffToToday = Math.ceil((new Date().getTime() - lastEntry.getTime()) / (1000 * 60 * 60 * 24));
+    // If difference is > 1 (meaning more than 24h passed since "today"), streak might be considered broken depending on definition.
+    // For simplicity, we just return the consecutive count of the latest chain.
+    
+    // If user hasn't done it for a week, calculateStreak might return 5 (from last week). 
+    // We should reset if last entry is > 1 day ago (yesterday).
+    
+    // diffToToday: 
+    // If today is 10th, last entry 10th => 0 days. Streak Valid.
+    // If today is 10th, last entry 9th => 1 day. Streak Valid.
+    // If today is 10th, last entry 8th => 2 days. Streak Broken? Yes.
+    
+    // Note: new Date() includes time, sorted[0] is just date. Normalize both to midnight or compare dates string.
+    const todayDate = new Date();
+    todayDate.setHours(0,0,0,0);
+    const lastEntryDate = new Date(sorted[0]);
+    lastEntryDate.setHours(0,0,0,0);
+    
+    // Since we create dates from string YYYY-MM-DD, they might be UTC. 
+    // It's safer to compare ISO strings.
+    
+    const dayDiff = (todayDate.getTime() - lastEntryDate.getTime()) / (1000 * 3600 * 24);
+    
+    if (dayDiff > 1) return 0;
+
     return streak;
 };
 
@@ -295,6 +324,7 @@ export const PersonalModule: React.FC = () => {
     
     // Calendar State
     const [viewDate, setViewDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(new Date());
 
     useEffect(() => {
         const unsubGoals = subscribeToPersonalGoals(setGoals);
@@ -340,7 +370,7 @@ export const PersonalModule: React.FC = () => {
         }
     };
 
-    const toggleHabitDate = (habit: Habit, dateStr: string) => {
+    const toggleHabitForDate = (habit: Habit, dateStr: string) => {
         let newHistory;
         if (habit.history.includes(dateStr)) {
             newHistory = habit.history.filter(d => d !== dateStr);
@@ -352,11 +382,6 @@ export const PersonalModule: React.FC = () => {
         saveHabit({ ...habit, history: newHistory, streak: newStreak });
     };
 
-    const isHabitDoneToday = (habit: Habit) => {
-        const today = new Date().toISOString().split('T')[0];
-        return habit.history.includes(today);
-    };
-
     const getCategoryIcon = (category: PersonalGoal['category']) => {
         if (category === 'Fitness') return <Dumbbell className="w-5 h-5 text-red-500" />;
         if (category === 'Learning') return <Book className="w-5 h-5 text-blue-500" />;
@@ -364,7 +389,21 @@ export const PersonalModule: React.FC = () => {
     };
     
     const currentMonthDays = getDaysInMonth(viewDate);
+    const selectedDateStr = selectedDate.toISOString().split('T')[0];
     const todayStr = new Date().toISOString().split('T')[0];
+
+    // Calculate daily completion status for color coding
+    const getDayCompletionColor = (dateStr: string) => {
+        if (habits.length === 0) return 'bg-slate-50 text-slate-400';
+        
+        const completedCount = habits.filter(h => h.history.includes(dateStr)).length;
+        const percentage = completedCount / habits.length;
+
+        if (percentage === 0) return 'bg-slate-50 text-slate-400 hover:bg-slate-100';
+        if (percentage < 0.4) return 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200';
+        if (percentage < 0.8) return 'bg-emerald-300 text-emerald-800 hover:bg-emerald-400';
+        return 'bg-emerald-500 text-white shadow-sm hover:bg-emerald-600';
+    };
 
     return (
         <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
@@ -397,10 +436,12 @@ export const PersonalModule: React.FC = () => {
                 </div>
             </header>
 
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
-                {/* Goals */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4">
-                     <h3 className="font-semibold text-slate-700 mb-4 px-2">Active Goals</h3>
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
+                {/* Left Column: Goals */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4 overflow-hidden">
+                     <h3 className="font-semibold text-slate-700 mb-4 px-2 flex items-center gap-2">
+                        <Star className="w-5 h-5 text-amber-500" /> Active Goals
+                     </h3>
                      <div className="flex-1 overflow-y-auto space-y-3 pr-2">
                          {goals.map(goal => (
                              <div 
@@ -430,94 +471,117 @@ export const PersonalModule: React.FC = () => {
                      </div>
                 </div>
 
-                {/* Habits */}
+                {/* Right Column: Unified Habit Tracker */}
                 <div className="flex flex-col gap-6 h-full overflow-hidden">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4 h-full">
-                        <div className="flex justify-between items-center mb-4 px-2">
-                            <h3 className="font-semibold text-slate-700">Habit Tracker</h3>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() - 1)))} className="hover:text-slate-800"><ChevronLeft className="w-4 h-4" /></button>
-                                <span className="font-medium w-20 text-center">{viewDate.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
-                                <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() + 1)))} className="hover:text-slate-800"><ChevronRight className="w-4 h-4" /></button>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full">
+                        {/* Calendar Header */}
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                                <CalendarDays className="w-5 h-5 text-indigo-600" /> Habit Calendar
+                            </h3>
+                            <div className="flex items-center gap-2 text-sm text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                                <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() - 1)))} className="hover:bg-slate-100 p-1 rounded"><ChevronLeft className="w-4 h-4" /></button>
+                                <span className="font-bold w-24 text-center text-slate-800">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+                                <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() + 1)))} className="hover:bg-slate-100 p-1 rounded"><ChevronRight className="w-4 h-4" /></button>
                             </div>
                         </div>
                         
-                        <div className="space-y-4 overflow-y-auto pr-1 flex-1">
-                            {habits.map(habit => (
-                                <div key={habit.id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex items-center gap-3">
-                                            <button 
-                                                onClick={() => toggleHabitDate(habit, todayStr)}
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-sm ${isHabitDoneToday(habit) ? 'bg-emerald-500 text-white' : 'bg-white border-2 border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'}`}
+                        {/* Master Calendar Grid */}
+                        <div className="p-4">
+                            <div className="grid grid-cols-7 gap-2 mb-2">
+                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                                    <div key={i} className="text-[10px] font-bold text-slate-400 uppercase text-center">{d}</div>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-2">
+                                {Array.from({ length: currentMonthDays[0].getDay() }).map((_, i) => (
+                                    <div key={`empty-${i}`} className="w-full aspect-square"></div>
+                                ))}
+                                {currentMonthDays.map((date) => {
+                                    const dateStr = date.toISOString().split('T')[0];
+                                    const isSelected = dateStr === selectedDateStr;
+                                    const isToday = dateStr === todayStr;
+                                    const colorClass = getDayCompletionColor(dateStr);
+                                    
+                                    return (
+                                        <button 
+                                            key={dateStr} 
+                                            onClick={() => setSelectedDate(date)}
+                                            className={`w-full aspect-square rounded-lg flex flex-col items-center justify-center transition-all relative ${colorClass} ${
+                                                isSelected ? 'ring-2 ring-indigo-600 ring-offset-2 z-10' : ''
+                                            }`}
+                                        >
+                                            <span className={`text-xs ${isToday ? 'font-bold underline' : ''}`}>{date.getDate()}</span>
+                                            {/* Optional: Dot for perfect day */}
+                                            {habits.length > 0 && habits.every(h => h.history.includes(dateStr)) && (
+                                                 <div className="w-1 h-1 rounded-full bg-white mt-0.5"></div>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Daily Check-in List */}
+                        <div className="flex-1 bg-slate-50 p-4 border-t border-slate-200 overflow-y-auto">
+                            <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                Check-ins for {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </h4>
+                            
+                            <div className="space-y-2 mb-4">
+                                {habits.map(habit => {
+                                    const isDone = habit.history.includes(selectedDateStr);
+                                    return (
+                                        <div key={habit.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200 shadow-sm group">
+                                            <div 
+                                                className="flex items-center gap-3 cursor-pointer flex-1"
+                                                onClick={() => toggleHabitForDate(habit, selectedDateStr)}
                                             >
-                                                <Check className="w-5 h-5" />
-                                            </button>
-                                            <div>
-                                                <span className="font-bold text-slate-700 block">{habit.title}</span>
-                                                <div className="flex items-center gap-1 text-amber-500 text-xs font-bold mt-0.5">
-                                                    <TrendingUp className="w-3 h-3" />
-                                                    {habit.streak} day streak
+                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                                    isDone ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-slate-50'
+                                                }`}>
+                                                    {isDone && <Check className="w-3.5 h-3.5 text-white" />}
                                                 </div>
+                                                <span className={`text-sm font-medium ${isDone ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                                    {habit.title}
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded-full">
+                                                    <TrendingUp className="w-3 h-3" />
+                                                    {habit.streak}
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleDeleteHabit(habit.id)}
+                                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={() => handleDeleteHabit(habit.id)}
-                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                            title="Delete Habit"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                    );
+                                })}
+                                {habits.length === 0 && (
+                                    <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-lg">
+                                        <p className="text-sm text-slate-400">No habits tracked yet.</p>
                                     </div>
-                                    
-                                    {/* Monthly Mini Calendar Visualization */}
-                                    <div className="pt-2 border-t border-slate-200">
-                                        <div className="grid grid-cols-7 gap-1 text-center mb-1">
-                                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                                                <div key={i} className="text-[9px] font-bold text-slate-400 uppercase">{d}</div>
-                                            ))}
-                                        </div>
-                                        <div className="grid grid-cols-7 gap-1">
-                                            {/* Padding for empty days at start of month */}
-                                            {Array.from({ length: currentMonthDays[0].getDay() }).map((_, i) => (
-                                                <div key={`empty-${i}`} className="w-full aspect-square"></div>
-                                            ))}
-                                            
-                                            {currentMonthDays.map((date) => {
-                                                const dateStr = date.toISOString().split('T')[0];
-                                                const isDone = habit.history.includes(dateStr);
-                                                const isToday = dateStr === todayStr;
-                                                
-                                                return (
-                                                    <button 
-                                                        key={dateStr} 
-                                                        onClick={() => toggleHabitDate(habit, dateStr)}
-                                                        className={`w-full aspect-square rounded-sm flex items-center justify-center text-[9px] transition-all hover:scale-110 ${
-                                                            isDone 
-                                                                ? 'bg-emerald-500 text-white shadow-sm' 
-                                                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                                                        } ${isToday ? 'ring-2 ring-indigo-500 ring-offset-1 z-10' : ''}`}
-                                                        title={date.toDateString()}
-                                                    >
-                                                        {date.getDate()}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            {habits.length === 0 && <p className="text-center text-sm text-slate-400 py-4 italic">No habits yet.</p>}
-                        </div>
-                        <div className="mt-4 flex gap-2 pt-4 border-t border-slate-100">
-                            <input 
-                                value={newHabit}
-                                onChange={e => setNewHabit(e.target.value)}
-                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
-                                placeholder="Add a new habit..."
-                                onKeyDown={e => e.key === 'Enter' && handleAddHabit()}
-                            />
-                            <button onClick={handleAddHabit} className="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700"><Plus className="w-4 h-4"/></button>
+                                )}
+                            </div>
+
+                            {/* Add Habit Input */}
+                            <div className="flex gap-2">
+                                <input 
+                                    value={newHabit}
+                                    onChange={e => setNewHabit(e.target.value)}
+                                    className="flex-1 border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    placeholder="Add new habit..."
+                                    onKeyDown={e => e.key === 'Enter' && handleAddHabit()}
+                                />
+                                <button onClick={handleAddHabit} className="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700">
+                                    <Plus className="w-4 h-4"/>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

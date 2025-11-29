@@ -1,3 +1,4 @@
+
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -133,6 +134,7 @@ export enum ViewState {
 
 // NEW: Admin specific view states
 export enum AdminViewState {
+    DASHBOARD = 'dashboard',
     DOCS = 'docs', // Includes Meetings
     PROJECTS = 'projects'
 }

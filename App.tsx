@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ViewState, Project, Idea, Reminder, Collaborator, ProjectStatus, AppModule, AdminViewState, SystemSettings } from './types';
 import { MOCK_USERS } from './constants';
@@ -72,7 +73,7 @@ const App: React.FC = () => {
   // Navigation State
   const [activeModule, setActiveModule] = useState<AppModule>(AppModule.RESEARCH);
   const [currentResearchView, setCurrentResearchView] = useState<ViewState>(ViewState.DASHBOARD);
-  const [currentAdminView, setCurrentAdminView] = useState<AdminViewState>(AdminViewState.DOCS);
+  const [currentAdminView, setCurrentAdminView] = useState<AdminViewState>(AdminViewState.DASHBOARD);
   
   // Data State (Managed by Firebase)
   const [projects, setProjects] = useState<Project[]>([]);
@@ -583,7 +584,7 @@ const App: React.FC = () => {
                 
                 {/* ADMIN MODULE + SUB-TABS */}
                 <button
-                    onClick={() => { setActiveModule(AppModule.ADMIN); setCurrentAdminView(AdminViewState.DOCS); setSelectedProject(null); }}
+                    onClick={() => { setActiveModule(AppModule.ADMIN); setCurrentAdminView(AdminViewState.DASHBOARD); setSelectedProject(null); }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 mb-1 ${
                         activeModule === AppModule.ADMIN && currentResearchView !== ViewState.SETTINGS
                             ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
@@ -596,6 +597,7 @@ const App: React.FC = () => {
                 
                 {activeModule === AppModule.ADMIN && currentResearchView !== ViewState.SETTINGS && (
                     <div className="ml-4 pl-4 border-l-2 border-slate-100 space-y-1 mb-4 animate-in slide-in-from-left-2 duration-200">
+                        <button onClick={() => setCurrentAdminView(AdminViewState.DASHBOARD)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${currentAdminView === AdminViewState.DASHBOARD ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'}`}><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> Dashboard</button>
                         <button onClick={() => setCurrentAdminView(AdminViewState.DOCS)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${currentAdminView === AdminViewState.DOCS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'}`}><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Docs & Meetings</button>
                         <button onClick={() => setCurrentAdminView(AdminViewState.PROJECTS)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${currentAdminView === AdminViewState.PROJECTS ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-slate-500 hover:text-slate-800'}`}><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Admin Projects</button>
                     </div>
@@ -625,7 +627,7 @@ const App: React.FC = () => {
                 />
                  <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                    className="w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all duration-200 text-slate-500 hover:bg-red-50 hover:text-red-600"
                 >
                     <LogOut className="w-5 h-5" />
                     <span className="font-medium">Sign Out</span>
