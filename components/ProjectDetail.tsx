@@ -5,11 +5,12 @@ import {
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
     Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
-    ClipboardList, Megaphone, Table, Loader2, AlertTriangle
+    ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
 import { sendEmailNotification } from '../services/email';
+import ReactMarkdown from 'react-markdown';
 
 interface ProjectDetailProps {
   project: Project;
@@ -759,6 +760,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     // File State
     const [isAddingFile, setIsAddingFile] = useState<null | 'draft' | 'code' | 'other'>(null);
     const [isManagingTags, setIsManagingTags] = useState(false);
+    
+    // Description Edit State
+    const [isEditingDescription, setIsEditingDescription] = useState(false);
+    const [tempDescription, setTempDescription] = useState('');
 
     // View State
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
@@ -870,9 +875,56 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const renderDashboard = () => (
         <div className="p-6 h-full overflow-y-auto animate-in fade-in duration-300">
              {/* Header Section with Description & Tags */}
-             <div className="mb-8">
-                <p className="text-slate-600 mb-4 text-lg">{project.description || "No description provided."}</p>
-                <div className="flex flex-wrap gap-2 items-center">
+             <div className="mb-8 group relative">
+                {isEditingDescription ? (
+                    <div className="space-y-3 bg-white p-4 rounded-lg border border-indigo-200 shadow-sm">
+                        <label className="text-xs font-bold text-indigo-600 uppercase">Edit Description</label>
+                        <textarea
+                            className="w-full p-3 border border-slate-300 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none font-sans min-h-[120px]"
+                            value={tempDescription}
+                            onChange={(e) => setTempDescription(e.target.value)}
+                            rows={4}
+                            placeholder="Enter project description (Markdown supported)..."
+                        />
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                onClick={() => setIsEditingDescription(false)}
+                                className="px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    onUpdateProject({ ...project, description: tempDescription });
+                                    setIsEditingDescription(false);
+                                }}
+                                className="px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium flex items-center gap-2"
+                            >
+                                <Save className="w-3.5 h-3.5" /> Save Changes
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-start justify-between">
+                        <div className="text-slate-600 mb-4 text-lg prose prose-slate max-w-none flex-1">
+                            {project.description ? <ReactMarkdown>{project.description}</ReactMarkdown> : <span className="text-slate-400 italic">No description provided.</span>}
+                        </div>
+                        {!isGuestView && (
+                            <button
+                                onClick={() => {
+                                    setTempDescription(project.description || '');
+                                    setIsEditingDescription(true);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                title="Edit Description"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                )}
+                
+                <div className="flex flex-wrap gap-2 items-center mt-2">
                     {(project.tags || []).map(tag => (
                         <span key={tag} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-sm font-medium border border-pink-100">
                             #{tag}
