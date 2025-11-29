@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot, ChevronLeft, CalendarDays, BarChart2 } from 'lucide-react';
+import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot, ChevronLeft, CalendarDays, BarChart2, Eye, EyeOff } from 'lucide-react';
 import { PersonalGoal, Habit, GoalMilestone, GoalLog } from '../types';
 import { generateGoalMilestones } from '../services/gemini';
 import { subscribeToPersonalGoals, subscribeToHabits, savePersonalGoal, deletePersonalGoal, saveHabit, deleteHabit } from '../services/firebase';
@@ -258,21 +258,18 @@ const calculateStreak = (history: string[]) => {
     
     // Sort desc
     const sorted = [...history].sort().reverse();
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    
-    // If not done today AND not done yesterday, streak is 0
-    // But logically, if I did it yesterday, streak is active even if I haven't done it TODAY yet.
-    // However, usually streak displays "Current Streak". If I miss today, it doesn't break UNTIL tomorrow.
-    // Simple logic: consecutive days starting from latest entry going back.
     
     let streak = 1;
-    let currentIdx = 0;
     
     // Check gaps
     for (let i = 0; i < sorted.length - 1; i++) {
         const curr = new Date(sorted[i]);
         const prev = new Date(sorted[i+1]);
+        
+        // Normalize time
+        curr.setHours(0,0,0,0);
+        prev.setHours(0,0,0,0);
+
         const diffTime = Math.abs(curr.getTime() - prev.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
         
@@ -283,28 +280,11 @@ const calculateStreak = (history: string[]) => {
         }
     }
     
-    // Check if the latest entry is too old (broken streak)
-    const lastEntry = new Date(sorted[0]);
-    const diffToToday = Math.ceil((new Date().getTime() - lastEntry.getTime()) / (1000 * 60 * 60 * 24));
-    // If difference is > 1 (meaning more than 24h passed since "today"), streak might be considered broken depending on definition.
-    // For simplicity, we just return the consecutive count of the latest chain.
-    
-    // If user hasn't done it for a week, calculateStreak might return 5 (from last week). 
-    // We should reset if last entry is > 1 day ago (yesterday).
-    
-    // diffToToday: 
-    // If today is 10th, last entry 10th => 0 days. Streak Valid.
-    // If today is 10th, last entry 9th => 1 day. Streak Valid.
-    // If today is 10th, last entry 8th => 2 days. Streak Broken? Yes.
-    
-    // Note: new Date() includes time, sorted[0] is just date. Normalize both to midnight or compare dates string.
+    // Validate if current streak is still active (i.e. last entry was today or yesterday)
     const todayDate = new Date();
     todayDate.setHours(0,0,0,0);
     const lastEntryDate = new Date(sorted[0]);
     lastEntryDate.setHours(0,0,0,0);
-    
-    // Since we create dates from string YYYY-MM-DD, they might be UTC. 
-    // It's safer to compare ISO strings.
     
     const dayDiff = (todayDate.getTime() - lastEntryDate.getTime()) / (1000 * 3600 * 24);
     
@@ -325,6 +305,10 @@ export const PersonalModule: React.FC = () => {
     // Calendar State
     const [viewDate, setViewDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
+    
+    // Focus State (for visualizing one habit on the calendar)
+    const [focusedHabitId, setFocusedHabitId] = useState<string | null>(null);
+    const [hoveredHabitId, setHoveredHabitId] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubGoals = subscribeToPersonalGoals(setGoals);
@@ -367,6 +351,7 @@ export const PersonalModule: React.FC = () => {
     const handleDeleteHabit = (id: string) => {
         if(window.confirm("Are you sure you want to delete this habit and its history?")) {
             deleteHabit(id);
+            if (focusedHabitId === id) setFocusedHabitId(null);
         }
     };
 
@@ -392,8 +377,21 @@ export const PersonalModule: React.FC = () => {
     const selectedDateStr = selectedDate.toISOString().split('T')[0];
     const todayStr = new Date().toISOString().split('T')[0];
 
+    // Determine which habit to visualize on the calendar (Focused or Hovered)
+    const activeVisualHabitId = hoveredHabitId || focusedHabitId;
+
     // Calculate daily completion status for color coding
     const getDayCompletionColor = (dateStr: string) => {
+        // If focusing on a specific habit, show binary status (Done/Not Done)
+        if (activeVisualHabitId) {
+            const habit = habits.find(h => h.id === activeVisualHabitId);
+            if (habit && habit.history.includes(dateStr)) {
+                return 'bg-indigo-600 text-white shadow-md';
+            }
+            return 'bg-slate-50 text-slate-300';
+        }
+
+        // Aggregate View
         if (habits.length === 0) return 'bg-slate-50 text-slate-400';
         
         const completedCount = habits.filter(h => h.history.includes(dateStr)).length;
@@ -476,9 +474,18 @@ export const PersonalModule: React.FC = () => {
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full">
                         {/* Calendar Header */}
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
-                            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                                <CalendarDays className="w-5 h-5 text-indigo-600" /> Habit Calendar
-                            </h3>
+                            <div>
+                                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                                    <CalendarDays className="w-5 h-5 text-indigo-600" /> Habit Calendar
+                                </h3>
+                                {activeVisualHabitId ? (
+                                    <p className="text-xs text-indigo-600 font-medium mt-1 ml-7 flex items-center gap-1">
+                                        <Eye className="w-3 h-3" /> Viewing: {habits.find(h => h.id === activeVisualHabitId)?.title}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-slate-400 mt-1 ml-7">Overview Mode</p>
+                                )}
+                            </div>
                             <div className="flex items-center gap-2 text-sm text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
                                 <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() - 1)))} className="hover:bg-slate-100 p-1 rounded"><ChevronLeft className="w-4 h-4" /></button>
                                 <span className="font-bold w-24 text-center text-slate-800">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
@@ -513,7 +520,7 @@ export const PersonalModule: React.FC = () => {
                                         >
                                             <span className={`text-xs ${isToday ? 'font-bold underline' : ''}`}>{date.getDate()}</span>
                                             {/* Optional: Dot for perfect day */}
-                                            {habits.length > 0 && habits.every(h => h.history.includes(dateStr)) && (
+                                            {!activeVisualHabitId && habits.length > 0 && habits.every(h => h.history.includes(dateStr)) && (
                                                  <div className="w-1 h-1 rounded-full bg-white mt-0.5"></div>
                                             )}
                                         </button>
@@ -531,8 +538,17 @@ export const PersonalModule: React.FC = () => {
                             <div className="space-y-2 mb-4">
                                 {habits.map(habit => {
                                     const isDone = habit.history.includes(selectedDateStr);
+                                    const isFocused = focusedHabitId === habit.id;
+
                                     return (
-                                        <div key={habit.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200 shadow-sm group">
+                                        <div 
+                                            key={habit.id} 
+                                            className={`flex items-center justify-between bg-white p-3 rounded-lg border shadow-sm group transition-all ${
+                                                isFocused || hoveredHabitId === habit.id ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-slate-200'
+                                            }`}
+                                            onMouseEnter={() => setHoveredHabitId(habit.id)}
+                                            onMouseLeave={() => setHoveredHabitId(null)}
+                                        >
                                             <div 
                                                 className="flex items-center gap-3 cursor-pointer flex-1"
                                                 onClick={() => toggleHabitForDate(habit, selectedDateStr)}
@@ -547,14 +563,23 @@ export const PersonalModule: React.FC = () => {
                                                 </span>
                                             </div>
                                             
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                {/* Focus Toggle */}
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setFocusedHabitId(isFocused ? null : habit.id); }}
+                                                    className={`p-1.5 rounded transition-colors ${isFocused ? 'bg-indigo-100 text-indigo-600' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}
+                                                    title={isFocused ? "Unfocus Calendar" : "Focus Calendar on this Habit"}
+                                                >
+                                                    {isFocused ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                                </button>
+
                                                 <div className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded-full">
                                                     <TrendingUp className="w-3 h-3" />
                                                     {habit.streak}
                                                 </div>
                                                 <button 
                                                     onClick={() => handleDeleteHabit(habit.id)}
-                                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
@@ -569,18 +594,21 @@ export const PersonalModule: React.FC = () => {
                                 )}
                             </div>
 
-                            {/* Add Habit Input */}
-                            <div className="flex gap-2">
-                                <input 
-                                    value={newHabit}
-                                    onChange={e => setNewHabit(e.target.value)}
-                                    className="flex-1 border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    placeholder="Add new habit..."
-                                    onKeyDown={e => e.key === 'Enter' && handleAddHabit()}
-                                />
-                                <button onClick={handleAddHabit} className="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700">
-                                    <Plus className="w-4 h-4"/>
-                                </button>
+                            {/* Habit Setup Section */}
+                            <div className="mt-6 pt-4 border-t border-slate-200">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Habit Setup</h4>
+                                <div className="flex gap-2">
+                                    <input 
+                                        value={newHabit}
+                                        onChange={e => setNewHabit(e.target.value)}
+                                        className="flex-1 border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="Define new habit..."
+                                        onKeyDown={e => e.key === 'Enter' && handleAddHabit()}
+                                    />
+                                    <button onClick={handleAddHabit} className="px-4 bg-slate-800 text-white rounded-lg hover:bg-slate-700 text-sm font-medium">
+                                        Add
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
