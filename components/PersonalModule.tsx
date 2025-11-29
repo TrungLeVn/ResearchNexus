@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot } from 'lucide-react';
+import { Target, TrendingUp, Heart, Book, Dumbbell, Star, CheckCircle, Sparkles, Loader2, Plus, Calendar, ChevronRight, Check, X, FileEdit, MessageSquare, Trash2, Bot, ChevronLeft } from 'lucide-react';
 import { PersonalGoal, Habit, GoalMilestone, GoalLog } from '../types';
 import { generateGoalMilestones } from '../services/gemini';
 import { subscribeToPersonalGoals, subscribeToHabits, savePersonalGoal, deletePersonalGoal, saveHabit, deleteHabit } from '../services/firebase';
@@ -234,14 +234,54 @@ const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goal, onClose, onUpdate
 };
 
 // --- HELPER FOR CALENDAR ---
-const getLast14Days = () => {
-    const dates = [];
-    for (let i = 13; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        dates.push(d);
+const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const days = [];
+    
+    // First day of month
+    const firstDay = new Date(year, month, 1);
+    // Last day of month
+    const lastDay = new Date(year, month + 1, 0);
+    
+    // Days in month
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+        days.push(new Date(year, month, i));
     }
-    return dates;
+    
+    return days;
+};
+
+// Recalculate streak based on history
+const calculateStreak = (history: string[]) => {
+    if (!history || history.length === 0) return 0;
+    
+    // Sort desc
+    const sorted = [...history].sort().reverse();
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    
+    // If not done today AND not done yesterday, streak is 0
+    if (!sorted.includes(today) && !sorted.includes(yesterday)) return 0;
+
+    let streak = 0;
+    let current = new Date(); // Start checking from today
+    
+    // If today is not done, start checking from yesterday
+    if (!sorted.includes(today)) {
+        current.setDate(current.getDate() - 1);
+    }
+
+    while (true) {
+        const dateStr = current.toISOString().split('T')[0];
+        if (sorted.includes(dateStr)) {
+            streak++;
+            current.setDate(current.getDate() - 1);
+        } else {
+            break;
+        }
+    }
+    return streak;
 };
 
 // --- MAIN COMPONENT ---
@@ -253,6 +293,9 @@ export const PersonalModule: React.FC = () => {
     const [selectedGoal, setSelectedGoal] = useState<PersonalGoal | null>(null);
     const [newHabit, setNewHabit] = useState('');
     
+    // Calendar State
+    const [viewDate, setViewDate] = useState(new Date());
+
     useEffect(() => {
         const unsubGoals = subscribeToPersonalGoals(setGoals);
         const unsubHabits = subscribeToHabits(setHabits);
@@ -269,7 +312,6 @@ export const PersonalModule: React.FC = () => {
 
     const handleUpdateGoal = (goal: PersonalGoal) => {
         savePersonalGoal(goal);
-        // Also update selectedGoal if it's open
         if (selectedGoal && selectedGoal.id === goal.id) {
             setSelectedGoal(goal);
         }
@@ -298,17 +340,16 @@ export const PersonalModule: React.FC = () => {
         }
     };
 
-    const handleTrackHabit = (habit: Habit) => {
-        const today = new Date().toISOString().split('T')[0];
-        if (habit.history.includes(today)) return; // Already tracked today
+    const toggleHabitDate = (habit: Habit, dateStr: string) => {
+        let newHistory;
+        if (habit.history.includes(dateStr)) {
+            newHistory = habit.history.filter(d => d !== dateStr);
+        } else {
+            newHistory = [...habit.history, dateStr];
+        }
         
-        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-        // If they did it yesterday, increment streak. Else reset to 1.
-        // Simple logic: check if history includes yesterday.
-        const streakContinues = habit.history.includes(yesterday);
-        const newStreak = streakContinues ? habit.streak + 1 : 1;
-        
-        saveHabit({ ...habit, history: [...habit.history, today], streak: newStreak });
+        const newStreak = calculateStreak(newHistory);
+        saveHabit({ ...habit, history: newHistory, streak: newStreak });
     };
 
     const isHabitDoneToday = (habit: Habit) => {
@@ -322,7 +363,8 @@ export const PersonalModule: React.FC = () => {
         return <Star className="w-5 h-5 text-amber-500" />;
     };
     
-    const last14Days = getLast14Days();
+    const currentMonthDays = getDaysInMonth(viewDate);
+    const todayStr = new Date().toISOString().split('T')[0];
 
     return (
         <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
@@ -389,18 +431,25 @@ export const PersonalModule: React.FC = () => {
                 </div>
 
                 {/* Habits */}
-                <div className="flex flex-col gap-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4">
-                        <h3 className="font-semibold text-slate-700 mb-4 px-2">Habit Tracker</h3>
-                        <div className="space-y-4 overflow-y-auto max-h-[600px] pr-1">
+                <div className="flex flex-col gap-6 h-full overflow-hidden">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-4 h-full">
+                        <div className="flex justify-between items-center mb-4 px-2">
+                            <h3 className="font-semibold text-slate-700">Habit Tracker</h3>
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() - 1)))} className="hover:text-slate-800"><ChevronLeft className="w-4 h-4" /></button>
+                                <span className="font-medium w-20 text-center">{viewDate.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
+                                <button onClick={() => setViewDate(new Date(viewDate.setMonth(viewDate.getMonth() + 1)))} className="hover:text-slate-800"><ChevronRight className="w-4 h-4" /></button>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-4 overflow-y-auto pr-1 flex-1">
                             {habits.map(habit => (
                                 <div key={habit.id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-3">
                                     <div className="flex justify-between items-start">
                                         <div className="flex items-center gap-3">
                                             <button 
-                                                onClick={() => handleTrackHabit(habit)}
-                                                disabled={isHabitDoneToday(habit)}
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-sm ${isHabitDoneToday(habit) ? 'bg-emerald-500 text-white cursor-default' : 'bg-white border-2 border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'}`}
+                                                onClick={() => toggleHabitDate(habit, todayStr)}
+                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-sm ${isHabitDoneToday(habit) ? 'bg-emerald-500 text-white' : 'bg-white border-2 border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'}`}
                                             >
                                                 <Check className="w-5 h-5" />
                                             </button>
@@ -421,29 +470,37 @@ export const PersonalModule: React.FC = () => {
                                         </button>
                                     </div>
                                     
-                                    {/* 14-Day Mini Calendar Visualization */}
+                                    {/* Monthly Mini Calendar Visualization */}
                                     <div className="pt-2 border-t border-slate-200">
-                                        <div className="flex justify-between text-[9px] text-slate-400 mb-1 uppercase font-semibold">
-                                            <span>Past 14 Days</span>
-                                            <span>Today</span>
+                                        <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                                                <div key={i} className="text-[9px] font-bold text-slate-400 uppercase">{d}</div>
+                                            ))}
                                         </div>
-                                        <div className="flex justify-between gap-1">
-                                            {last14Days.map((date, i) => {
+                                        <div className="grid grid-cols-7 gap-1">
+                                            {/* Padding for empty days at start of month */}
+                                            {Array.from({ length: currentMonthDays[0].getDay() }).map((_, i) => (
+                                                <div key={`empty-${i}`} className="w-full aspect-square"></div>
+                                            ))}
+                                            
+                                            {currentMonthDays.map((date) => {
                                                 const dateStr = date.toISOString().split('T')[0];
                                                 const isDone = habit.history.includes(dateStr);
-                                                const isToday = i === 13;
+                                                const isToday = dateStr === todayStr;
+                                                
                                                 return (
-                                                    <div key={dateStr} className="flex flex-col items-center gap-1 group relative">
-                                                        <div 
-                                                            className={`w-full aspect-square rounded-sm transition-colors ${
-                                                                isDone ? 'bg-emerald-500' : 'bg-slate-200'
-                                                            } ${isToday ? 'ring-2 ring-emerald-200' : ''}`}
-                                                        />
-                                                        {/* Tooltip on Hover */}
-                                                        <div className="absolute bottom-full mb-1 bg-slate-800 text-white text-[9px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                                                            {date.toLocaleDateString(undefined, {weekday:'short', day:'numeric'})}
-                                                        </div>
-                                                    </div>
+                                                    <button 
+                                                        key={dateStr} 
+                                                        onClick={() => toggleHabitDate(habit, dateStr)}
+                                                        className={`w-full aspect-square rounded-sm flex items-center justify-center text-[9px] transition-all hover:scale-110 ${
+                                                            isDone 
+                                                                ? 'bg-emerald-500 text-white shadow-sm' 
+                                                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                                        } ${isToday ? 'ring-2 ring-indigo-500 ring-offset-1 z-10' : ''}`}
+                                                        title={date.toDateString()}
+                                                    >
+                                                        {date.getDate()}
+                                                    </button>
                                                 );
                                             })}
                                         </div>
