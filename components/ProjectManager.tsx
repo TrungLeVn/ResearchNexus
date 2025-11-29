@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { Project, Collaborator, ProjectStatus } from '../types';
-import { ChevronLeft, Plus, Users, X, Briefcase, GraduationCap } from 'lucide-react';
+import { ChevronLeft, Plus, Users, X, Briefcase, GraduationCap, Eye, PenTool } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface ProjectManagerProps {
   projects: Project[];
@@ -26,6 +27,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newStatus, setNewStatus] = useState<ProjectStatus>(ProjectStatus.PLANNING);
+  const [descriptionMode, setDescriptionMode] = useState<'write' | 'preview'>('write');
 
   const handleCreateProject = () => {
      if (!newTitle.trim() || !onAddProject) return;
@@ -45,6 +47,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
     setNewTitle('');
     setNewDescription('');
     setNewStatus(ProjectStatus.PLANNING);
+    setDescriptionMode('write');
     setShowCreateModal(false);
   };
 
@@ -86,13 +89,36 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Description / Goal</label>
-                        <textarea 
-                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px] resize-none"
-                            placeholder="Briefly describe the objectives of this project..."
-                            value={newDescription}
-                            onChange={e => setNewDescription(e.target.value)}
-                        />
+                        <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase">Description / Goal</label>
+                            <div className="flex bg-slate-100 rounded-lg p-0.5">
+                                <button 
+                                    onClick={() => setDescriptionMode('write')}
+                                    className={`px-2 py-0.5 text-xs font-medium rounded-md flex items-center gap-1 transition-all ${descriptionMode === 'write' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <PenTool className="w-3 h-3" /> Write
+                                </button>
+                                <button 
+                                    onClick={() => setDescriptionMode('preview')}
+                                    className={`px-2 py-0.5 text-xs font-medium rounded-md flex items-center gap-1 transition-all ${descriptionMode === 'preview' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <Eye className="w-3 h-3" /> Preview
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {descriptionMode === 'write' ? (
+                            <textarea 
+                                className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none min-h-[120px] resize-none font-mono"
+                                placeholder="Describe the objectives of this project... (Markdown supported)"
+                                value={newDescription}
+                                onChange={e => setNewDescription(e.target.value)}
+                            />
+                        ) : (
+                            <div className="w-full border border-slate-200 bg-slate-50 rounded-lg p-3 text-sm min-h-[120px] max-h-[200px] overflow-y-auto prose prose-sm max-w-none">
+                                {newDescription ? <ReactMarkdown>{newDescription}</ReactMarkdown> : <span className="text-slate-400 italic">No description to preview.</span>}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
