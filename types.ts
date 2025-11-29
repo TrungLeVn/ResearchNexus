@@ -94,6 +94,7 @@ export interface Project {
   notes: StickyNote[]; // Changed from string to StickyNote array
   collaborators: Collaborator[];
   tasks: Task[];
+  driveFolderUrl?: string; // Link to the main Google Drive folder for the project
   activity?: ProjectActivity[];
   category?: 'research' | 'admin'; // Differentiate between Research and Admin projects
 }

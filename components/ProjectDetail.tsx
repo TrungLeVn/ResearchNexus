@@ -5,7 +5,7 @@ import {
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
     Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
-    ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save
+    ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save, Folder
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -765,6 +765,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [tempDescription, setTempDescription] = useState('');
 
+    // Drive Link State
+    const [isEditingDriveLink, setIsEditingDriveLink] = useState(false);
+    const [tempDriveLink, setTempDriveLink] = useState('');
+
     // View State
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
 
@@ -1015,6 +1019,71 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                      <p className="text-xs text-slate-400 mt-4">Across drafts, code, & assets</p>
                  </div>
              </div>
+
+             {/* NEW: Shared Drive Folder Widget */}
+             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-8">
+                <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Folder className="w-5 h-5 text-amber-500" />
+                        Shared Drive Folder
+                    </h3>
+                    {currentUser.role === 'Owner' && !isGuestView && !isEditingDriveLink && (
+                        <button
+                            onClick={() => {
+                                setTempDriveLink(project.driveFolderUrl || '');
+                                setIsEditingDriveLink(true);
+                            }}
+                            className="text-xs font-medium text-indigo-600 hover:underline"
+                        >
+                            {project.driveFolderUrl ? 'Edit Link' : '+ Set Link'}
+                        </button>
+                    )}
+                </div>
+                <div className="mt-4">
+                    {isEditingDriveLink ? (
+                        <div className="flex gap-2 items-center">
+                            <Link className="w-4 h-4 text-slate-400 ml-1" />
+                            <input
+                                type="url"
+                                value={tempDriveLink}
+                                onChange={(e) => setTempDriveLink(e.target.value)}
+                                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                placeholder="https://drive.google.com/..."
+                                autoFocus
+                            />
+                            <button
+                                onClick={() => {
+                                    onUpdateProject({ ...project, driveFolderUrl: tempDriveLink });
+                                    setIsEditingDriveLink(false);
+                                }}
+                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium"
+                            >
+                                Save
+                            </button>
+                            <button
+                                onClick={() => setIsEditingDriveLink(false)}
+                                className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    ) : project.driveFolderUrl ? (
+                        <a
+                            href={project.driveFolderUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm"
+                        >
+                            <Link className="w-4 h-4" />
+                            Open Project Folder
+                        </a>
+                    ) : (
+                        <p className="text-sm text-slate-400 italic">
+                            No shared folder linked. {currentUser.role === 'Owner' && 'Click "Set Link" to add one.'}
+                        </p>
+                    )}
+                </div>
+            </div>
 
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                  {/* Charts */}

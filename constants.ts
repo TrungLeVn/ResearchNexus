@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { Project, ProjectStatus, Idea, Reminder, Collaborator, Course, MeetingNote } from './types';
 
 export const MOCK_USERS: Collaborator[] = [
@@ -20,6 +12,7 @@ export const MOCK_PROJECTS: Project[] = [
     description: 'Investigating evolutionary algorithms for optimizing deep learning architectures in resource-constrained environments.',
     status: ProjectStatus.ACTIVE,
     progress: 65,
+    driveFolderUrl: 'https://drive.google.com/drive/folders/123-abc-example-placeholder',
     tags: ['AI', 'Optimization', 'Deep Learning'],
     notes: [
         { id: 'pn1', title: 'Initial Thoughts', content: 'Focus on MobileNet variants. Check latest survey paper.', color: 'yellow', createdAt: new Date().toISOString() },
