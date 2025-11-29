@@ -765,6 +765,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [tempDescription, setTempDescription] = useState('');
 
+    // Title Edit State
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [tempTitle, setTempTitle] = useState(project.title);
+
     // Drive Link State
     const [isEditingDriveLink, setIsEditingDriveLink] = useState(false);
     const [tempDriveLink, setTempDriveLink] = useState('');
@@ -773,6 +777,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'files' | 'team' | 'ai'>('dashboard');
 
     useEffect(() => { setTasks(project.tasks); }, [project.tasks]);
+    useEffect(() => { setTempTitle(project.title); }, [project.title]);
+
+    const handleSaveTitle = () => {
+        if (tempTitle.trim() && tempTitle.trim() !== project.title) {
+            onUpdateProject({ ...project, title: tempTitle.trim() });
+        }
+        setIsEditingTitle(false);
+    };
 
     const handleUpdateTask = (updatedTask: Task) => {
         const newTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
@@ -1448,8 +1460,41 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                          </button>
                      )}
                      <div>
-                         <h2 className="text-xl font-bold text-slate-800">{project.title}</h2>
-                         <div className="flex items-center gap-3 text-xs text-slate-500">
+                        {isEditingTitle ? (
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={tempTitle}
+                                    onChange={(e) => setTempTitle(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveTitle();
+                                        if (e.key === 'Escape') setIsEditingTitle(false);
+                                    }}
+                                    className="text-xl font-bold text-slate-800 bg-white border border-indigo-300 rounded-lg px-2 py-1 outline-none ring-2 ring-indigo-200"
+                                    autoFocus
+                                />
+                                <button onClick={handleSaveTitle} className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg" title="Save">
+                                    <Save className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => setIsEditingTitle(false)} className="p-1.5 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg" title="Cancel">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 group">
+                                <h2 className="text-xl font-bold text-slate-800">{project.title}</h2>
+                                {currentUser.role === 'Owner' && !isGuestView && (
+                                    <button
+                                        onClick={() => setIsEditingTitle(true)}
+                                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                                        title="Edit Project Title"
+                                    >
+                                        <Edit2 className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                         <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                              {currentUser.role === 'Owner' && !isGuestView ? (
                                  <select 
                                     value={project.status} 

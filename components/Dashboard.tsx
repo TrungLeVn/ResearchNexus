@@ -36,8 +36,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
     }, {} as Record<string, number>)
   )
   .map(([name, count]) => ({ name, count: count as number }))
-  .sort((a, b) => b.count - a.count)
-  .slice(0, 6); // Top 6 topics
+  .sort((a, b) => b.count - a.count);
 
   // Data for Charts
   const progressData = activeProjects.map(p => ({
@@ -158,22 +157,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
             </div>
 
             {/* Topic Landscape (Tag Cloud replacement) */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80 flex flex-col">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">Topic Landscape</h3>
                 {tagDistribution.length > 0 ? (
-                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={tagDistribution} layout="vertical">
-                            <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" width={100} fontSize={12} tickLine={false} axisLine={false} />
-                            <Tooltip 
-                                cursor={{ fill: '#f1f5f9' }}
-                                contentStyle={{ borderRadius: '8px', border: 'none' }}
-                            />
-                            <Bar dataKey="count" fill="#ec4899" radius={[0, 4, 4, 0]} barSize={20} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                     <div className="w-full flex-1 overflow-y-auto pr-2">
+                        <ResponsiveContainer width="100%" height={Math.max(260, tagDistribution.length * 35)}>
+                            <BarChart data={tagDistribution} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" width={100} fontSize={12} tickLine={false} axisLine={false} interval={0} />
+                                <Tooltip 
+                                    cursor={{ fill: '#f1f5f9' }}
+                                    contentStyle={{ borderRadius: '8px', border: 'none' }}
+                                />
+                                <Bar dataKey="count" fill="#ec4899" radius={[0, 4, 4, 0]} barSize={20} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 ) : (
-                    <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                    <div className="flex-1 flex items-center justify-center h-full text-slate-400 text-sm">
                         No tags found across projects.
                     </div>
                 )}
