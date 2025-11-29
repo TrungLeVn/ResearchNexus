@@ -75,7 +75,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
   };
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6 animate-in fade-in duration-500">
+    <div className="absolute inset-0 overflow-y-auto p-6 space-y-6 animate-in fade-in duration-500">
       <header className="mb-8 flex justify-between items-end">
         <div>
             <h1 className="text-2xl font-bold text-slate-800">Research Overview</h1>
