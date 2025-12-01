@@ -7,7 +7,7 @@ import {
     LayoutDashboard, ChevronDown, Flag,
     Code, FileText, Database, FolderOpen, Box, Hash,
     ClipboardList, Megaphone, Loader2, AlertTriangle, Edit2, Save, Folder, Globe,
-    ExternalLink, Mail, User, UserPlus, BarChart2, Activity, PenLine, Share2, MoreVertical, Shield
+    ExternalLink, Mail, User, UserPlus, BarChart2, Activity, PenLine, Share2, MoreVertical
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { listFilesInFolder, DriveFile } from '../services/googleDrive';
@@ -558,15 +558,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const [addingTaskTo, setAddingTaskTo] = useState<TaskStatus | null>(null);
   const [showNotification, setShowNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
-  // Permission Levels - Robust check that looks for the user in the collaborator list first
-  // This solves the issue where "currentUser" has a session role (e.g. Guest) but is an Editor in the project.
-  const effectiveCollaborator = project.collaborators.find(c => 
-      c.email.toLowerCase() === currentUser.email.toLowerCase() || c.id === currentUser.id
-  ) || currentUser;
-
-  const effectiveRole = effectiveCollaborator.role;
-  const isOwner = effectiveRole === 'Owner';
-  const canEdit = isOwner || effectiveRole === 'Editor';
+  // Permission Levels
+  const isOwner = currentUser.role === 'Owner';
+  const canEdit = isOwner || currentUser.role === 'Editor';
 
   // Dashboard Edit State
   const [isEditingOverview, setIsEditingOverview] = useState(false);
@@ -918,12 +912,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     </div>
                 ))}
             </div>
-            {/* Show User Role Badge for Self-Verify */}
-            <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-slate-100 rounded text-xs text-slate-500 mr-2" title={`Your role in this project: ${effectiveRole}`}>
-                <Shield className="w-3 h-3" />
-                <span className="font-medium">{effectiveRole}</span>
-            </div>
-
             {canEdit && (
                 <button 
                     onClick={handleShareProject}
