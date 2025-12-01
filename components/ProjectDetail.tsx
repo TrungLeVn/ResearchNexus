@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity, FileSection } from '../types';
 import { 
@@ -547,41 +546,66 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       }
   }, [project, isEditingOverview]);
   
-  // Migration Effect for Legacy Projects without fileSections
+  // Migration & Recovery Effect
   useEffect(() => {
-      // STRICT CHECK: Only migrate if fileSections is completely undefined.
-      // If it is an empty array [], that means sections were deleted intentionally, so do not migrate.
-      if (project.fileSections === undefined) {
-          console.log('Migrating legacy project file structure...');
-          
+      // Check if we need to migrate or recover data
+      const legacy = project.categoryDriveUrls;
+      const sections = project.fileSections;
+      
+      let newSections = sections ? [...sections] : [];
+      let hasChanges = false;
+      
+      // 1. If no sections exist at all, create defaults
+      if (!sections || sections.length === 0) {
           const isAdmin = project.category === 'admin';
-          const sec1Id = 'sec_1';
-          const sec2Id = 'sec_2';
-          const sec3Id = 'sec_3';
-          
-          const defaultSections: FileSection[] = [
-              { id: sec1Id, name: isAdmin ? 'Official Documents' : 'Drafts & Papers', driveUrl: project.categoryDriveUrls?.drafts || '' },
-              { id: sec2Id, name: isAdmin ? 'Financial Documents' : 'Code & Data', driveUrl: project.categoryDriveUrls?.code || '' },
-              { id: sec3Id, name: isAdmin ? 'Assets' : 'Other Assets', driveUrl: project.categoryDriveUrls?.assets || '' }
+          newSections = [
+              { id: 'sec_1', name: isAdmin ? 'Official Documents' : 'Drafts & Papers', driveUrl: '' },
+              { id: 'sec_2', name: isAdmin ? 'Financial Documents' : 'Code & Data', driveUrl: '' },
+              { id: 'sec_3', name: isAdmin ? 'Assets' : 'Other Assets', driveUrl: '' }
           ];
+          hasChanges = true;
+      }
+      
+      // 2. Recover/Merge Legacy URLs (Safe Merge)
+      // Only overwrite if the new section URL is empty and we have a legacy URL
+      if (legacy) {
+          // Map legacy keys to section indices (0, 1, 2)
+          if (legacy.drafts && newSections[0] && !newSections[0].driveUrl) {
+              newSections[0] = { ...newSections[0], driveUrl: legacy.drafts };
+              hasChanges = true;
+          }
+          if (legacy.code && newSections[1] && !newSections[1].driveUrl) {
+              newSections[1] = { ...newSections[1], driveUrl: legacy.code };
+              hasChanges = true;
+          }
+          if (legacy.assets && newSections[2] && !newSections[2].driveUrl) {
+              newSections[2] = { ...newSections[2], driveUrl: legacy.assets };
+              hasChanges = true;
+          }
+      }
 
-          // Map existing files to sections
-          const updatedFiles = (project.files || []).map(f => {
-              if (f.sectionId) return f;
-              let sId = sec3Id;
-              if (['draft', 'document'].includes(f.type)) sId = sec1Id;
-              else if (['code', 'data'].includes(f.type)) sId = sec2Id;
-              return { ...f, sectionId: sId };
-          });
+      // 3. Migrate Files that lack sectionId
+      const updatedFiles = (project.files || []).map(f => {
+          if (f.sectionId) return f;
+          hasChanges = true;
+          let sId = newSections[2]?.id || 'sec_3';
+          
+          if (['draft', 'document'].includes(f.type)) sId = newSections[0]?.id || 'sec_1';
+          else if (['code', 'data'].includes(f.type)) sId = newSections[1]?.id || 'sec_2';
+          
+          return { ...f, sectionId: sId };
+      });
 
+      if (hasChanges) {
+          // IMPORTANT: Do NOT delete categoryDriveUrls yet (remove `categoryDriveUrls: undefined`)
+          // This ensures that if the migration runs partially, we don't lose source data.
           onUpdateProject({
               ...project,
-              fileSections: defaultSections,
-              files: updatedFiles,
-              categoryDriveUrls: undefined // Cleanup
+              fileSections: newSections,
+              files: updatedFiles
           });
       }
-  }, [project.id, project.fileSections]); // Check on ID or fileSections change
+  }, [project.id, project.fileSections, project.categoryDriveUrls, project.files]);
 
   // --- HANDLERS ---
   
