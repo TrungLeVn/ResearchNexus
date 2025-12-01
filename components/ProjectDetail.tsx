@@ -573,14 +573,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const [editSectionName, setEditSectionName] = useState('');
 
   // PERMISSIONS LOGIC
-  const projectMember = project.collaborators.find(c => c.id === currentUser.id);
-  // If guest view, role is Guest. Otherwise use project role, fallback to Viewer (safest default).
-  const userRole = isGuestView ? 'Guest' : (projectMember?.role || 'Viewer');
-  
-  // Editors and Owners can edit content.
-  const canEdit = ['Owner', 'Editor'].includes(userRole);
-  // Only Owners can perform administrative actions (delete project, manage roles).
-  const isOwner = userRole === 'Owner';
+  // Robust check that looks for the user in the collaborator list first
+  // This solves the issue where "currentUser" has a session role (e.g. Guest) but is an Editor in the project.
+  const effectiveCollaborator = project.collaborators.find(c => 
+      c.email.toLowerCase() === currentUser.email.toLowerCase() || c.id === currentUser.id
+  ) || currentUser;
+
+  const effectiveRole = effectiveCollaborator.role;
+  const isOwner = effectiveRole === 'Owner';
+  const canEdit = isOwner || effectiveRole === 'Editor';
 
   useEffect(() => {
     if (showNotification) {
