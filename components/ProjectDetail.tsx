@@ -5,7 +5,9 @@ import {
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, Activity, ChevronDown, Flag,
     Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
-    ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save, Folder, FolderSync, Globe
+    ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save, Folder, FolderSync, Globe,
+    // FIX: Import ExternalLink icon
+    ExternalLink
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -460,78 +462,28 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
     );
 };
 
-interface FileCardProps {
-    file: ProjectFile;
-    onDelete: (id: string) => void;
-}
-
-const FileCard: React.FC<FileCardProps> = ({ file, onDelete }) => (
-    <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-2 group relative hover:shadow-md transition-all h-full">
-        <div className="flex items-start gap-3">
-            <div className={`p-2 rounded-lg shrink-0 ${
-                file.type === 'code' ? 'bg-slate-800 text-white' : 
-                file.type === 'data' ? 'bg-emerald-100 text-emerald-600' :
-                file.type === 'draft' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'
-            }`}>
-                {file.type === 'code' && <Code className="w-4 h-4" />}
-                {file.type === 'data' && <Database className="w-4 h-4" />}
-                {file.type === 'draft' && <FileText className="w-4 h-4" />}
-                {file.type === 'slide' && <Megaphone className="w-4 h-4" />}
-                {file.type === 'document' && <ClipboardList className="w-4 h-4" />}
-                {file.type === 'other' && <Box className="w-4 h-4" />}
-            </div>
-            <div className="flex-1">
-                 <a href={file.url} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-slate-800 hover:underline line-clamp-2">{file.name}</a>
-                 <p className="text-xs text-slate-500 mt-1">Updated: {new Date(file.lastModified).toLocaleDateString()}</p>
-            </div>
-        </div>
-        <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded line-clamp-2">{file.description || "No description."}</p>
-        <button onClick={() => onDelete(file.id)} className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-            <Trash2 className="w-3.5 h-3.5" />
-        </button>
-    </div>
-);
+const getFileIcon = (type: ProjectFile['type']) => {
+    switch (type) {
+        case 'code': return <Code className="w-5 h-5 text-slate-500" />;
+        case 'data': return <Database className="w-5 h-5 text-emerald-500" />;
+        case 'draft': return <FileText className="w-5 h-5 text-blue-500" />;
+        case 'slide': return <Megaphone className="w-5 h-5 text-orange-500" />;
+        case 'document': return <ClipboardList className="w-5 h-5 text-purple-500" />;
+        default: return <Box className="w-5 h-5 text-slate-400" />;
+    }
+};
 
 // --- NEW GOOGLE DRIVE SECTION COMPONENT ---
-const DriveFolderSection: React.FC<{
-    title: string;
+const DriveLinkManager: React.FC<{
     category: 'drafts' | 'code' | 'assets';
     project: Project;
     onUpdateProject: (project: Project) => void;
-}> = ({ title, category, project, onUpdateProject }) => {
-    const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isEditing, setIsEditing] = useState(false);
+}> = ({ category, project, onUpdateProject }) => {
     const driveUrl = project.categoryDriveUrls?.[category] || '';
     const [urlInput, setUrlInput] = useState(driveUrl);
     
     useEffect(() => {
         setUrlInput(driveUrl); // Sync input when project data changes from outside
-    }, [driveUrl]);
-
-    useEffect(() => {
-        if (driveUrl) {
-            const fetchFiles = async () => {
-                setIsLoading(true);
-                setError(null);
-                setDriveFiles([]);
-                try {
-                    const files = await listFilesInFolder(driveUrl);
-                    setDriveFiles(files);
-                } catch (e) {
-                    setError((e as Error).message);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-            fetchFiles();
-        } else {
-            // Clear previous state if URL is removed
-            setDriveFiles([]);
-            setError(null);
-            setIsLoading(false);
-        }
     }, [driveUrl]);
 
     const handleSaveLink = () => {
@@ -543,87 +495,110 @@ const DriveFolderSection: React.FC<{
             },
         };
         onUpdateProject(updatedProject);
-        setIsEditing(false);
     };
-
-    const renderContent = () => {
-        if (isLoading) {
-            return <div className="flex items-center justify-center p-6 text-slate-500"><Loader2 className="w-6 h-6 animate-spin" /></div>;
-        }
-        if (error) {
-            return (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                    <p className="font-bold">Error syncing folder:</p>
-                    <p className="text-xs mt-1">{error}</p>
-                </div>
-            );
-        }
-        if (driveFiles.length > 0) {
-            return (
-                <div className="space-y-2 max-h-52 overflow-y-auto">
-                    {driveFiles.map(file => (
-                        <a 
-                            key={file.id}
-                            href={file.webViewLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-100 text-sm font-medium text-slate-700"
-                        >
-                            <FileIcon className="w-4 h-4 text-slate-500 shrink-0" />
-                            <span className="truncate">{file.name}</span>
-                        </a>
-                    ))}
-                </div>
-            );
-        }
-        if (driveUrl) {
-            return <p className="text-sm text-center text-slate-400 italic p-6">Folder is empty.</p>;
-        }
-        return (
-            <div className="text-center p-6">
-                <FolderSync className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm text-slate-500">No folder linked.</p>
-                <button onClick={() => setIsEditing(true)} className="text-xs text-indigo-600 font-medium hover:underline mt-1">
-                    Link a Google Drive folder
-                </button>
-            </div>
-        );
+    
+    const handleClearLink = () => {
+        setUrlInput('');
+         const updatedProject = {
+            ...project,
+            categoryDriveUrls: {
+                ...project.categoryDriveUrls,
+                [category]: '',
+            },
+        };
+        onUpdateProject(updatedProject);
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                    <Folder className="w-5 h-5 text-indigo-500" /> {title}
-                </h4>
-                <button onClick={() => setIsEditing(!isEditing)} className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center gap-1">
-                    <Link className="w-3 h-3" /> {driveUrl ? 'Change Link' : 'Manage Link'}
-                </button>
-            </div>
-            {isEditing && (
-                <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-2 animate-in fade-in duration-200">
-                    <label className="text-xs font-bold text-slate-600 block">Google Drive Folder Link</label>
-                    <input 
-                        value={urlInput}
-                        onChange={(e) => setUrlInput(e.target.value)}
-                        className="w-full border border-slate-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-indigo-500"
-                        placeholder="Paste the URL of a publicly shared folder..."
-                    />
-                    <div className="flex justify-end gap-2 pt-2">
-                        <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-xs rounded-md bg-slate-200 hover:bg-slate-300">Cancel</button>
-                        <button onClick={handleSaveLink} className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700">Save</button>
-                    </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-white rounded-md border border-slate-200 text-slate-500">
+                    <Globe className="w-4 h-4" />
                 </div>
-            )}
-            <div className="p-4">
-                {renderContent()}
-            </div>
+                <input 
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    className="flex-1 border border-slate-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-indigo-500"
+                    placeholder="Paste public Google Drive folder URL..."
+                />
+                {driveUrl && (
+                     <button onClick={handleClearLink} className="p-2 text-xs rounded-md text-slate-500 hover:bg-slate-200" title="Clear Link">
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                )}
+                <button onClick={handleSaveLink} className="px-3 py-2 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
+                    {driveUrl ? 'Update' : 'Save'}
+                </button>
+             </div>
+        </div>
+    );
+};
+
+const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
+    const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!driveUrl) {
+            setIsLoading(false);
+            setError(null);
+            setDriveFiles([]);
+            return;
+        }
+        
+        const fetchFiles = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const files = await listFilesInFolder(driveUrl);
+                setDriveFiles(files);
+            } catch (e) {
+                setError((e as Error).message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchFiles();
+    }, [driveUrl]);
+
+    if (isLoading) {
+        return <div className="flex items-center justify-center p-4 text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading files...</div>;
+    }
+    if (error) {
+        return <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{error}</div>;
+    }
+    if (driveFiles.length === 0) {
+        return <p className="text-xs text-center text-slate-400 italic p-4">Synced folder is empty.</p>;
+    }
+
+    return (
+        <div className="space-y-1.5 max-h-60 overflow-y-auto">
+            {driveFiles.map(file => (
+                <a 
+                    key={file.id}
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-1.5 rounded-md hover:bg-slate-100 text-sm font-medium text-slate-600 group"
+                >
+                    <FileIcon className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
+                    <span className="truncate">{file.name}</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400 ml-auto opacity-0 group-hover:opacity-100" />
+                </a>
+            ))}
         </div>
     );
 };
 
 // FIX: Moved TabButton outside of ProjectDetail to avoid re-declaration on each render and fix potential type inference issues.
-const TabButton = ({ isActive, onClick, children, icon: Icon }: { isActive: boolean, onClick: () => void, children: React.ReactNode, icon: any }) => (
+// Updated signature to use React.FC to solve type inference issues with children.
+const TabButton: React.FC<{
+  isActive: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  icon: any;
+}> = ({ isActive, onClick, children, icon: Icon }) => (
     <button
         onClick={onClick}
         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -764,45 +739,48 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 </div>
             );
         case 'files':
+            const categoryFiles = (category: ProjectFile['type'][]) => project.files.filter(f => category.includes(f.type));
             return (
-                <div className="p-6 space-y-8 animate-in fade-in duration-300">
-                    <DriveFolderSection 
-                        title="Drafts & Papers" 
-                        category="drafts" 
-                        project={project} 
-                        onUpdateProject={onUpdateProject} 
-                    />
-                    <DriveFolderSection 
-                        title="Code & Data" 
-                        category="code" 
-                        project={project} 
-                        onUpdateProject={onUpdateProject} 
-                    />
-                    <DriveFolderSection 
-                        title="Other Assets" 
-                        category="assets" 
-                        project={project} 
-                        onUpdateProject={onUpdateProject} 
-                    />
-                    
-                    <div className="border-t border-slate-200 pt-8">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-slate-700">Manually Added Files</h3>
-                            {!isGuestView && (
-                                <button onClick={handleAddFile} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-xs font-medium">
-                                    <Plus className="w-3 h-3" /> Add File
-                                </button>
-                            )}
-                        </div>
-                        {project.files.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {project.files.map(file => <FileCard key={file.id} file={file} onDelete={handleDeleteFile} />)}
-                            </div>
-                        ) : (
-                             <div className="text-center text-slate-400 py-12 border-2 border-dashed rounded-lg">
-                                No manually added files.
-                            </div>
+                <div className="p-6 space-y-6 animate-in fade-in duration-300">
+                    <div className="flex justify-end">
+                         {!isGuestView && (
+                            <button onClick={handleAddFile} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-medium hover:bg-slate-700">
+                                <Plus className="w-3 h-3" /> Add File Manually
+                            </button>
                         )}
+                    </div>
+                    {/* Drafts & Papers */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <h3 className="font-semibold text-slate-800 mb-3">Drafts & Papers</h3>
+                        <DriveLinkManager category="drafts" project={project} onUpdateProject={onUpdateProject} />
+                        <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                            {project.categoryDriveUrls?.drafts && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.drafts} />}
+                            {categoryFiles(['draft', 'document']).map(file => (
+                                <div key={file.id} className="flex items-center gap-2 p-1.5 text-sm"><FileText className="w-4 h-4 text-blue-500 shrink-0" /> <span className="font-medium text-slate-700">{file.name}</span></div>
+                            ))}
+                        </div>
+                    </div>
+                     {/* Code & Data */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <h3 className="font-semibold text-slate-800 mb-3">Code & Data</h3>
+                        <DriveLinkManager category="code" project={project} onUpdateProject={onUpdateProject} />
+                        <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                            {project.categoryDriveUrls?.code && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.code} />}
+                            {categoryFiles(['code', 'data']).map(file => (
+                                <div key={file.id} className="flex items-center gap-2 p-1.5 text-sm">{getFileIcon(file.type)} <span className="font-medium text-slate-700">{file.name}</span></div>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Other Assets */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <h3 className="font-semibold text-slate-800 mb-3">Other Assets</h3>
+                        <DriveLinkManager category="assets" project={project} onUpdateProject={onUpdateProject} />
+                         <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                            {project.categoryDriveUrls?.assets && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.assets} />}
+                            {categoryFiles(['slide', 'other']).map(file => (
+                                <div key={file.id} className="flex items-center gap-2 p-1.5 text-sm">{getFileIcon(file.type)} <span className="font-medium text-slate-700">{file.name}</span></div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             );
