@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { Project, AcademicYearDoc, Reminder, AdminViewState, ProjectStatus } from '../types';
 import { ProjectManager } from './ProjectManager';
-import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2, Bot, X, CheckCircle2, TrendingUp, Layers } from 'lucide-react';
+import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2, Bot, X, CheckCircle2, TrendingUp, Layers, PenTool, Save, File } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
 import { subscribeToAdminDocs, saveAdminDoc, deleteAdminDoc } from '../services/firebase';
 import { AIChat } from './AIChat';
 import { ProjectDetail } from './ProjectDetail';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import ReactMarkdown from 'react-markdown';
 
 interface AdminModuleProps {
     activeView: AdminViewState;
@@ -20,6 +21,86 @@ interface AdminModuleProps {
     onAddProject?: (p: Project) => void;
     onAddReminder?: (reminder: Reminder) => void;
 }
+
+// --- DOCUMENT DETAIL MODAL ---
+interface DocDetailModalProps {
+    doc: AcademicYearDoc;
+    onClose: () => void;
+    onSave: (doc: AcademicYearDoc) => void;
+    onDelete: (id: string) => void;
+}
+
+const DocDetailModal: React.FC<DocDetailModalProps> = ({ doc, onClose, onSave, onDelete }) => {
+    const [content, setContent] = useState(doc.content || '');
+    const [name, setName] = useState(doc.name);
+    const [isEditing, setIsEditing] = useState(false);
+
+    const handleSave = () => {
+        onSave({ ...doc, name, content });
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <div className="flex items-center gap-3 flex-1">
+                        <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                            <FileText className="w-5 h-5" />
+                        </div>
+                        {isEditing ? (
+                            <input 
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="font-bold text-lg text-slate-800 bg-white border border-slate-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                            />
+                        ) : (
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-800">{doc.name}</h3>
+                                <p className="text-xs text-slate-500">{doc.category} • {doc.year}</p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                         {isEditing ? (
+                            <button onClick={handleSave} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors" title="Save">
+                                <Save className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <button onClick={() => setIsEditing(true)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors" title="Edit">
+                                <PenTool className="w-4 h-4" />
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => { if(window.confirm('Delete this document?')) { onDelete(doc.id); onClose(); } }}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-8 bg-white">
+                    {isEditing ? (
+                        <textarea 
+                            value={content}
+                            onChange={(e) => setContent(e.target.value)}
+                            className="w-full h-full resize-none outline-none text-slate-700 leading-relaxed font-mono text-sm"
+                            placeholder="Type your meeting notes or document content here..."
+                        />
+                    ) : (
+                        <div className="prose prose-slate max-w-none">
+                            {content ? <ReactMarkdown>{content}</ReactMarkdown> : <p className="text-slate-400 italic">No content. Click edit to add notes.</p>}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- ADMIN DASHBOARD COMPONENT ---
 interface AdminDashboardProps {
@@ -182,6 +263,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 }) => {
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     const [showChat, setShowChat] = useState(false);
+    const [selectedDoc, setSelectedDoc] = useState<AcademicYearDoc | null>(null);
 
     // Document State from Firebase
     const [docs, setDocs] = useState<AcademicYearDoc[]>([]);
@@ -196,22 +278,35 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     const [searchDocQuery, setSearchDocQuery] = useState('');
     const [isAddingDoc, setIsAddingDoc] = useState(false);
     const [isAddingFolder, setIsAddingFolder] = useState(false);
+    
+    // Add Doc State
+    const [newItemType, setNewItemType] = useState<'link' | 'note'>('link');
     const [newDocData, setNewDocData] = useState({ name: '', url: '', year: '2023-2024', category: 'Report' });
     const [newFolderName, setNewFolderName] = useState('');
 
     const handleAddDoc = () => {
-        if (!newDocData.name || !newDocData.url) return;
+        if (!newDocData.name) return;
+        
+        // If it's a link, we need a URL. If it's a note, we can have empty URL.
+        if (newItemType === 'link' && !newDocData.url) return;
+
         const newDoc: AcademicYearDoc = {
             id: Date.now().toString(),
             name: newDocData.name,
-            url: newDocData.url,
+            url: newItemType === 'link' ? newDocData.url : '', // Empty URL for notes
             year: newDocData.year,
             category: newDocData.category as any,
-            type: 'doc'
+            type: 'doc',
+            content: newItemType === 'note' ? '' : undefined // Initialize empty content for notes
         };
         saveAdminDoc(newDoc);
         setIsAddingDoc(false);
         setNewDocData({ name: '', url: '', year: availableYears[0] || '2023-2024', category: 'Report' });
+        
+        // If it's a note, open it immediately
+        if (newItemType === 'note') {
+            setSelectedDoc(newDoc);
+        }
     };
 
     const handleAddFolder = () => {
@@ -226,16 +321,13 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     const handleDeleteFolder = (year: string) => {
         if (window.confirm(`Are you sure you want to hide folder "${year}"? This will hide documents associated with this year until they are reassigned.`)) {
             setAvailableYears(availableYears.filter(y => y !== year));
-            // In a real app we might update all docs to a different year or delete them.
-            // For now, just hiding the folder from the view state locally.
-            // If docs exist in that year, they persist in DB but won't show if the year isn't in 'allYears' logic.
         }
     };
 
     const handleDeleteDoc = (id: string) => {
-        if (window.confirm("Are you sure you want to remove this document/meeting link?")) {
-            deleteAdminDoc(id);
-        }
+        // Confirmation is handled inside DocDetailModal or inline
+        deleteAdminDoc(id);
+        if (selectedDoc?.id === id) setSelectedDoc(null);
     };
 
     const handleSmartPlan = async () => {
@@ -267,6 +359,15 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 
     return (
         <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
+             {selectedDoc && (
+                <DocDetailModal 
+                    doc={selectedDoc} 
+                    onClose={() => setSelectedDoc(null)} 
+                    onSave={(updatedDoc) => saveAdminDoc(updatedDoc)}
+                    onDelete={handleDeleteDoc}
+                />
+             )}
+
              <header className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -372,6 +473,19 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                         {isAddingDoc && (
                             <div className="bg-slate-50 p-4 rounded-xl border border-indigo-200 animate-in fade-in slide-in-from-top-2">
                                 <h4 className="text-sm font-semibold text-slate-700 mb-3">Add New Item</h4>
+                                
+                                {/* Toggle Type */}
+                                <div className="flex gap-4 mb-3 text-sm">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="itemType" checked={newItemType === 'link'} onChange={() => setNewItemType('link')} />
+                                        <span>External Link</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="itemType" checked={newItemType === 'note'} onChange={() => setNewItemType('note')} />
+                                        <span>Internal Note</span>
+                                    </label>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                     <input 
                                         placeholder="Item Name / Meeting Title"
@@ -379,12 +493,14 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                         value={newDocData.name}
                                         onChange={e => setNewDocData({...newDocData, name: e.target.value})}
                                     />
-                                    <input 
-                                        placeholder="URL (Drive Link, Google Doc)"
-                                        className="w-full px-3 py-2 text-sm border rounded-lg"
-                                        value={newDocData.url}
-                                        onChange={e => setNewDocData({...newDocData, url: e.target.value})}
-                                    />
+                                    {newItemType === 'link' && (
+                                        <input 
+                                            placeholder="URL (Drive Link, Google Doc)"
+                                            className="w-full px-3 py-2 text-sm border rounded-lg"
+                                            value={newDocData.url}
+                                            onChange={e => setNewDocData({...newDocData, url: e.target.value})}
+                                        />
+                                    )}
                                     <select 
                                         className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
                                         value={newDocData.year}
@@ -448,42 +564,73 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                     + Add to {year}
                                                 </button>
                                             </div>
-                                        ) : yearDocs.map(doc => (
-                                            <div key={doc.id} className="relative group/doc">
-                                                <a 
-                                                    href={doc.url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`p-2 rounded transition-colors ${
-                                                            doc.category === 'Meeting' 
-                                                                ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
-                                                                : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white group-hover/doc:text-indigo-600'
-                                                        }`}>
-                                                            <FileText className="w-4 h-4" />
+                                        ) : yearDocs.map(doc => {
+                                            const isInternalNote = !doc.url;
+                                            return (
+                                                <div key={doc.id} className="relative group/doc">
+                                                    {isInternalNote ? (
+                                                         <div 
+                                                            onClick={() => setSelectedDoc(doc)}
+                                                            className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors cursor-pointer"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`p-2 rounded transition-colors ${
+                                                                    doc.category === 'Meeting' 
+                                                                        ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
+                                                                        : 'bg-amber-100 text-amber-600 group-hover/doc:bg-amber-200'
+                                                                }`}>
+                                                                    <File className="w-4 h-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                                                                        doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
+                                                                    }`}>{doc.category}</span>
+                                                                    <span className="ml-2 text-[10px] text-slate-400 border border-slate-200 px-1 rounded">Note</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
+                                                                <PenTool className="w-4 h-4" />
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
-                                                                doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
-                                                            }`}>{doc.category}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
-                                                        <ExternalLink className="w-4 h-4" />
-                                                    </div>
-                                                </a>
-                                                <button 
-                                                    onClick={(e) => { e.preventDefault(); handleDeleteDoc(doc.id); }}
-                                                    className="absolute top-3 right-10 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/doc:opacity-100 transition-opacity"
-                                                    title="Delete Item"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ))}
+                                                    ) : (
+                                                        <a 
+                                                            href={doc.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`p-2 rounded transition-colors ${
+                                                                    doc.category === 'Meeting' 
+                                                                        ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
+                                                                        : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white group-hover/doc:text-indigo-600'
+                                                                }`}>
+                                                                    <FileText className="w-4 h-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                                                                        doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
+                                                                    }`}>{doc.category}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
+                                                                <ExternalLink className="w-4 h-4" />
+                                                            </div>
+                                                        </a>
+                                                    )}
+                                                   
+                                                    <button 
+                                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(window.confirm('Delete this item?')) handleDeleteDoc(doc.id); }}
+                                                        className="absolute top-3 right-10 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover/doc:opacity-100 transition-opacity"
+                                                        title="Delete Item"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             );

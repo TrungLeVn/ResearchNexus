@@ -1486,7 +1486,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 {currentUser.role === 'Owner' && !isGuestView && (
                                     <button
                                         onClick={() => setIsEditingTitle(true)}
-                                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                                         title="Edit Project Title"
                                     >
                                         <Edit2 className="w-4 h-4" />

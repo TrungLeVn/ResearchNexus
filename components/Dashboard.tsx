@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { Project, ProjectStatus, Reminder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -37,6 +36,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
   )
   .map(([name, count]) => ({ name, count: count as number }))
   .sort((a, b) => b.count - a.count);
+
+  // Calculate dynamic height for the topic chart (approx 40px per bar)
+  const topicChartHeight = Math.max(300, tagDistribution.length * 40);
 
   // Data for Charts
   const progressData = activeProjects.map(p => ({
@@ -156,22 +158,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
                 </ResponsiveContainer>
             </div>
 
-            {/* Topic Landscape (Tag Cloud replacement) */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80 flex flex-col">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Topic Landscape</h3>
+            {/* Topic Landscape (Interactive & Scrollable) */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-96 flex flex-col">
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">Topic Landscape</h3>
                 {tagDistribution.length > 0 ? (
-                     <div className="w-full flex-1 overflow-y-auto pr-2">
-                        <ResponsiveContainer width="100%" height={Math.max(260, tagDistribution.length * 35)}>
-                            <BarChart data={tagDistribution} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
-                                <XAxis type="number" hide />
-                                <YAxis dataKey="name" type="category" width={100} fontSize={12} tickLine={false} axisLine={false} interval={0} />
-                                <Tooltip 
-                                    cursor={{ fill: '#f1f5f9' }}
-                                    contentStyle={{ borderRadius: '8px', border: 'none' }}
-                                />
-                                <Bar dataKey="count" fill="#ec4899" radius={[0, 4, 4, 0]} barSize={20} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                     <div className="flex-1 overflow-y-auto pr-4 scrollbar-thin">
+                        <div style={{ height: topicChartHeight }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={tagDistribution} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={140} fontSize={12} tickLine={false} axisLine={false} interval={0} />
+                                    <Tooltip 
+                                        cursor={{ fill: '#f1f5f9' }}
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    />
+                                    <Bar dataKey="count" fill="#ec4899" radius={[0, 4, 4, 0]} barSize={24}>
+                                        {tagDistribution.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b'][index % 5]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 ) : (
                     <div className="flex-1 flex items-center justify-center h-full text-slate-400 text-sm">
