@@ -577,7 +577,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   // If guest view, role is Guest. Otherwise use project role, fallback to Viewer (safest default).
   const userRole = isGuestView ? 'Guest' : (projectMember?.role || 'Viewer');
   
+  // Editors and Owners can edit content.
   const canEdit = ['Owner', 'Editor'].includes(userRole);
+  // Only Owners can perform administrative actions (delete project, manage roles).
   const isOwner = userRole === 'Owner';
 
   useEffect(() => {
