@@ -1,4 +1,5 @@
 
+
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -83,7 +84,7 @@ export interface ProjectActivity {
 }
 
 export interface Project {
-  id: string;
+  id:string;
   title: string;
   description: string;
   status: ProjectStatus;
@@ -95,6 +96,11 @@ export interface Project {
   collaborators: Collaborator[];
   tasks: Task[];
   driveFolderUrl?: string; // Link to the main Google Drive folder for the project
+  categoryDriveUrls?: { // NEW
+    drafts?: string;
+    code?: string;
+    assets?: string;
+  };
   activity?: ProjectActivity[];
   category?: 'research' | 'admin'; // Differentiate between Research and Admin projects
 }

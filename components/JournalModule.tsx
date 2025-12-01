@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Save, Plus, Trash2, ChevronLeft, ChevronRight, Sparkles, Loader2, Bot, X, StickyNote as NoteIcon, Briefcase, Lightbulb, PenTool, Maximize2, MoreHorizontal, FileText } from 'lucide-react';
 import { JournalEntry, StickyNote, Idea, AcademicYearDoc } from '../types';
@@ -27,6 +28,7 @@ export const JournalModule: React.FC = () => {
     const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
     const [showTemplates, setShowTemplates] = useState(false);
+    const [showNoteActions, setShowNoteActions] = useState<string | null>(null);
 
     // Subscribe to Firebase Journal Entries
     useEffect(() => {
@@ -195,6 +197,61 @@ export const JournalModule: React.FC = () => {
         handleSave(updatedEntry);
         if (activeNoteId === id) setActiveNoteId(null);
     };
+    
+    // --- NOTE PROMOTION LOGIC ---
+    const getCurrentAcademicYear = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth(); // 0-11
+        if (month >= 6) return `${year}-${year + 1}`;
+        return `${year - 1}-${year}`;
+    };
+
+    const handleMoveToIdeas = async (note: StickyNote) => {
+        if (!window.confirm("This will create a new Idea from this note and remove it from the journal. Continue?")) return;
+
+        const newIdea: Idea = {
+            id: `idea_${Date.now()}`,
+            title: note.title,
+            description: note.content.substring(0, 100) + (note.content.length > 100 ? '...' : ''),
+            content: note.content,
+            relatedResources: [],
+            aiEnhanced: false,
+        };
+        await saveIdea(newIdea);
+
+        const updatedNotes = (entry.notes || []).filter(n => n.id !== note.id);
+        const updatedEntry = { ...entry, notes: updatedNotes };
+        setEntry(updatedEntry);
+        await handleSave(updatedEntry);
+
+        setShowNoteActions(null);
+        alert('Note successfully moved to Idea Lab!');
+    };
+
+    const handleMoveToAdminDocs = async (note: StickyNote) => {
+        if (!window.confirm("This will create a new Admin Document from this note and remove it from the journal. Continue?")) return;
+
+        const newDoc: AcademicYearDoc = {
+            id: `admin-doc-${Date.now()}`,
+            name: note.title,
+            type: 'doc',
+            year: getCurrentAcademicYear(),
+            url: '',
+            category: 'Meeting',
+            content: note.content
+        };
+        await saveAdminDoc(newDoc);
+
+        const updatedNotes = (entry.notes || []).filter(n => n.id !== note.id);
+        const updatedEntry = { ...entry, notes: updatedNotes };
+        setEntry(updatedEntry);
+        await handleSave(updatedEntry);
+        
+        setShowNoteActions(null);
+        alert('Note successfully moved to Admin Docs!');
+    };
+
 
     return (
         <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
@@ -342,6 +399,21 @@ export const JournalModule: React.FC = () => {
                                             placeholder="Note Title"
                                         />
                                         <div className="absolute top-4 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="relative">
+                                                <button onClick={() => setShowNoteActions(showNoteActions === note.id ? null : note.id)} className="p-1 hover:bg-black/10 rounded">
+                                                    <MoreHorizontal className="w-3 h-3" />
+                                                </button>
+                                                {showNoteActions === note.id && (
+                                                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-slate-100 z-20 overflow-hidden animate-in fade-in zoom-in-95">
+                                                        <button onClick={() => handleMoveToIdeas(note)} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                            <Lightbulb className="w-4 h-4 text-purple-500" /> Move to Idea Lab
+                                                        </button>
+                                                        <button onClick={() => handleMoveToAdminDocs(note)} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                            <Briefcase className="w-4 h-4 text-blue-500" /> Move to Admin Docs
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <button onClick={() => setExpandedNoteId(isExpanded ? null : note.id)} className="p-1 hover:bg-black/10 rounded">
                                                 <Maximize2 className="w-3 h-3" />
                                             </button>
