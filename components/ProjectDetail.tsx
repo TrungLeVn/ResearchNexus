@@ -935,6 +935,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
             );
         case 'files':
             const categoryFiles = (category: ProjectFile['type'][]) => project.files.filter(f => category.includes(f.type));
+            const isAdmin = project.category === 'admin';
+
             return (
                 <div className="p-6 space-y-6 animate-in fade-in duration-300">
                     <div className="flex justify-end">
@@ -944,9 +946,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             </button>
                         )}
                     </div>
-                    {/* Drafts & Papers */}
+                    {/* Drafts & Papers / Official Docs */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200">
-                        <h3 className="font-semibold text-slate-800 mb-3">Drafts & Papers</h3>
+                        <h3 className="font-semibold text-slate-800 mb-3">{isAdmin ? 'Official Documents' : 'Drafts & Papers'}</h3>
                         <DriveLinkManager category="drafts" project={project} onUpdateProject={onUpdateProject} />
                         <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                             {project.categoryDriveUrls?.drafts && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.drafts} />}
@@ -967,9 +969,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             )}
                         </div>
                     </div>
-                     {/* Code & Data */}
+                     {/* Code & Data / Financial Docs */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200">
-                        <h3 className="font-semibold text-slate-800 mb-3">Code & Data</h3>
+                        <h3 className="font-semibold text-slate-800 mb-3">{isAdmin ? 'Financial Documents' : 'Code & Data'}</h3>
                         <DriveLinkManager category="code" project={project} onUpdateProject={onUpdateProject} />
                         <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                             {project.categoryDriveUrls?.code && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.code} />}
@@ -990,9 +992,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                              )}
                         </div>
                     </div>
-                    {/* Other Assets */}
+                    {/* Other Assets / Assets */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200">
-                        <h3 className="font-semibold text-slate-800 mb-3">Other Assets</h3>
+                        <h3 className="font-semibold text-slate-800 mb-3">{isAdmin ? 'Assets' : 'Other Assets'}</h3>
                         <DriveLinkManager category="assets" project={project} onUpdateProject={onUpdateProject} />
                          <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                             {project.categoryDriveUrls?.assets && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.assets} />}
