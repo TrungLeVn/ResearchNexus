@@ -1,13 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity } from '../types';
+import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity, FileSection } from '../types';
 import { 
     ChevronLeft, Plus, Users, File as FileIcon, 
     Trash2, X, Check, Calendar, Send, MessageCircle, 
     LayoutDashboard, ChevronDown, Flag,
     Code, FileText, Database, FolderOpen, Box, Hash,
     ClipboardList, Megaphone, Loader2, AlertTriangle, Edit2, Save, Folder, Globe,
-    ExternalLink, Mail, User, UserPlus, BarChart2, Activity
+    ExternalLink, Mail, User, UserPlus, BarChart2, Activity, PenLine, Share2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { listFilesInFolder, DriveFile } from '../services/googleDrive';
@@ -421,32 +421,6 @@ const EditableResourceLink: React.FC<{
     );
 };
 
-// --- DRIVE LINK MANAGER (Uses EditableResourceLink) ---
-const DriveLinkManager: React.FC<{
-    category: 'drafts' | 'code' | 'assets';
-    project: Project;
-    onUpdateProject: (project: Project) => void;
-}> = ({ category, project, onUpdateProject }) => {
-    const driveUrl = project.categoryDriveUrls?.[category] || '';
-    
-    const handleSave = (url: string) => {
-        const updatedProject = {
-            ...project,
-            categoryDriveUrls: { ...project.categoryDriveUrls, [category]: url.trim() },
-        };
-        onUpdateProject(updatedProject);
-    };
-    
-    return (
-        <EditableResourceLink 
-            url={driveUrl} 
-            onSave={handleSave} 
-            placeholder={`Paste Google Drive folder URL for ${category}...`}
-            icon={<Globe className="w-4 h-4 text-slate-500"/>}
-        />
-    );
-};
-
 const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
     const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -551,6 +525,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const [newProjectTitle, setNewProjectTitle] = useState(project.title);
   const [showEditTitleIcon, setShowEditTitleIcon] = useState(false);
 
+  // File Section Editing State
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editSectionName, setEditSectionName] = useState('');
+
   useEffect(() => {
     if (showNotification) {
       const timer = setTimeout(() => setShowNotification(null), 3000);
@@ -567,6 +545,35 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
           setEditProgress(project.progress);
       }
   }, [project, isEditingOverview]);
+  
+  // Migration Effect for Legacy Projects without fileSections
+  useEffect(() => {
+      if (!project.fileSections) {
+          console.log('Migrating legacy project file structure...');
+          
+          const isAdmin = project.category === 'admin';
+          const defaultSections: FileSection[] = [
+              { id: 'sec_1', name: isAdmin ? 'Official Documents' : 'Drafts & Papers', driveUrl: project.categoryDriveUrls?.drafts },
+              { id: 'sec_2', name: isAdmin ? 'Financial Documents' : 'Code & Data', driveUrl: project.categoryDriveUrls?.code },
+              { id: 'sec_3', name: isAdmin ? 'Assets' : 'Other Assets', driveUrl: project.categoryDriveUrls?.assets }
+          ];
+
+          // Map existing files to sections based on type
+          const updatedFiles = (project.files || []).map(f => {
+              if (f.sectionId) return f;
+              if (['draft', 'document'].includes(f.type)) return { ...f, sectionId: 'sec_1' };
+              if (['code', 'data'].includes(f.type)) return { ...f, sectionId: 'sec_2' };
+              return { ...f, sectionId: 'sec_3' };
+          });
+
+          onUpdateProject({
+              ...project,
+              fileSections: defaultSections,
+              files: updatedFiles,
+              categoryDriveUrls: undefined // Clear legacy field
+          });
+      }
+  }, [project.id]); // Run only when project ID changes to prevent loops
 
   const addActivity = (message: string): ProjectActivity[] => {
       const newActivity: ProjectActivity = {
@@ -609,7 +616,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       }
   };
 
-  const handleAddFile = () => {
+  const handleAddFile = (sectionId: string) => {
       const name = prompt("File name or title:");
       if (!name) return;
       const typeStr = prompt("Type (draft, code, data, slide, document):", "document");
@@ -621,7 +628,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
           url: '', 
           description: "Manually added file.",
           type,
-          lastModified: new Date().toISOString()
+          lastModified: new Date().toISOString(),
+          sectionId // Assign to specific section
       };
       onUpdateProject({ ...project, files: [...project.files, newFile], activity: addActivity(`added file "${name}"`) });
   };
@@ -629,6 +637,45 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const handleDeleteFile = (id: string) => {
       onUpdateProject({ ...project, files: project.files.filter(f => f.id !== id) });
   };
+
+  // --- SECTION MANAGEMENT ---
+  const handleAddSection = () => {
+      const name = prompt("New Section Name:");
+      if (!name) return;
+      const newSection: FileSection = {
+          id: `sec_${Date.now()}`,
+          name,
+          driveUrl: ''
+      };
+      onUpdateProject({ 
+          ...project, 
+          fileSections: [...(project.fileSections || []), newSection] 
+      });
+  };
+
+  const handleUpdateSectionName = (id: string) => {
+      if (!editSectionName.trim()) return;
+      const updatedSections = (project.fileSections || []).map(s => 
+          s.id === id ? { ...s, name: editSectionName } : s
+      );
+      onUpdateProject({ ...project, fileSections: updatedSections });
+      setEditingSectionId(null);
+  };
+
+  const handleDeleteSection = (id: string) => {
+      if (window.confirm("Delete this section? Files inside will be kept but unorganized.")) {
+           const updatedSections = (project.fileSections || []).filter(s => s.id !== id);
+           onUpdateProject({ ...project, fileSections: updatedSections });
+      }
+  };
+  
+  const handleUpdateSectionDriveUrl = (sectionId: string, url: string) => {
+      const updatedSections = (project.fileSections || []).map(s => 
+          s.id === sectionId ? { ...s, driveUrl: url } : s
+      );
+      onUpdateProject({ ...project, fileSections: updatedSections });
+  };
+
 
   const handleUpdateProjectTitle = () => {
     if (newProjectTitle.trim() && newProjectTitle !== project.title) {
@@ -708,6 +755,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       );
       onUpdateProject({ ...project, collaborators: updatedCollaborators });
       setShowNotification({ message: 'Role updated', type: 'success' });
+  };
+
+  const handleShareProject = () => {
+    const url = `${window.location.origin}?pid=${project.id}`;
+    navigator.clipboard.writeText(url);
+    setShowNotification({ message: 'Project Invite Link copied to clipboard!', type: 'success' });
   };
 
   const renderTabContent = () => {
@@ -934,87 +987,103 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 </div>
             );
         case 'files':
-            const categoryFiles = (category: ProjectFile['type'][]) => project.files.filter(f => category.includes(f.type));
-            const isAdmin = project.category === 'admin';
-
             return (
                 <div className="p-6 space-y-6 animate-in fade-in duration-300">
-                    <div className="flex justify-end">
-                         {!isGuestView && (
-                            <button onClick={handleAddFile} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-medium hover:bg-slate-700">
-                                <Plus className="w-3 h-3" /> Add File Manually
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-bold text-slate-800">Files & Documents</h2>
+                        {!isGuestView && (
+                            <button onClick={handleAddSection} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-medium hover:bg-slate-700">
+                                <Plus className="w-3 h-3" /> New Section
                             </button>
                         )}
                     </div>
-                    {/* Drafts & Papers / Official Docs */}
-                    <div className="bg-white p-4 rounded-xl border border-slate-200">
-                        <h3 className="font-semibold text-slate-800 mb-3">{isAdmin ? 'Official Documents' : 'Drafts & Papers'}</h3>
-                        <DriveLinkManager category="drafts" project={project} onUpdateProject={onUpdateProject} />
-                        <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                            {project.categoryDriveUrls?.drafts && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.drafts} />}
-                            {/* Manual Files */}
-                            {categoryFiles(['draft', 'document']).length > 0 && (
-                                <div className="space-y-2">
-                                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
-                                     {categoryFiles(['draft', 'document']).map(file => (
-                                        <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
-                                            <div className="flex items-center gap-2 text-sm">
-                                                <FileText className="w-4 h-4 text-blue-500 shrink-0" /> 
-                                                <span className="font-medium text-slate-700">{file.name}</span>
-                                            </div>
-                                            <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
-                                        </div>
-                                    ))}
+
+                    {(project.fileSections || []).map(section => (
+                        <div key={section.id} className="bg-white p-4 rounded-xl border border-slate-200 relative group/section">
+                             <div className="flex justify-between items-center mb-3">
+                                {editingSectionId === section.id ? (
+                                    <div className="flex gap-2 items-center flex-1">
+                                        <input 
+                                            value={editSectionName}
+                                            onChange={e => setEditSectionName(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleUpdateSectionName(section.id)}
+                                            autoFocus
+                                            className="font-semibold text-slate-800 bg-slate-50 border border-slate-300 rounded px-2 py-1 outline-none text-sm"
+                                        />
+                                        <button onClick={() => handleUpdateSectionName(section.id)} className="p-1 bg-indigo-600 text-white rounded"><Check className="w-3 h-3"/></button>
+                                        <button onClick={() => setEditingSectionId(null)} className="p-1 bg-slate-200 text-slate-600 rounded"><X className="w-3 h-3"/></button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 group-hover/section:text-indigo-600 transition-colors">
+                                        <h3 className="font-semibold text-slate-800">{section.name}</h3>
+                                        {!isGuestView && (
+                                            <button 
+                                                onClick={() => { setEditingSectionId(section.id); setEditSectionName(section.name); }} 
+                                                className="p-1 text-slate-300 hover:text-indigo-600 opacity-0 group-hover/section:opacity-100 transition-opacity"
+                                            >
+                                                <PenLine className="w-3.5 h-3.5"/>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                <div className="flex items-center gap-2">
+                                     {!isGuestView && (
+                                         <>
+                                            <button 
+                                                onClick={() => handleAddFile(section.id)}
+                                                className="text-xs flex items-center gap-1 text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+                                            >
+                                                <Plus className="w-3 h-3" /> Add File
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteSection(section.id)}
+                                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                title="Delete Section"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                         </>
+                                     )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                     {/* Code & Data / Financial Docs */}
-                    <div className="bg-white p-4 rounded-xl border border-slate-200">
-                        <h3 className="font-semibold text-slate-800 mb-3">{isAdmin ? 'Financial Documents' : 'Code & Data'}</h3>
-                        <DriveLinkManager category="code" project={project} onUpdateProject={onUpdateProject} />
-                        <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                            {project.categoryDriveUrls?.code && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.code} />}
-                             {/* Manual Files */}
-                             {categoryFiles(['code', 'data']).length > 0 && (
-                                 <div className="space-y-2">
-                                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
-                                    {categoryFiles(['code', 'data']).map(file => (
-                                        <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
-                                            <div className="flex items-center gap-2 text-sm">
-                                                {getFileIcon(file.type)} 
-                                                <span className="font-medium text-slate-700">{file.name}</span>
+                            </div>
+
+                            <EditableResourceLink 
+                                url={section.driveUrl || ''} 
+                                onSave={(url) => handleUpdateSectionDriveUrl(section.id, url)} 
+                                placeholder={`Paste Google Drive folder URL for ${section.name}...`}
+                                icon={<Globe className="w-4 h-4 text-slate-500"/>}
+                            />
+                            
+                            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                                {section.driveUrl && <SyncedDriveFiles driveUrl={section.driveUrl} />}
+                                
+                                {/* Manual Files for this Section */}
+                                {project.files.filter(f => f.sectionId === section.id).length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
+                                        {project.files.filter(f => f.sectionId === section.id).map(file => (
+                                            <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    {getFileIcon(file.type)} 
+                                                    <span className="font-medium text-slate-700">{file.name}</span>
+                                                </div>
+                                                <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
                                             </div>
-                                            <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                             )}
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                    {/* Other Assets / Assets */}
-                    <div className="bg-white p-4 rounded-xl border border-slate-200">
-                        <h3 className="font-semibold text-slate-800 mb-3">{isAdmin ? 'Assets' : 'Other Assets'}</h3>
-                        <DriveLinkManager category="assets" project={project} onUpdateProject={onUpdateProject} />
-                         <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                            {project.categoryDriveUrls?.assets && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.assets} />}
-                            {/* Manual Files */}
-                            {categoryFiles(['slide', 'other']).length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
-                                    {categoryFiles(['slide', 'other']).map(file => (
-                                        <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
-                                            <div className="flex items-center gap-2 text-sm">
-                                                {getFileIcon(file.type)} 
-                                                <span className="font-medium text-slate-700">{file.name}</span>
-                                            </div>
-                                            <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                    ))}
+                    
+                    {(project.fileSections || []).length === 0 && (
+                        <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                            <FolderOpen className="w-12 h-12 mx-auto mb-2 opacity-50"/>
+                            <p>No file sections defined.</p>
+                            {!isGuestView && <button onClick={handleAddSection} className="text-indigo-600 font-medium hover:underline text-sm">Create a section</button>}
                         </div>
-                    </div>
+                    )}
                 </div>
             );
         case 'team':
@@ -1170,10 +1239,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     ))}
                     {project.collaborators.length > 3 && <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center font-bold text-slate-600 text-xs border-2 border-white">+{project.collaborators.length - 3}</div>}
                 </div>
+
+                {!isGuestView && (
+                    <button 
+                        onClick={handleShareProject} 
+                        className="ml-4 flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm"
+                        title="Copy Invite Link"
+                    >
+                        <Share2 className="w-3.5 h-3.5"/> Share
+                    </button>
+                )}
+
                 {!isGuestView && (
                     <button 
                         onClick={() => setActiveTab('team')} 
-                        className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="ml-2 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                         title="Manage Team"
                     >
                         <Users className="w-4 h-4"/>

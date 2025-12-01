@@ -42,6 +42,13 @@ export interface ProjectFile {
   type: 'draft' | 'code' | 'data' | 'slide' | 'document' | 'other';
   lastModified: string;
   url?: string; // Google Drive Link
+  sectionId?: string; // New: Associates file with a specific custom section
+}
+
+export interface FileSection {
+    id: string;
+    name: string;
+    driveUrl?: string;
 }
 
 export interface Collaborator {
@@ -96,11 +103,15 @@ export interface Project {
   collaborators: Collaborator[];
   tasks: Task[];
   driveFolderUrl?: string; // Link to the main Google Drive folder for the project
-  categoryDriveUrls?: { // NEW
+  
+  // Deprecated: categoryDriveUrls. Replaced by fileSections.
+  categoryDriveUrls?: {
     drafts?: string;
     code?: string;
     assets?: string;
   };
+  fileSections?: FileSection[]; // New: Dynamic list of file sections
+  
   activity?: ProjectActivity[];
   category?: 'research' | 'admin'; // Differentiate between Research and Admin projects
 }
