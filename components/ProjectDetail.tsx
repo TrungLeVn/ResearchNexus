@@ -572,6 +572,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editSectionName, setEditSectionName] = useState('');
 
+  // Progress Slider State
+  const [localProgress, setLocalProgress] = useState(project.progress);
+
+  // Sync edit state when project changes (if updated externally)
+  useEffect(() => {
+      if (!isEditingOverview) {
+          setEditDescription(project.description);
+          setEditTags(project.tags || []);
+          setEditStatus(project.status);
+          setEditProgress(project.progress);
+      }
+      setLocalProgress(project.progress);
+  }, [project, isEditingOverview]);
+
   // PERMISSIONS LOGIC
   // Robust check that looks for the user in the collaborator list first
   // This solves the issue where "currentUser" has a session role (e.g. Guest) but is an Editor in the project.
@@ -589,16 +603,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       return () => clearTimeout(timer);
     }
   }, [showNotification]);
-
-  // Sync edit state when project changes (if updated externally)
-  useEffect(() => {
-      if (!isEditingOverview) {
-          setEditDescription(project.description);
-          setEditTags(project.tags || []);
-          setEditStatus(project.status);
-          setEditProgress(project.progress);
-      }
-  }, [project, isEditingOverview]);
   
   // Migration Effect for Legacy Projects without fileSections
   useEffect(() => {
@@ -780,6 +784,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
   const handleRemoveTag = (tag: string) => {
       setEditTags(editTags.filter(t => t !== tag));
+  };
+
+  const handleProgressCommit = () => {
+    if (localProgress !== project.progress) {
+         onUpdateProject({ ...project, progress: localProgress });
+    }
   };
   
   // Calculate Task Stats
@@ -1060,12 +1070,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                      
                      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                          <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Project Progress</h3>
-                         <div className="flex items-center gap-4">
-                             <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
-                                 <div className="h-full bg-indigo-600 rounded-full" style={{width: `${project.progress}%`}}></div>
+                         {canEdit ? (
+                             <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-4">
+                                     <input 
+                                        type="range" 
+                                        min="0" max="100" 
+                                        value={localProgress}
+                                        onChange={(e) => setLocalProgress(Number(e.target.value))}
+                                        onMouseUp={handleProgressCommit}
+                                        onTouchEnd={handleProgressCommit}
+                                        className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                     />
+                                     <span className="font-bold text-indigo-600 min-w-[3ch] text-right">{localProgress}%</span>
+                                </div>
+                                <p className="text-[10px] text-slate-400 text-center">Drag to update</p>
                              </div>
-                             <span className="font-bold text-indigo-600">{project.progress}%</span>
-                         </div>
+                         ) : (
+                             <div className="flex items-center gap-4">
+                                 <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                     <div className="h-full bg-indigo-600 rounded-full" style={{width: `${project.progress}%`}}></div>
+                                 </div>
+                                 <span className="font-bold text-indigo-600">{project.progress}%</span>
+                             </div>
+                         )}
                      </div>
                  </div>
              </div>
