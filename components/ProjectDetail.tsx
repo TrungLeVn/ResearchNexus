@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity, FileSection } from '../types';
 import { 
@@ -82,9 +81,10 @@ interface AssigneeSelectorProps {
     collaborators: Collaborator[];
     selectedIds: string[];
     onChange: (ids: string[]) => void;
+    disabled?: boolean;
 }
 
-const AssigneeSelector: React.FC<AssigneeSelectorProps> = ({ collaborators, selectedIds, onChange }) => {
+const AssigneeSelector: React.FC<AssigneeSelectorProps> = ({ collaborators, selectedIds, onChange, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -110,8 +110,8 @@ const AssigneeSelector: React.FC<AssigneeSelectorProps> = ({ collaborators, sele
         <div className="relative" ref={containerRef}>
             <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Assignees</label>
             <div 
-                onClick={() => setIsOpen(!isOpen)} 
-                className="w-full min-h-[42px] p-2 border border-slate-200 rounded-lg bg-white flex items-center justify-between cursor-pointer hover:border-indigo-400 transition-colors"
+                onClick={() => !disabled && setIsOpen(!isOpen)} 
+                className={`w-full min-h-[42px] p-2 border border-slate-200 rounded-lg bg-white flex items-center justify-between transition-colors ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-indigo-400'}`}
             >
                 <div className="flex items-center gap-1 flex-wrap">
                     {selectedIds.length === 0 && <span className="text-slate-400 text-sm">Select members...</span>}
@@ -131,7 +131,7 @@ const AssigneeSelector: React.FC<AssigneeSelectorProps> = ({ collaborators, sele
                 <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
             
-            {isOpen && (
+            {isOpen && !disabled && (
                 <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-xl mt-2 shadow-xl max-h-48 overflow-y-auto animate-in fade-in zoom-in-95">
                      <div className="p-2 space-y-1">
                         {collaborators.map(c => {
@@ -170,8 +170,9 @@ interface TaskDetailModalProps {
     onUpdateTask: (updatedTask: Task) => void;
     onDeleteTask: (taskId: string) => void;
     onSendNotification: (msg: string, type?: 'success' | 'error') => void;
+    readOnly?: boolean;
 }
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask, onSendNotification }) => {
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask, onSendNotification, readOnly }) => {
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [newComment, setNewComment] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -205,16 +206,32 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <input value={editedTask.title} onChange={e => setEditedTask({...editedTask, title: e.target.value})} className="text-lg font-bold text-slate-800 bg-transparent outline-none w-full" />
+                    <input 
+                        value={editedTask.title} 
+                        onChange={e => setEditedTask({...editedTask, title: e.target.value})} 
+                        disabled={readOnly}
+                        className={`text-lg font-bold text-slate-800 bg-transparent outline-none w-full ${readOnly ? 'cursor-not-allowed' : ''}`} 
+                    />
                     <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
                 <div className="flex-1 p-6 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto">
                     <div className="md:col-span-2 space-y-4">
                         <div>
                             <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
-                            <textarea value={editedTask.description} onChange={e => setEditedTask({...editedTask, description: e.target.value})} className="w-full mt-1 p-2 border rounded-md h-24 text-sm" placeholder="Add task details..."/>
+                            <textarea 
+                                value={editedTask.description} 
+                                onChange={e => setEditedTask({...editedTask, description: e.target.value})} 
+                                disabled={readOnly}
+                                className={`w-full mt-1 p-2 border rounded-md h-24 text-sm ${readOnly ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : ''}`} 
+                                placeholder="Add task details..."
+                            />
                         </div>
-                        <AssigneeSelector collaborators={collaborators} selectedIds={editedTask.assigneeIds || []} onChange={(ids) => setEditedTask({...editedTask, assigneeIds: ids})} />
+                        <AssigneeSelector 
+                            collaborators={collaborators} 
+                            selectedIds={editedTask.assigneeIds || []} 
+                            onChange={(ids) => setEditedTask({...editedTask, assigneeIds: ids})} 
+                            disabled={readOnly}
+                        />
                         <div>
                             <label className="text-xs font-bold text-slate-400 uppercase">Comments</label>
                             <div className="mt-2 space-y-3 max-h-64 overflow-y-auto pr-2">
@@ -240,7 +257,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                     <div className="md:col-span-1 space-y-4">
                         <div className="bg-slate-50 p-3 rounded-lg border">
                             <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
-                            <select value={editedTask.status} onChange={e => setEditedTask({...editedTask, status: e.target.value as TaskStatus})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
+                            <select 
+                                value={editedTask.status} 
+                                onChange={e => setEditedTask({...editedTask, status: e.target.value as TaskStatus})} 
+                                disabled={readOnly}
+                                className={`w-full mt-1 p-2 border rounded-md text-sm bg-white ${readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="todo">To Do</option>
                                 <option value="in_progress">In Progress</option>
                                 <option value="done">Done</option>
@@ -248,11 +270,22 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                         </div>
                         <div className="bg-slate-50 p-3 rounded-lg border">
                             <label className="text-xs font-bold text-slate-400 uppercase">Due Date</label>
-                            <input type="date" value={editedTask.dueDate} onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})} className="w-full mt-1 p-2 border rounded-md text-sm"/>
+                            <input 
+                                type="date" 
+                                value={editedTask.dueDate} 
+                                onChange={e => setEditedTask({...editedTask, dueDate: e.target.value})} 
+                                disabled={readOnly}
+                                className={`w-full mt-1 p-2 border rounded-md text-sm ${readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            />
                         </div>
                         <div className="bg-slate-50 p-3 rounded-lg border">
                             <label className="text-xs font-bold text-slate-400 uppercase">Priority</label>
-                            <select value={editedTask.priority} onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})} className="w-full mt-1 p-2 border rounded-md text-sm bg-white">
+                            <select 
+                                value={editedTask.priority} 
+                                onChange={e => setEditedTask({...editedTask, priority: e.target.value as TaskPriority})} 
+                                disabled={readOnly}
+                                className={`w-full mt-1 p-2 border rounded-md text-sm bg-white ${readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            >
                                 <option value="low">Low</option>
                                 <option value="medium">Medium</option>
                                 <option value="high">High</option>
@@ -261,10 +294,20 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                     </div>
                 </div>
                 <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
-                    <button onClick={() => { if (window.confirm("Delete task?")) { onDeleteTask(task.id); onClose(); } }} className="text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><Trash2 className="w-4 h-4"/> Delete Task</button>
-                    <button onClick={handleSave} disabled={isSaving} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-70 flex items-center gap-2">
-                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Save & Close
-                    </button>
+                    {!readOnly ? (
+                        <button onClick={() => { if (window.confirm("Delete task?")) { onDeleteTask(task.id); onClose(); } }} className="text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><Trash2 className="w-4 h-4"/> Delete Task</button>
+                    ) : (
+                        <div></div>
+                    )}
+                    {!readOnly ? (
+                        <button onClick={handleSave} disabled={isSaving} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-70 flex items-center gap-2">
+                            {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Save & Close
+                        </button>
+                    ) : (
+                        <button onClick={onClose} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300">
+                            Close
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -529,6 +572,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editSectionName, setEditSectionName] = useState('');
 
+  // PERMISSIONS LOGIC
+  const projectMember = project.collaborators.find(c => c.id === currentUser.id);
+  // If guest view, role is Guest. Otherwise use project role, fallback to Viewer (safest default).
+  const userRole = isGuestView ? 'Guest' : (projectMember?.role || 'Viewer');
+  
+  const canEdit = ['Owner', 'Editor'].includes(userRole);
+  const isOwner = userRole === 'Owner';
+
   useEffect(() => {
     if (showNotification) {
       const timer = setTimeout(() => setShowNotification(null), 3000);
@@ -603,6 +654,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   };
 
   const handleTaskMove = (taskId: string, newStatus: TaskStatus) => {
+      if (!canEdit) return; // Guard
       const updatedTasks = project.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
       onUpdateProject({ ...project, tasks: updatedTasks });
       
@@ -650,9 +702,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       if (!window.confirm("Are you sure? This will remove the section but keep the files (they will be moved to Uncategorized).")) return;
       
       const updatedSections = (project.fileSections || []).filter(s => s.id !== sectionId);
-      // Move files to undefined section or handle as orphan? 
-      // For simplicity, we just keep them, they won't show in loop but exist in data. 
-      // Ideally, reassign to a 'Default' section or show in "Uncategorized".
       onUpdateProject({ ...project, fileSections: updatedSections });
   };
 
@@ -685,8 +734,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const handleInviteMember = () => {
       if (!inviteEmail || !inviteName) return;
       
-      // In a real app, this would send an email
-      // Here we just add to the project collaborators mock
       const newMember: Collaborator = {
           id: inviteEmail.toLowerCase().replace(/[^a-z0-9]/g, '-'),
           name: inviteName,
@@ -763,9 +810,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                  onUpdateProject({ ...project, tasks: project.tasks.filter(t => t.id !== tid) });
             }}
             onSendNotification={(msg, type) => setShowNotification({ message: msg, type: type || 'success' })}
+            readOnly={!canEdit}
           />
       )}
-      {addingTaskTo && (
+      {addingTaskTo && canEdit && (
           <AddTaskModal 
              status={addingTaskTo}
              project={project}
@@ -812,8 +860,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     />
                 ) : (
                     <div className="flex items-center gap-2">
-                        <h1 onClick={() => !isGuestView && setIsEditingTitle(true)} className="text-xl font-bold text-slate-800 cursor-pointer">{project.title}</h1>
-                        {!isGuestView && showEditTitleIcon && (
+                        <h1 onClick={() => canEdit && setIsEditingTitle(true)} className={`text-xl font-bold text-slate-800 ${canEdit ? 'cursor-pointer' : ''}`}>{project.title}</h1>
+                        {canEdit && showEditTitleIcon && (
                             <Edit2 onClick={() => setIsEditingTitle(true)} className="w-4 h-4 text-slate-400 cursor-pointer hover:text-indigo-600" />
                         )}
                     </div>
@@ -842,7 +890,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     <Share2 className="w-4 h-4" />
                 </button>
             )}
-             {!isGuestView && (
+             {isOwner && (
                 <button 
                     onClick={() => { if(window.confirm("Are you sure you want to delete this project?")) onDeleteProject(project.id); }}
                     className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
@@ -872,7 +920,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                          <div className="flex justify-between items-center mb-4">
                              <h3 className="text-lg font-bold text-slate-800">Project Overview</h3>
-                             {!isGuestView && (
+                             {canEdit && (
                                 <button 
                                     onClick={() => isEditingOverview ? handleUpdateOverview() : setIsEditingOverview(true)}
                                     className={`text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2 ${isEditingOverview ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
@@ -1047,7 +1095,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                             />
                         ))}
                     </div>
-                    {!isGuestView && (
+                    {canEdit && (
                         <button 
                             onClick={() => setAddingTaskTo(status as TaskStatus)}
                             className="mt-3 w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-500 hover:bg-white hover:shadow-sm rounded-lg transition-all border border-transparent hover:border-slate-200"
@@ -1084,7 +1132,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                         <FolderOpen className="w-5 h-5 text-indigo-500" /> {section.name}
                                     </h3>
                                 )}
-                                {!isGuestView && !editingSectionId && (
+                                {canEdit && !editingSectionId && (
                                     <div className="flex gap-1">
                                          <button onClick={() => { setEditingSectionId(section.id); setEditSectionName(section.name); }} className="p-1 text-slate-400 hover:text-indigo-600"><Edit2 className="w-3 h-3"/></button>
                                          <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3 h-3"/></button>
@@ -1092,7 +1140,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 )}
                             </div>
                             
-                            {!isGuestView && (
+                            {canEdit && (
                                 <button 
                                     onClick={() => handleAddFile(section.id)}
                                     className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 shadow-sm"
@@ -1108,7 +1156,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1">
                                     <Globe className="w-3 h-3" /> Google Drive Folder
                                 </label>
-                                {!isGuestView ? (
+                                {canEdit ? (
                                     <EditableResourceLink 
                                         url={section.driveUrl || ''} 
                                         onSave={(url) => handleUpdateSectionDrive(section.id, url)}
@@ -1141,7 +1189,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                                     <p className="text-[10px] text-slate-400">{new Date(file.lastModified).toLocaleDateString()}</p>
                                                 </div>
                                             </div>
-                                            {!isGuestView && (
+                                            {canEdit && (
                                                 <button onClick={() => handleDeleteFile(file.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
@@ -1157,7 +1205,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     </div>
                 ))}
                 
-                {!isGuestView && (
+                {canEdit && (
                     <button 
                         onClick={handleAddSection}
                         className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 font-medium"
@@ -1191,7 +1239,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    {!isGuestView ? (
+                                    {isOwner ? (
                                         <select 
                                             value={member.role}
                                             onChange={(e) => handleUpdateRole(member.id, e.target.value as any)}
@@ -1207,7 +1255,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                         <span className="text-sm font-medium text-slate-600 px-2">{member.role}</span>
                                     )}
                                     
-                                    {!isGuestView && member.role !== 'Owner' && (
+                                    {isOwner && member.role !== 'Owner' && (
                                         <button 
                                             onClick={() => handleRemoveMember(member.id)}
                                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -1222,7 +1270,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                     </div>
                 </div>
 
-                {!isGuestView && (
+                {canEdit && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                         <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <UserPlus className="w-5 h-5 text-indigo-600" /> Invite New Member
