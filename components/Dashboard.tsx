@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Project, ProjectStatus, Reminder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Clock, CheckCircle2, TrendingUp, Calendar, Plus, Sparkles, Bell, Trash2, Hash, Layers } from 'lucide-react';
+import { Clock, CheckCircle2, TrendingUp, Calendar, Plus, Sparkles, Bell, Trash2, Hash, Layers, Activity } from 'lucide-react';
 import { suggestProjectSchedule } from '../services/gemini';
 
 interface DashboardProps {
@@ -46,6 +46,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
     progress: p.progress,
     fullTitle: p.title
   }));
+
+  // --- AGGREGATE RECENT ACTIVITY ---
+  const recentActivities = activeProjects.flatMap(p => 
+    (p.activity || []).map(a => {
+        const author = p.collaborators.find(c => c.id === a.authorId);
+        return {
+            ...a,
+            projectTitle: p.title,
+            projectId: p.id,
+            authorName: author ? author.name : 'Unknown User',
+            authorInitials: author ? author.initials : '?'
+        };
+    })
+  )
+  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  .slice(0, 20); // Show top 20 recent activities
 
   const handleSmartPlan = async () => {
       if (activeProjects.length === 0) return;
@@ -187,6 +203,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, reminders, onAdd
                     </div>
                 )}
             </div>
+
+            {/* NEW: Global Activity Feed */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col h-[500px]">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-indigo-600" />
+                    Global Activity Feed
+                </h3>
+                {recentActivities.length > 0 ? (
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin">
+                        {recentActivities.map(activity => (
+                            <div key={activity.id} className="flex gap-3 group">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-xs shrink-0 border border-slate-200">
+                                    {activity.authorInitials}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-sm text-slate-800">
+                                        <span className="font-semibold">{activity.authorName}</span> <span className="text-slate-600">{activity.message}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-medium truncate max-w-[150px]">
+                                            {activity.projectTitle}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400">
+                                            {new Date(activity.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center text-slate-400 text-sm italic">
+                        No recent activity in active projects.
+                    </div>
+                )}
+            </div>
+
         </div>
 
         {/* Right Column: Reminders */}
