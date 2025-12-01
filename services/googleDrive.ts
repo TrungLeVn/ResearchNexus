@@ -29,12 +29,21 @@ export const listFilesInFolder = async (folderUrl: string): Promise<DriveFile[]>
     
     try {
         const response = await fetch(endpoint);
+        
         if (!response.ok) {
             const errorData = await response.json();
             console.error("Google Drive API Error:", errorData);
-            const message = errorData.error?.message || "Failed to fetch files. Please ensure the folder is public ('Anyone with the link can view').";
-            throw new Error(message);
+            
+            const msg = errorData.error?.message || "";
+            if (msg.includes("API has not been used in project") || msg.includes("Drive API")) {
+                 throw new Error("Google Drive API is not enabled for this project key. You can still use the link above to view files directly.");
+            }
+            if (response.status === 403) {
+                 throw new Error("Permission denied. Ensure the folder is 'Public' or 'Anyone with the link' can view.");
+            }
+            throw new Error(msg || "Failed to fetch files from Drive.");
         }
+        
         const data = await response.json();
         return data.files || [];
     } catch (error) {
