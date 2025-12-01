@@ -7,7 +7,7 @@ import {
     LayoutDashboard, ChevronDown, Flag,
     Code, FileText, Database, FolderOpen, Box, Hash,
     ClipboardList, Megaphone, Loader2, AlertTriangle, Edit2, Save, Folder, Globe,
-    ExternalLink, Mail, User, UserPlus, BarChart2, Activity, PenLine, Share2
+    ExternalLink, Mail, User, UserPlus, BarChart2, Activity, PenLine, Share2, MoreVertical
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { listFilesInFolder, DriveFile } from '../services/googleDrive';
@@ -548,741 +548,719 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   
   // Migration Effect for Legacy Projects without fileSections
   useEffect(() => {
-      if (!project.fileSections) {
+      // STRICT CHECK: Only migrate if fileSections is completely undefined.
+      // If it is an empty array [], that means sections were deleted intentionally, so do not migrate.
+      if (project.fileSections === undefined) {
           console.log('Migrating legacy project file structure...');
           
           const isAdmin = project.category === 'admin';
+          const sec1Id = 'sec_1';
+          const sec2Id = 'sec_2';
+          const sec3Id = 'sec_3';
+          
           const defaultSections: FileSection[] = [
-              { id: 'sec_1', name: isAdmin ? 'Official Documents' : 'Drafts & Papers', driveUrl: project.categoryDriveUrls?.drafts },
-              { id: 'sec_2', name: isAdmin ? 'Financial Documents' : 'Code & Data', driveUrl: project.categoryDriveUrls?.code },
-              { id: 'sec_3', name: isAdmin ? 'Assets' : 'Other Assets', driveUrl: project.categoryDriveUrls?.assets }
+              { id: sec1Id, name: isAdmin ? 'Official Documents' : 'Drafts & Papers', driveUrl: project.categoryDriveUrls?.drafts || '' },
+              { id: sec2Id, name: isAdmin ? 'Financial Documents' : 'Code & Data', driveUrl: project.categoryDriveUrls?.code || '' },
+              { id: sec3Id, name: isAdmin ? 'Assets' : 'Other Assets', driveUrl: project.categoryDriveUrls?.assets || '' }
           ];
 
-          // Map existing files to sections based on type
+          // Map existing files to sections
           const updatedFiles = (project.files || []).map(f => {
               if (f.sectionId) return f;
-              if (['draft', 'document'].includes(f.type)) return { ...f, sectionId: 'sec_1' };
-              if (['code', 'data'].includes(f.type)) return { ...f, sectionId: 'sec_2' };
-              return { ...f, sectionId: 'sec_3' };
+              let sId = sec3Id;
+              if (['draft', 'document'].includes(f.type)) sId = sec1Id;
+              else if (['code', 'data'].includes(f.type)) sId = sec2Id;
+              return { ...f, sectionId: sId };
           });
 
           onUpdateProject({
               ...project,
               fileSections: defaultSections,
               files: updatedFiles,
-              categoryDriveUrls: undefined // Clear legacy field
+              categoryDriveUrls: undefined // Cleanup
           });
       }
-  }, [project.id]); // Run only when project ID changes to prevent loops
+  }, [project.id, project.fileSections]); // Check on ID or fileSections change
 
-  const addActivity = (message: string): ProjectActivity[] => {
-      const newActivity: ProjectActivity = {
-          id: `act_${Date.now()}`,
-          message: `${currentUser.name} ${message}`,
+  // --- HANDLERS ---
+  
+  const handleShareProject = () => {
+    const inviteLink = `${window.location.origin}?pid=${project.id}`;
+    navigator.clipboard.writeText(inviteLink);
+    setShowNotification({ message: 'Invite link copied to clipboard!', type: 'success' });
+  };
+
+  const handleUpdateOverview = () => {
+      onUpdateProject({
+          ...project,
+          description: editDescription,
+          tags: editTags,
+          status: editStatus,
+          progress: editProgress
+      });
+      setIsEditingOverview(false);
+      setShowNotification({ message: 'Project overview updated', type: 'success' });
+  };
+
+  const handleTaskMove = (taskId: string, newStatus: TaskStatus) => {
+      const updatedTasks = project.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+      onUpdateProject({ ...project, tasks: updatedTasks });
+      
+      const movedTask = project.tasks.find(t => t.id === taskId);
+      const activity: ProjectActivity = {
+          id: Date.now().toString(),
+          message: `moved task '${movedTask?.title}' to ${statusMap[newStatus]}`,
           timestamp: new Date().toISOString(),
           authorId: currentUser.id
       };
-      return [newActivity, ...(project.activity || [])];
+      onUpdateProject({ ...project, tasks: updatedTasks, activity: [activity, ...(project.activity || [])] });
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
-    const updatedTasks = project.tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
-    const activityMessage = updatedTask.status !== project.tasks.find(t=>t.id===updatedTask.id)?.status
-        ? `updated task "${updatedTask.title}" to ${statusMap[updatedTask.status]}`
-        : `updated task details for "${updatedTask.title}"`;
-
-    onUpdateProject({ ...project, tasks: updatedTasks, activity: addActivity(activityMessage) });
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+      e.dataTransfer.setData('taskId', taskId);
   };
 
-  const handleAddTask = (newTask: Task) => {
-    onUpdateProject({ ...project, tasks: [...project.tasks, newTask], activity: addActivity(`created task "${newTask.title}"`) });
-    setAddingTaskTo(null);
-    setShowNotification({ message: 'Task added successfully!', type: 'success' });
-  };
-  
-  const handleDeleteTask = (taskId: string) => {
-      const taskToDelete = project.tasks.find(t => t.id === taskId);
-      if(!taskToDelete) return;
-      onUpdateProject({ ...project, tasks: project.tasks.filter(t => t.id !== taskId), activity: addActivity(`deleted task "${taskToDelete.title}"`) });
-      setShowNotification({ message: 'Task deleted!', type: 'success' });
-  };
-
-  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
-  const handleDrop = (e: React.DragEvent, newStatus: TaskStatus) => {
+  const handleDrop = (e: React.DragEvent, status: TaskStatus) => {
       const taskId = e.dataTransfer.getData('taskId');
-      const task = project.tasks.find(t => t.id === taskId);
-      if (task && task.status !== newStatus) {
-          handleUpdateTask({ ...task, status: newStatus });
-      }
-  };
-
-  const handleAddFile = (sectionId: string) => {
-      const name = prompt("File name or title:");
-      if (!name) return;
-      const typeStr = prompt("Type (draft, code, data, slide, document):", "document");
-      const type = (['draft', 'code', 'data', 'slide', 'document'].includes(typeStr || '') ? typeStr : 'document') as ProjectFile['type'];
-      
-      const newFile: ProjectFile = {
-          id: `file_${Date.now()}`,
-          name,
-          url: '', 
-          description: "Manually added file.",
-          type,
-          lastModified: new Date().toISOString(),
-          sectionId // Assign to specific section
-      };
-      onUpdateProject({ ...project, files: [...project.files, newFile], activity: addActivity(`added file "${name}"`) });
+      if (taskId) handleTaskMove(taskId, status);
   };
   
-  const handleDeleteFile = (id: string) => {
-      onUpdateProject({ ...project, files: project.files.filter(f => f.id !== id) });
-  };
-
-  // --- SECTION MANAGEMENT ---
+  // File Section Handlers
   const handleAddSection = () => {
-      const name = prompt("New Section Name:");
+      const name = prompt("Enter new section name:");
       if (!name) return;
       const newSection: FileSection = {
           id: `sec_${Date.now()}`,
-          name,
+          name: name,
           driveUrl: ''
       };
-      onUpdateProject({ 
-          ...project, 
-          fileSections: [...(project.fileSections || []), newSection] 
-      });
+      onUpdateProject({ ...project, fileSections: [...(project.fileSections || []), newSection] });
   };
 
-  const handleUpdateSectionName = (id: string) => {
-      if (!editSectionName.trim()) return;
+  const handleRenameSection = (sectionId: string) => {
+      if (editSectionName.trim() === '') return;
       const updatedSections = (project.fileSections || []).map(s => 
-          s.id === id ? { ...s, name: editSectionName } : s
+          s.id === sectionId ? { ...s, name: editSectionName } : s
       );
       onUpdateProject({ ...project, fileSections: updatedSections });
       setEditingSectionId(null);
   };
 
-  const handleDeleteSection = (id: string) => {
-      if (window.confirm("Delete this section? Files inside will be kept but unorganized.")) {
-           const updatedSections = (project.fileSections || []).filter(s => s.id !== id);
-           onUpdateProject({ ...project, fileSections: updatedSections });
-      }
+  const handleDeleteSection = (sectionId: string) => {
+      if (!window.confirm("Are you sure? This will remove the section but keep the files (they will be moved to Uncategorized).")) return;
+      
+      const updatedSections = (project.fileSections || []).filter(s => s.id !== sectionId);
+      // Move files to undefined section or handle as orphan? 
+      // For simplicity, we just keep them, they won't show in loop but exist in data. 
+      // Ideally, reassign to a 'Default' section or show in "Uncategorized".
+      onUpdateProject({ ...project, fileSections: updatedSections });
   };
-  
-  const handleUpdateSectionDriveUrl = (sectionId: string, url: string) => {
+
+  const handleUpdateSectionDrive = (sectionId: string, url: string) => {
       const updatedSections = (project.fileSections || []).map(s => 
           s.id === sectionId ? { ...s, driveUrl: url } : s
       );
       onUpdateProject({ ...project, fileSections: updatedSections });
   };
 
-
-  const handleUpdateProjectTitle = () => {
-    if (newProjectTitle.trim() && newProjectTitle !== project.title) {
-        onUpdateProject({ ...project, title: newProjectTitle.trim() });
-    }
-    setIsEditingTitle(false);
+  const handleAddFile = (sectionId: string) => {
+      const name = prompt("File Name:");
+      if (!name) return;
+      // In a real app, this would be a file picker
+      const newFile: ProjectFile = {
+          id: `f_${Date.now()}`,
+          name,
+          type: 'document',
+          lastModified: new Date().toISOString(),
+          sectionId
+      };
+      onUpdateProject({ ...project, files: [...project.files, newFile] });
   };
   
-  // --- Overview Edit Handlers ---
-  const handleSaveOverview = () => {
-      onUpdateProject({
-          ...project,
-          description: editDescription,
-          tags: editTags,
-          status: editStatus,
-          progress: editProgress,
-          activity: addActivity('updated project overview')
-      });
-      setIsEditingOverview(false);
-      setShowNotification({ message: 'Project overview updated', type: 'success' });
+  const handleDeleteFile = (fileId: string) => {
+      if (!window.confirm("Delete this file reference?")) return;
+      onUpdateProject({ ...project, files: project.files.filter(f => f.id !== fileId) });
   };
 
-  const handleTagInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && tagInput.trim() !== '') {
-        e.preventDefault();
-        if (!editTags.includes(tagInput.trim())) {
-            setEditTags([...editTags, tagInput.trim()]);
-        }
-        setTagInput('');
-    }
-  };
-
-  const removeTag = (tagToRemove: string) => {
-      setEditTags(editTags.filter(t => t !== tagToRemove));
-  };
-  
-  const handleDriveUrlChange = (url: string) => {
-    onUpdateProject({ ...project, driveFolderUrl: url });
-  };
-
-  const handleDeleteProjectConfirm = () => {
-    if(window.prompt(`This will permanently delete the project "${project.title}". This cannot be undone. Type the project title to confirm.`) === project.title) {
-        onDeleteProject(project.id);
-    }
-  };
-
-  // --- Team Management Functions ---
-  const handleAddCollaborator = () => {
-      if (!inviteName || !inviteEmail) return;
+  const handleInviteMember = () => {
+      if (!inviteEmail || !inviteName) return;
       
-      const newCollab: Collaborator = {
-          id: `collab_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+      // In a real app, this would send an email
+      // Here we just add to the project collaborators mock
+      const newMember: Collaborator = {
+          id: inviteEmail.toLowerCase().replace(/[^a-z0-9]/g, '-'),
           name: inviteName,
           email: inviteEmail,
           role: 'Viewer',
-          initials: inviteName.substring(0,2).toUpperCase()
+          initials: inviteName.substring(0, 2).toUpperCase()
       };
       
-      const updatedCollaborators = [...project.collaborators, newCollab];
-      onUpdateProject({ ...project, collaborators: updatedCollaborators });
-      setShowNotification({ message: `Added ${inviteName} to team`, type: 'success' });
+      onUpdateProject({ 
+          ...project, 
+          collaborators: [...project.collaborators, newMember] 
+      });
+      
       setInviteName('');
       setInviteEmail('');
+      setShowNotification({ message: `${newMember.name} added to project!`, type: 'success' });
   };
 
-  const handleRemoveCollaborator = (id: string) => {
-      if (window.confirm("Are you sure you want to remove this member?")) {
-          const updatedCollaborators = project.collaborators.filter(c => c.id !== id);
-          onUpdateProject({ ...project, collaborators: updatedCollaborators });
-          setShowNotification({ message: 'Collaborator removed', type: 'success' });
+  const handleRemoveMember = (memberId: string) => {
+      if (!window.confirm("Remove this member?")) return;
+      onUpdateProject({
+          ...project,
+          collaborators: project.collaborators.filter(c => c.id !== memberId)
+      });
+  };
+
+  const handleUpdateRole = (memberId: string, newRole: Collaborator['role']) => {
+      onUpdateProject({
+          ...project,
+          collaborators: project.collaborators.map(c => c.id === memberId ? { ...c, role: newRole } : c)
+      });
+  };
+
+  // Tag Handling
+  const handleAddTag = () => {
+      if (tagInput && !editTags.includes(tagInput)) {
+          setEditTags([...editTags, tagInput]);
+          setTagInput('');
       }
   };
 
-  const handleUpdateRole = (id: string, newRole: 'Owner' | 'Editor' | 'Viewer' | 'Guest') => {
-      const updatedCollaborators = project.collaborators.map(c => 
-          c.id === id ? { ...c, role: newRole } : c
-      );
-      onUpdateProject({ ...project, collaborators: updatedCollaborators });
-      setShowNotification({ message: 'Role updated', type: 'success' });
+  const handleRemoveTag = (tag: string) => {
+      setEditTags(editTags.filter(t => t !== tag));
   };
-
-  const handleShareProject = () => {
-    const url = `${window.location.origin}?pid=${project.id}`;
-    navigator.clipboard.writeText(url);
-    setShowNotification({ message: 'Project Invite Link copied to clipboard!', type: 'success' });
-  };
-
-  const renderTabContent = () => {
-    switch(activeTab) {
-        case 'dashboard':
-            const completedTasks = project.tasks.filter(t => t.status === 'done').length;
-            const totalTasks = project.tasks.length;
-            const tasksInProgress = project.tasks.filter(t => t.status === 'in_progress').length;
-            const tasksTodo = project.tasks.filter(t => t.status === 'todo').length;
-
-            const taskData = [
-                { name: 'To Do', value: tasksTodo, color: '#f59e0b' },
-                { name: 'In Progress', value: tasksInProgress, color: '#6366f1' },
-                { name: 'Done', value: completedTasks, color: '#10b981' }
-            ].filter(d => d.value > 0);
-
-            return (
-                <div className="p-6 space-y-6 max-w-6xl mx-auto">
-                     {/* Description & Overview Card */}
-                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative group">
-                        <div className="flex justify-between items-start mb-4">
-                             <h3 className="text-lg font-bold text-slate-800">Project Overview</h3>
-                             {!isGuestView && !isEditingOverview && (
-                                 <button 
-                                     onClick={() => setIsEditingOverview(true)} 
-                                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                                 >
-                                     <Edit2 className="w-3.5 h-3.5"/> Edit
-                                 </button>
-                             )}
-                        </div>
-
-                        {isEditingOverview ? (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                                    <textarea 
-                                        value={editDescription} 
-                                        onChange={e => setEditDescription(e.target.value)} 
-                                        className="w-full border rounded-md p-2 h-32 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                                        <select value={editStatus} onChange={e => setEditStatus(e.target.value as ProjectStatus)} className="w-full border rounded-md p-2 bg-white text-sm">
-                                            {Object.values(ProjectStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Progress: {editProgress}%</label>
-                                        <input type="range" min="0" max="100" value={editProgress} onChange={e => setEditProgress(Number(e.target.value))} className="w-full"/>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tags</label>
-                                    <div className="flex flex-wrap gap-2 mb-2">
-                                        {editTags.map(tag => (
-                                            <span key={tag} className="flex items-center gap-1.5 bg-pink-100 text-pink-700 px-2 py-1 rounded-full text-xs font-medium">
-                                                {tag}
-                                                <button onClick={() => removeTag(tag)} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        value={tagInput}
-                                        onChange={e => setTagInput(e.target.value)}
-                                        onKeyDown={handleTagInput}
-                                        className="w-full border rounded-md p-2 text-sm" 
-                                        placeholder="Add a tag and press Enter"
-                                        list="existing-tags-datalist"
-                                    />
-                                    <datalist id="existing-tags-datalist">
-                                        {existingTags.filter(t => !editTags.includes(t)).map(tag => <option key={tag} value={tag} />)}
-                                    </datalist>
-                                </div>
-
-                                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                                    <button onClick={() => setIsEditingOverview(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                                    <button onClick={handleSaveOverview} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Save Overview</button>
-                                </div>
-                                
-                                {/* Danger Zone inside Edit Mode */}
-                                <div className="mt-8 pt-4 border-t border-red-100">
-                                    <h4 className="text-sm font-bold text-red-700 mb-2">Danger Zone</h4>
-                                    <button onClick={handleDeleteProjectConfirm} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 text-sm font-medium">
-                                        <Trash2 className="w-4 h-4"/> Delete Project
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-                                    {project.description || "No description provided."}
-                                </p>
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                    {project.tags?.map(tag => (
-                                        <span key={tag} className="text-xs font-medium px-2 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
-                                            #{tag}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
-                            <p className="text-sm font-semibold text-slate-500">Progress</p>
-                            <div className="flex items-end gap-2">
-                                <span className="text-3xl font-bold text-indigo-600">{project.progress}%</span>
-                            </div>
-                             <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2">
-                                <div className="bg-indigo-600 h-1.5 rounded-full" style={{ width: `${project.progress}%` }}></div>
-                            </div>
-                        </div>
-                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
-                             <p className="text-sm font-semibold text-slate-500">Total Tasks</p>
-                             <span className="text-3xl font-bold text-slate-800">{totalTasks}</span>
-                             <div className="flex items-center gap-1 text-xs text-slate-400">
-                                 <ClipboardList className="w-3 h-3"/> {completedTasks} completed
-                             </div>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
-                             <p className="text-sm font-semibold text-slate-500">Team Size</p>
-                             <span className="text-3xl font-bold text-purple-600">{project.collaborators.length}</span>
-                             <div className="flex items-center gap-1 text-xs text-slate-400">
-                                 <Users className="w-3 h-3"/> Active members
-                             </div>
-                        </div>
-                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
-                             <p className="text-sm font-semibold text-slate-500">Documents</p>
-                             <span className="text-3xl font-bold text-emerald-600">{project.files.length}</span>
-                             <div className="flex items-center gap-1 text-xs text-slate-400">
-                                 <FolderOpen className="w-3 h-3"/> Resources
-                             </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
-                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart2 className="w-4 h-4 text-slate-500"/> Task Status</h4>
-                            {totalTasks > 0 ? (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={taskData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                            {taskData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                                        </Pie>
-                                        <Tooltip formatter={(value) => [value, 'Tasks']} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-slate-400 italic">No tasks created yet.</div>
-                            )}
-                             <div className="flex justify-center gap-4 mt-[-20px]">
-                                {taskData.map(entry => (
-                                    <div key={entry.name} className="flex items-center gap-1 text-xs text-slate-600">
-                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                                        {entry.name}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80 overflow-hidden flex flex-col">
-                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Activity className="w-4 h-4 text-slate-500"/> Recent Activity</h4>
-                            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                                {(project.activity || []).slice(0, 10).map(act => (
-                                    <div key={act.id} className="flex gap-3 text-sm border-b border-slate-50 pb-2 last:border-0">
-                                        <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                                            {(project.collaborators.find(c => c.id === act.authorId)?.initials) || '?'}
-                                        </div>
-                                        <div>
-                                            <p className="text-slate-700">{act.message}</p>
-                                            <p className="text-[10px] text-slate-400">{new Date(act.timestamp).toLocaleString()}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                                {(!project.activity || project.activity.length === 0) && (
-                                    <p className="text-center text-slate-400 italic mt-10">No recent activity.</p>
-                                )}
-                            </div>
-                         </div>
-                    </div>
-
-                    {/* Key Resources / Drive Integration - Moved to Dashboard for Visibility */}
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Folder className="w-5 h-5 text-indigo-600"/> Key Resources</h3>
-                        <div className="space-y-4">
-                            <EditableResourceLink 
-                                label="Main Google Drive Folder"
-                                url={project.driveFolderUrl || ''} 
-                                onSave={handleDriveUrlChange} 
-                                placeholder="https://drive.google.com/drive/folders/..." 
-                                icon={<Globe className="w-4 h-4 text-slate-500"/>}
-                            />
-                            {project.driveFolderUrl && (
-                                <div className="mt-2 pl-2 border-l-2 border-indigo-100">
-                                    <SyncedDriveFiles driveUrl={project.driveFolderUrl} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            );
-        case 'board':
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
-                    {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => (
-                        <div key={status} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, status)} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <div className="flex justify-between items-center mb-4 px-2">
-                                <h3 className="font-semibold text-slate-700">{statusMap[status]}</h3>
-                                {!isGuestView && (
-                                    <button onClick={() => setAddingTaskTo(status)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Plus className="w-4 h-4"/></button>
-                                )}
-                            </div>
-                            <div className="space-y-3 min-h-[100px]">
-                                {project.tasks.filter(t => t.status === status).map(task => (
-                                    <TaskCard key={task.id} task={task} project={project} onClick={() => setSelectedTask(task)} onDragStart={(e, taskId) => e.dataTransfer.setData('taskId', taskId)} />
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            );
-        case 'files':
-            return (
-                <div className="p-6 space-y-6 animate-in fade-in duration-300">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold text-slate-800">Files & Documents</h2>
-                        {!isGuestView && (
-                            <button onClick={handleAddSection} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-medium hover:bg-slate-700">
-                                <Plus className="w-3 h-3" /> New Section
-                            </button>
-                        )}
-                    </div>
-
-                    {(project.fileSections || []).map(section => (
-                        <div key={section.id} className="bg-white p-4 rounded-xl border border-slate-200 relative group/section">
-                             <div className="flex justify-between items-center mb-3">
-                                {editingSectionId === section.id ? (
-                                    <div className="flex gap-2 items-center flex-1">
-                                        <input 
-                                            value={editSectionName}
-                                            onChange={e => setEditSectionName(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleUpdateSectionName(section.id)}
-                                            autoFocus
-                                            className="font-semibold text-slate-800 bg-slate-50 border border-slate-300 rounded px-2 py-1 outline-none text-sm"
-                                        />
-                                        <button onClick={() => handleUpdateSectionName(section.id)} className="p-1 bg-indigo-600 text-white rounded"><Check className="w-3 h-3"/></button>
-                                        <button onClick={() => setEditingSectionId(null)} className="p-1 bg-slate-200 text-slate-600 rounded"><X className="w-3 h-3"/></button>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-2 group-hover/section:text-indigo-600 transition-colors">
-                                        <h3 className="font-semibold text-slate-800">{section.name}</h3>
-                                        {!isGuestView && (
-                                            <button 
-                                                onClick={() => { setEditingSectionId(section.id); setEditSectionName(section.name); }} 
-                                                className="p-1 text-slate-300 hover:text-indigo-600 opacity-0 group-hover/section:opacity-100 transition-opacity"
-                                            >
-                                                <PenLine className="w-3.5 h-3.5"/>
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                                
-                                <div className="flex items-center gap-2">
-                                     {!isGuestView && (
-                                         <>
-                                            <button 
-                                                onClick={() => handleAddFile(section.id)}
-                                                className="text-xs flex items-center gap-1 text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
-                                            >
-                                                <Plus className="w-3 h-3" /> Add File
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDeleteSection(section.id)}
-                                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                                title="Delete Section"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                         </>
-                                     )}
-                                </div>
-                            </div>
-
-                            <EditableResourceLink 
-                                url={section.driveUrl || ''} 
-                                onSave={(url) => handleUpdateSectionDriveUrl(section.id, url)} 
-                                placeholder={`Paste Google Drive folder URL for ${section.name}...`}
-                                icon={<Globe className="w-4 h-4 text-slate-500"/>}
-                            />
-                            
-                            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                                {section.driveUrl && <SyncedDriveFiles driveUrl={section.driveUrl} />}
-                                
-                                {/* Manual Files for this Section */}
-                                {project.files.filter(f => f.sectionId === section.id).length > 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
-                                        {project.files.filter(f => f.sectionId === section.id).map(file => (
-                                            <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
-                                                <div className="flex items-center gap-2 text-sm">
-                                                    {getFileIcon(file.type)} 
-                                                    <span className="font-medium text-slate-700">{file.name}</span>
-                                                </div>
-                                                <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                    
-                    {(project.fileSections || []).length === 0 && (
-                        <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
-                            <FolderOpen className="w-12 h-12 mx-auto mb-2 opacity-50"/>
-                            <p>No file sections defined.</p>
-                            {!isGuestView && <button onClick={handleAddSection} className="text-indigo-600 font-medium hover:underline text-sm">Create a section</button>}
-                        </div>
-                    )}
-                </div>
-            );
-        case 'team':
-             if (isGuestView) return <div className="p-6 text-center text-slate-400">Team management is hidden for guests.</div>;
-             return (
-                 <div className="p-6 max-w-4xl mx-auto space-y-6">
-                     {/* Team List */}
-                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                                <Users className="w-5 h-5 text-indigo-600"/> Project Team
-                            </h3>
-                            <span className="text-xs font-semibold px-2 py-1 bg-slate-100 rounded-full text-slate-500">{project.collaborators.length} Members</span>
-                        </div>
-                        <div className="space-y-1">
-                            {project.collaborators.map(member => (
-                                <div key={member.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
-                                    <div className="flex items-center gap-4 mb-3 md:mb-0">
-                                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
-                                            {member.initials}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-700 text-sm">{member.name} {member.id === currentUser.id && <span className="text-slate-400 font-normal">(You)</span>}</p>
-                                            <p className="text-xs text-slate-500">{member.email}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 pl-14 md:pl-0">
-                                        <div className="relative">
-                                            <select 
-                                                value={member.role}
-                                                disabled={member.role === 'Owner' || currentUser.role !== 'Owner'}
-                                                onChange={(e) => handleUpdateRole(member.id, e.target.value as any)}
-                                                className="appearance-none bg-white border border-slate-300 text-slate-700 text-xs font-medium py-1.5 pl-3 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-100"
-                                            >
-                                                <option value="Owner">Owner</option>
-                                                <option value="Editor">Editor</option>
-                                                <option value="Viewer">Viewer</option>
-                                                <option value="Guest">Guest</option>
-                                            </select>
-                                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                                        </div>
-                                        {member.role !== 'Owner' && currentUser.role === 'Owner' && (
-                                            <button 
-                                                onClick={() => handleRemoveCollaborator(member.id)}
-                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" 
-                                                title="Remove Member"
-                                            >
-                                                <Trash2 className="w-4 h-4"/>
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                     </div>
-                     
-                     {/* Invite Section */}
-                     {currentUser.role === 'Owner' && (
-                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                             <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-                                <UserPlus className="w-5 h-5 text-emerald-600"/> Invite New Member
-                             </h3>
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Full Name</label>
-                                    <div className="relative">
-                                        <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                                        <input 
-                                            value={inviteName}
-                                            onChange={e => setInviteName(e.target.value)}
-                                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                            placeholder="John Doe"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Email Address</label>
-                                    <div className="relative">
-                                        <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                                        <input 
-                                            value={inviteEmail}
-                                            onChange={e => setInviteEmail(e.target.value)}
-                                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                            placeholder="john@example.com"
-                                        />
-                                    </div>
-                                </div>
-                             </div>
-                             <div className="mt-4 flex justify-end">
-                                 <button 
-                                    onClick={handleAddCollaborator}
-                                    disabled={!inviteName || !inviteEmail}
-                                    className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 disabled:opacity-50 text-sm flex items-center gap-2"
-                                 >
-                                     <Send className="w-4 h-4"/> Send Invite
-                                 </button>
-                             </div>
-                         </div>
-                     )}
-                 </div>
-             );
-        default: return null;
-    }
-  };
+  
+  // Calculate Task Stats
+  const taskStats = [
+      { name: 'To Do', value: project.tasks.filter(t => t.status === 'todo').length, color: '#94a3b8' },
+      { name: 'In Progress', value: project.tasks.filter(t => t.status === 'in_progress').length, color: '#f59e0b' },
+      { name: 'Done', value: project.tasks.filter(t => t.status === 'done').length, color: '#10b981' }
+  ].filter(d => d.value > 0);
 
   return (
-    <div className="h-full flex flex-col bg-slate-100 animate-in fade-in duration-500">
-      {selectedTask && <TaskDetailModal task={selectedTask} project={project} currentUser={currentUser} onClose={() => setSelectedTask(null)} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onSendNotification={(message, type='success') => setShowNotification({message, type})} />}
-      {addingTaskTo && <AddTaskModal status={addingTaskTo} project={project} onClose={() => setAddingTaskTo(null)} onSave={handleAddTask} />}
-      
+    <div className="h-full flex flex-col bg-slate-50 relative animate-in fade-in duration-300">
       {showNotification && (
-          <div className={`fixed top-5 right-5 z-50 px-4 py-2 rounded-lg shadow-lg text-white animate-in slide-in-from-top ${showNotification.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`}>
+          <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-50 flex items-center gap-2 animate-in slide-in-from-top-4 fade-in ${showNotification.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-500 text-white'}`}>
+              {showNotification.type === 'success' ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
               {showNotification.message}
           </div>
       )}
+      
+      {/* Modals */}
+      {selectedTask && (
+          <TaskDetailModal 
+            task={selectedTask} 
+            project={project}
+            currentUser={currentUser}
+            onClose={() => setSelectedTask(null)}
+            onUpdateTask={(t) => {
+                const updatedTasks = project.tasks.map(task => task.id === t.id ? t : task);
+                onUpdateProject({ ...project, tasks: updatedTasks });
+            }}
+            onDeleteTask={(tid) => {
+                 onUpdateProject({ ...project, tasks: project.tasks.filter(t => t.id !== tid) });
+            }}
+            onSendNotification={(msg, type) => setShowNotification({ message: msg, type: type || 'success' })}
+          />
+      )}
+      {addingTaskTo && (
+          <AddTaskModal 
+             status={addingTaskTo}
+             project={project}
+             onClose={() => setAddingTaskTo(null)}
+             onSave={(t) => {
+                 onUpdateProject({ ...project, tasks: [...project.tasks, t] });
+                 setAddingTaskTo(null);
+                 setShowNotification({ message: 'Task added successfully', type: 'success' });
+             }}
+          />
+      )}
 
       {/* Header */}
-      <header className="bg-white p-4 border-b border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft className="w-5 h-5 text-slate-500" /></button>
-          <div onMouseEnter={() => setShowEditTitleIcon(true)} onMouseLeave={() => setShowEditTitleIcon(false)} className="relative group">
-            {isEditingTitle ? (
-                <div className="flex items-center gap-2">
+      <div className="bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-4">
+            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
+                <ChevronLeft className="w-5 h-5" />
+            </button>
+            <div 
+                className="relative group" 
+                onMouseEnter={() => setShowEditTitleIcon(true)}
+                onMouseLeave={() => setShowEditTitleIcon(false)}
+            >
+                {isEditingTitle ? (
                     <input 
                         value={newProjectTitle}
                         onChange={(e) => setNewProjectTitle(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateProjectTitle()}
-                        onBlur={handleUpdateProjectTitle}
+                        onBlur={() => {
+                            if (newProjectTitle.trim()) {
+                                onUpdateProject({ ...project, title: newProjectTitle });
+                            }
+                            setIsEditingTitle(false);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                if (newProjectTitle.trim()) {
+                                    onUpdateProject({ ...project, title: newProjectTitle });
+                                }
+                                setIsEditingTitle(false);
+                            }
+                        }}
                         autoFocus
-                        className="text-xl font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-md px-2 py-1 outline-none"
+                        className="text-xl font-bold text-slate-800 border-b-2 border-indigo-500 outline-none bg-transparent"
                     />
-                    <button onClick={handleUpdateProjectTitle} className="p-1.5 bg-indigo-600 text-white rounded-md"><Save className="w-3.5 h-3.5" /></button>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <h1 onClick={() => !isGuestView && setIsEditingTitle(true)} className="text-xl font-bold text-slate-800 cursor-pointer">{project.title}</h1>
+                        {!isGuestView && showEditTitleIcon && (
+                            <Edit2 onClick={() => setIsEditingTitle(true)} className="w-4 h-4 text-slate-400 cursor-pointer hover:text-indigo-600" />
+                        )}
+                    </div>
+                )}
+                <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                    <span className={`px-2 py-0.5 rounded-full ${project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100'}`}>{project.status}</span>
+                    <span>• {project.progress}% Complete</span>
                 </div>
-            ) : (
-                <h2 className="text-xl font-bold text-slate-800">{project.title}</h2>
-            )}
-            {!isEditingTitle && showEditTitleIcon && currentUser.role === 'Owner' && (
-                 <button onClick={() => setIsEditingTitle(true)} className="absolute -right-7 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Edit2 className="w-3.5 h-3.5"/>
+            </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+             <div className="flex -space-x-2 mr-2">
+                {project.collaborators.slice(0, 4).map(c => (
+                    <div key={c.id} title={c.name} className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs border-2 border-white">
+                        {c.initials}
+                    </div>
+                ))}
+            </div>
+            {!isGuestView && (
+                <button 
+                    onClick={handleShareProject}
+                    className="p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors border border-slate-200"
+                    title="Copy Invite Link"
+                >
+                    <Share2 className="w-4 h-4" />
                 </button>
             )}
-          </div>
-          <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{project.status}</span>
+             {!isGuestView && (
+                <button 
+                    onClick={() => { if(window.confirm("Are you sure you want to delete this project?")) onDeleteProject(project.id); }}
+                    className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                >
+                    <Trash2 className="w-5 h-5" />
+                </button>
+             )}
         </div>
-        <div className="flex items-center gap-4">
-           {/* Collaborators */}
-           <div className="flex items-center">
-                <div className="flex items-center -space-x-3 pr-2">
-                    {project.collaborators.slice(0, 3).map(c => (
-                        <div key={c.id} title={c.name} className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs border-2 border-white">
-                            {c.initials}
-                        </div>
-                    ))}
-                    {project.collaborators.length > 3 && <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center font-bold text-slate-600 text-xs border-2 border-white">+{project.collaborators.length - 3}</div>}
-                </div>
+      </div>
 
-                {!isGuestView && (
-                    <button 
-                        onClick={handleShareProject} 
-                        className="ml-4 flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm"
-                        title="Copy Invite Link"
-                    >
-                        <Share2 className="w-3.5 h-3.5"/> Share
-                    </button>
-                )}
-
-                {!isGuestView && (
-                    <button 
-                        onClick={() => setActiveTab('team')} 
-                        className="ml-2 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Manage Team"
-                    >
-                        <Users className="w-4 h-4"/>
-                    </button>
-                )}
-           </div>
-           
-           {/* AI Chat Toggle */}
-           <div className="w-px h-6 bg-slate-200"></div>
-           <div className="relative">
-              <button onClick={() => alert('AI Chat coming soon!')} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-700 shadow-sm">
-                  <MessageCircle className="w-4 h-4"/> AI Assistant
-              </button>
-           </div>
-        </div>
-      </header>
-
-      {/* Tabs */}
-      <nav className="bg-white border-b border-slate-200 px-6 flex gap-4">
+      {/* Navigation */}
+      <div className="bg-white border-b border-slate-200 px-6 flex gap-6">
         <TabButton isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={LayoutDashboard}>Dashboard</TabButton>
         <TabButton isActive={activeTab === 'board'} onClick={() => setActiveTab('board')} icon={ClipboardList}>Tasks</TabButton>
         <TabButton isActive={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={FolderOpen}>Files</TabButton>
         <TabButton isActive={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users}>Team</TabButton>
-      </nav>
+      </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        {renderTabContent()}
-      </main>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-6">
+        
+        {/* DASHBOARD TAB */}
+        {activeTab === 'dashboard' && (
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 {/* Overview / Edit Card */}
+                 <div className="lg:col-span-2 space-y-6">
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <div className="flex justify-between items-center mb-4">
+                             <h3 className="text-lg font-bold text-slate-800">Project Overview</h3>
+                             {!isGuestView && (
+                                <button 
+                                    onClick={() => isEditingOverview ? handleUpdateOverview() : setIsEditingOverview(true)}
+                                    className={`text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2 ${isEditingOverview ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                >
+                                    {isEditingOverview ? <Save className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                                    {isEditingOverview ? 'Save Changes' : 'Edit'}
+                                </button>
+                             )}
+                         </div>
+                         
+                         {isEditingOverview ? (
+                             <div className="space-y-4">
+                                 <div>
+                                     <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
+                                     <textarea 
+                                        value={editDescription}
+                                        onChange={e => setEditDescription(e.target.value)}
+                                        className="w-full mt-1 p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                     />
+                                 </div>
+                                 <div className="grid grid-cols-2 gap-4">
+                                     <div>
+                                         <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
+                                         <select 
+                                            value={editStatus}
+                                            onChange={e => setEditStatus(e.target.value as ProjectStatus)}
+                                            className="w-full mt-1 p-2 border rounded-lg text-sm bg-white"
+                                         >
+                                             {Object.values(ProjectStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                                         </select>
+                                     </div>
+                                     <div>
+                                         <label className="text-xs font-bold text-slate-400 uppercase">Progress (%)</label>
+                                         <input 
+                                            type="number"
+                                            min="0" max="100"
+                                            value={editProgress}
+                                            onChange={e => setEditProgress(Number(e.target.value))}
+                                            className="w-full mt-1 p-2 border rounded-lg text-sm"
+                                         />
+                                     </div>
+                                 </div>
+                                 <div>
+                                     <label className="text-xs font-bold text-slate-400 uppercase">Tags</label>
+                                     <div className="flex gap-2 mt-1 mb-2 flex-wrap">
+                                         {editTags.map(tag => (
+                                             <span key={tag} className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs flex items-center gap-1">
+                                                 {tag} <X onClick={() => handleRemoveTag(tag)} className="w-3 h-3 cursor-pointer" />
+                                             </span>
+                                         ))}
+                                     </div>
+                                     <div className="flex gap-2">
+                                         <input 
+                                            value={tagInput}
+                                            onChange={e => setTagInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                                            placeholder="Add tag..."
+                                            className="flex-1 p-2 border rounded-lg text-sm"
+                                            list="existingTags"
+                                         />
+                                         <datalist id="existingTags">
+                                             {existingTags.map(t => <option key={t} value={t} />)}
+                                         </datalist>
+                                         <button onClick={handleAddTag} className="p-2 bg-slate-100 rounded-lg text-slate-600"><Plus className="w-4 h-4" /></button>
+                                     </div>
+                                 </div>
+                             </div>
+                         ) : (
+                             <div className="space-y-4">
+                                 <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{project.description || "No description provided."}</p>
+                                 <div className="flex flex-wrap gap-2">
+                                     {project.tags?.map(tag => (
+                                         <span key={tag} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium border border-slate-200">#{tag}</span>
+                                     ))}
+                                 </div>
+                             </div>
+                         )}
+                     </div>
+                     
+                     {/* Recent Activity */}
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                             <Activity className="w-5 h-5 text-indigo-600" /> Recent Activity
+                         </h3>
+                         <div className="space-y-4">
+                             {(project.activity || []).slice(0, 5).map(act => {
+                                 const author = project.collaborators.find(c => c.id === act.authorId);
+                                 return (
+                                     <div key={act.id} className="flex gap-3 text-sm">
+                                         <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-xs shrink-0">
+                                             {author?.initials || '?'}
+                                         </div>
+                                         <div>
+                                             <p className="text-slate-800">
+                                                 <span className="font-semibold">{author?.name || 'Unknown'}</span> {act.message}
+                                             </p>
+                                             <p className="text-xs text-slate-400">{new Date(act.timestamp).toLocaleString()}</p>
+                                         </div>
+                                     </div>
+                                 );
+                             })}
+                             {(project.activity || []).length === 0 && <p className="text-slate-400 italic text-sm">No recent activity.</p>}
+                         </div>
+                     </div>
+                 </div>
+                 
+                 {/* Sidebar Stats */}
+                 <div className="space-y-6">
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Task Completion</h3>
+                         <div className="h-48">
+                             {taskStats.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={taskStats} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value">
+                                            {taskStats.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                        </Pie>
+                                        <Tooltip />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                             ) : (
+                                 <div className="h-full flex items-center justify-center text-slate-400 text-xs">No tasks yet</div>
+                             )}
+                         </div>
+                         <div className="flex justify-center gap-4 mt-2">
+                             {taskStats.map(s => (
+                                 <div key={s.name} className="flex items-center gap-1 text-xs text-slate-600">
+                                     <div className="w-2 h-2 rounded-full" style={{backgroundColor: s.color}}></div>
+                                     {s.name} ({s.value})
+                                 </div>
+                             ))}
+                         </div>
+                     </div>
+                     
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Project Progress</h3>
+                         <div className="flex items-center gap-4">
+                             <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                 <div className="h-full bg-indigo-600 rounded-full" style={{width: `${project.progress}%`}}></div>
+                             </div>
+                             <span className="font-bold text-indigo-600">{project.progress}%</span>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+        )}
+
+        {/* BOARD TAB */}
+        {activeTab === 'board' && (
+            <div className="flex gap-6 h-full overflow-x-auto pb-4">
+            {Object.keys(statusMap).map(status => (
+                <div 
+                    key={status} 
+                    className="flex-1 min-w-[300px] bg-slate-100/50 rounded-xl p-4 flex flex-col border border-slate-200"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => handleDrop(e, status as TaskStatus)}
+                >
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-slate-700">{statusMap[status as TaskStatus]}</h3>
+                        <span className="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-full font-medium">
+                            {project.tasks.filter(t => t.status === status).length}
+                        </span>
+                    </div>
+                    <div className="space-y-3 flex-1 overflow-y-auto">
+                        {project.tasks.filter(t => t.status === status).map(task => (
+                            <TaskCard 
+                                key={task.id} 
+                                task={task} 
+                                project={project}
+                                onClick={() => setSelectedTask(task)}
+                                onDragStart={handleDragStart}
+                            />
+                        ))}
+                    </div>
+                    {!isGuestView && (
+                        <button 
+                            onClick={() => setAddingTaskTo(status as TaskStatus)}
+                            className="mt-3 w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-500 hover:bg-white hover:shadow-sm rounded-lg transition-all border border-transparent hover:border-slate-200"
+                        >
+                            <Plus className="w-4 h-4" /> Add Task
+                        </button>
+                    )}
+                </div>
+            ))}
+            </div>
+        )}
+
+        {/* FILES TAB */}
+        {activeTab === 'files' && (
+            <div className="space-y-8">
+                {(project.fileSections || []).map(section => (
+                    <div key={section.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        {/* Section Header */}
+                        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                {editingSectionId === section.id ? (
+                                    <div className="flex gap-2">
+                                        <input 
+                                            value={editSectionName}
+                                            onChange={e => setEditSectionName(e.target.value)}
+                                            className="px-2 py-1 border rounded text-sm"
+                                            autoFocus
+                                        />
+                                        <button onClick={() => handleRenameSection(section.id)} className="p-1 bg-indigo-600 text-white rounded"><Check className="w-3 h-3"/></button>
+                                        <button onClick={() => setEditingSectionId(null)} className="p-1 bg-slate-200 rounded"><X className="w-3 h-3"/></button>
+                                    </div>
+                                ) : (
+                                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                        <FolderOpen className="w-5 h-5 text-indigo-500" /> {section.name}
+                                    </h3>
+                                )}
+                                {!isGuestView && !editingSectionId && (
+                                    <div className="flex gap-1">
+                                         <button onClick={() => { setEditingSectionId(section.id); setEditSectionName(section.name); }} className="p-1 text-slate-400 hover:text-indigo-600"><Edit2 className="w-3 h-3"/></button>
+                                         <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3 h-3"/></button>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {!isGuestView && (
+                                <button 
+                                    onClick={() => handleAddFile(section.id)}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 shadow-sm"
+                                >
+                                    <Plus className="w-3 h-3" /> Add File
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Drive Link & Sync */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1">
+                                    <Globe className="w-3 h-3" /> Google Drive Folder
+                                </label>
+                                {!isGuestView ? (
+                                    <EditableResourceLink 
+                                        url={section.driveUrl || ''} 
+                                        onSave={(url) => handleUpdateSectionDrive(section.id, url)}
+                                        placeholder="Paste Google Drive folder link..."
+                                    />
+                                ) : (
+                                    section.driveUrl ? (
+                                        <a href={section.driveUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 hover:underline text-sm"><Folder className="w-4 h-4"/> Open Drive Folder</a>
+                                    ) : <p className="text-sm text-slate-400 italic">No Drive folder linked.</p>
+                                )}
+                                
+                                {section.driveUrl && (
+                                    <div className="mt-3">
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-2">Synced Files</p>
+                                        <SyncedDriveFiles driveUrl={section.driveUrl} />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Manual Files */}
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Tracked Files</label>
+                                <div className="space-y-2">
+                                    {project.files.filter(f => f.sectionId === section.id).map(file => (
+                                        <div key={file.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 group">
+                                            <div className="flex items-center gap-3">
+                                                {getFileIcon(file.type)}
+                                                <div>
+                                                    <p className="text-sm font-medium text-slate-700">{file.name}</p>
+                                                    <p className="text-[10px] text-slate-400">{new Date(file.lastModified).toLocaleDateString()}</p>
+                                                </div>
+                                            </div>
+                                            {!isGuestView && (
+                                                <button onClick={() => handleDeleteFile(file.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {project.files.filter(f => f.sectionId === section.id).length === 0 && (
+                                        <p className="text-sm text-slate-400 italic">No manually tracked files.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                
+                {!isGuestView && (
+                    <button 
+                        onClick={handleAddSection}
+                        className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 font-medium"
+                    >
+                        <Plus className="w-5 h-5" /> Add New Section
+                    </button>
+                )}
+            </div>
+        )}
+
+        {/* TEAM TAB */}
+        {activeTab === 'team' && (
+            <div className="space-y-6">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <h3 className="font-bold text-lg text-slate-800">Team Members</h3>
+                        <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold">
+                            {project.collaborators.length} Members
+                        </span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {project.collaborators.map(member => (
+                            <div key={member.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 border-2 border-white shadow-sm">
+                                        {member.initials}
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-slate-800">{member.name} {member.id === currentUser.id && <span className="text-xs text-slate-400 font-normal">(You)</span>}</p>
+                                        <p className="text-sm text-slate-500">{member.email}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    {!isGuestView ? (
+                                        <select 
+                                            value={member.role}
+                                            onChange={(e) => handleUpdateRole(member.id, e.target.value as any)}
+                                            className="text-sm border-none bg-transparent font-medium text-slate-600 focus:ring-0 cursor-pointer"
+                                            disabled={member.role === 'Owner'} // Can't demote owner easily here for safety
+                                        >
+                                            <option value="Owner">Owner</option>
+                                            <option value="Editor">Editor</option>
+                                            <option value="Viewer">Viewer</option>
+                                            <option value="Guest">Guest</option>
+                                        </select>
+                                    ) : (
+                                        <span className="text-sm font-medium text-slate-600 px-2">{member.role}</span>
+                                    )}
+                                    
+                                    {!isGuestView && member.role !== 'Owner' && (
+                                        <button 
+                                            onClick={() => handleRemoveMember(member.id)}
+                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                            title="Remove Member"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {!isGuestView && (
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <UserPlus className="w-5 h-5 text-indigo-600" /> Invite New Member
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Full Name</label>
+                                <input 
+                                    value={inviteName}
+                                    onChange={(e) => setInviteName(e.target.value)}
+                                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                                    placeholder="e.g. Dr. Jane Doe"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Email Address</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        value={inviteEmail}
+                                        onChange={(e) => setInviteEmail(e.target.value)}
+                                        className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm"
+                                        placeholder="jane@university.edu"
+                                    />
+                                    <button 
+                                        onClick={handleInviteMember}
+                                        disabled={!inviteName || !inviteEmail}
+                                        className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                                    >
+                                        Send Invite
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Project, Collaborator, ProjectStatus } from '../types';
+import { Project, Collaborator, ProjectStatus, FileSection } from '../types';
 import { ChevronLeft, Plus, Users, X, Briefcase, GraduationCap, Eye, PenTool, Hash } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -35,6 +35,14 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
 
   const handleCreateProject = () => {
      if (!newTitle.trim() || !onAddProject) return;
+     
+     const isAdmin = projectCategory === 'admin';
+     // Initialize default sections immediately to avoid migration logic overwriting later
+     const defaultSections: FileSection[] = [
+        { id: 'sec_1', name: isAdmin ? 'Official Documents' : 'Drafts & Papers', driveUrl: '' },
+        { id: 'sec_2', name: isAdmin ? 'Financial Documents' : 'Code & Data', driveUrl: '' },
+        { id: 'sec_3', name: isAdmin ? 'Assets' : 'Other Assets', driveUrl: '' }
+     ];
 
      const newProject: Project = { 
         id: `proj_${Date.now()}`,
@@ -46,6 +54,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({
         papers: [], files: [], notes: [],
         collaborators: [currentUser], tasks: [],
         category: projectCategory as 'research' | 'admin',
+        fileSections: defaultSections, // Initialize with correct sections
     };
     onAddProject(newProject);
     
