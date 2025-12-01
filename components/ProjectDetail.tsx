@@ -4,15 +4,12 @@ import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, Pro
 import { 
     ChevronLeft, Plus, Users, File as FileIcon, 
     Trash2, X, Check, Calendar, Send, MessageCircle, 
-    LayoutDashboard, Activity, ChevronDown, Flag,
-    Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
-    ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save, Folder, FolderSync, Globe,
-    ExternalLink, Mail, User, UserPlus, BarChart2, CheckCircle2, Clock
+    LayoutDashboard, ChevronDown, Flag,
+    Code, FileText, Database, FolderOpen, Box, Hash,
+    ClipboardList, Megaphone, Loader2, AlertTriangle, Edit2, Save, Folder, Globe,
+    ExternalLink, Mail, User, UserPlus, BarChart2, Activity
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { AIChat } from './AIChat';
-import { sendEmailNotification } from '../services/email';
-import ReactMarkdown from 'react-markdown';
 import { listFilesInFolder, DriveFile } from '../services/googleDrive';
 
 interface ProjectDetailProps {
@@ -487,8 +484,7 @@ const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
                 <div className="flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                     <div>
-                         <p className="text-xs text-amber-800 font-medium">Google Drive API is not enabled for this project key.</p>
-                         <p className="text-[10px] text-amber-700 mt-1">You can still use the link above to view files directly.</p>
+                         <p className="text-xs text-amber-800 font-medium">{error}</p>
                          <a href={driveUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline mt-2 font-medium">
                             Open in Drive <ExternalLink className="w-3 h-3"/>
                         </a>
@@ -534,10 +530,18 @@ const TabButton: React.FC<{ isActive: boolean; onClick: () => void; children: Re
 );
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false, existingTags = [] }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'files' | 'team' | 'activity' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'files' | 'team'>('dashboard');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [addingTaskTo, setAddingTaskTo] = useState<TaskStatus | null>(null);
   const [showNotification, setShowNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  // Dashboard Edit State
+  const [isEditingOverview, setIsEditingOverview] = useState(false);
+  const [editDescription, setEditDescription] = useState(project.description);
+  const [editTags, setEditTags] = useState(project.tags || []);
+  const [tagInput, setTagInput] = useState('');
+  const [editStatus, setEditStatus] = useState(project.status);
+  const [editProgress, setEditProgress] = useState(project.progress);
   
   // Team Management State
   const [inviteName, setInviteName] = useState('');
@@ -553,6 +557,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       return () => clearTimeout(timer);
     }
   }, [showNotification]);
+
+  // Sync edit state when project changes (if updated externally)
+  useEffect(() => {
+      if (!isEditingOverview) {
+          setEditDescription(project.description);
+          setEditTags(project.tags || []);
+          setEditStatus(project.status);
+          setEditProgress(project.progress);
+      }
+  }, [project, isEditingOverview]);
 
   const addActivity = (message: string): ProjectActivity[] => {
       const newActivity: ProjectActivity = {
@@ -623,6 +637,44 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     setIsEditingTitle(false);
   };
   
+  // --- Overview Edit Handlers ---
+  const handleSaveOverview = () => {
+      onUpdateProject({
+          ...project,
+          description: editDescription,
+          tags: editTags,
+          status: editStatus,
+          progress: editProgress,
+          activity: addActivity('updated project overview')
+      });
+      setIsEditingOverview(false);
+      setShowNotification({ message: 'Project overview updated', type: 'success' });
+  };
+
+  const handleTagInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && tagInput.trim() !== '') {
+        e.preventDefault();
+        if (!editTags.includes(tagInput.trim())) {
+            setEditTags([...editTags, tagInput.trim()]);
+        }
+        setTagInput('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+      setEditTags(editTags.filter(t => t !== tagToRemove));
+  };
+  
+  const handleDriveUrlChange = (url: string) => {
+    onUpdateProject({ ...project, driveFolderUrl: url });
+  };
+
+  const handleDeleteProjectConfirm = () => {
+    if(window.prompt(`This will permanently delete the project "${project.title}". This cannot be undone. Type the project title to confirm.`) === project.title) {
+        onDeleteProject(project.id);
+    }
+  };
+
   // --- Team Management Functions ---
   const handleAddCollaborator = () => {
       if (!inviteName || !inviteEmail) return;
@@ -674,19 +726,93 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
             return (
                 <div className="p-6 space-y-6 max-w-6xl mx-auto">
-                     {/* Description Card */}
-                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-slate-800 mb-2">Project Overview</h3>
-                        <p className="text-slate-600 leading-relaxed">
-                            {project.description || "No description provided."}
-                        </p>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                            {project.tags?.map(tag => (
-                                <span key={tag} className="text-xs font-medium px-2 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
-                                    #{tag}
-                                </span>
-                            ))}
+                     {/* Description & Overview Card */}
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative group">
+                        <div className="flex justify-between items-start mb-4">
+                             <h3 className="text-lg font-bold text-slate-800">Project Overview</h3>
+                             {!isGuestView && !isEditingOverview && (
+                                 <button 
+                                     onClick={() => setIsEditingOverview(true)} 
+                                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                                 >
+                                     <Edit2 className="w-3.5 h-3.5"/> Edit
+                                 </button>
+                             )}
                         </div>
+
+                        {isEditingOverview ? (
+                            <div className="space-y-4 animate-in fade-in">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                                    <textarea 
+                                        value={editDescription} 
+                                        onChange={e => setEditDescription(e.target.value)} 
+                                        className="w-full border rounded-md p-2 h-32 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                     <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                                        <select value={editStatus} onChange={e => setEditStatus(e.target.value as ProjectStatus)} className="w-full border rounded-md p-2 bg-white text-sm">
+                                            {Object.values(ProjectStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Progress: {editProgress}%</label>
+                                        <input type="range" min="0" max="100" value={editProgress} onChange={e => setEditProgress(Number(e.target.value))} className="w-full"/>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tags</label>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {editTags.map(tag => (
+                                            <span key={tag} className="flex items-center gap-1.5 bg-pink-100 text-pink-700 px-2 py-1 rounded-full text-xs font-medium">
+                                                {tag}
+                                                <button onClick={() => removeTag(tag)} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        value={tagInput}
+                                        onChange={e => setTagInput(e.target.value)}
+                                        onKeyDown={handleTagInput}
+                                        className="w-full border rounded-md p-2 text-sm" 
+                                        placeholder="Add a tag and press Enter"
+                                        list="existing-tags-datalist"
+                                    />
+                                    <datalist id="existing-tags-datalist">
+                                        {existingTags.filter(t => !editTags.includes(t)).map(tag => <option key={tag} value={tag} />)}
+                                    </datalist>
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                                    <button onClick={() => setIsEditingOverview(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                                    <button onClick={handleSaveOverview} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Save Overview</button>
+                                </div>
+                                
+                                {/* Danger Zone inside Edit Mode */}
+                                <div className="mt-8 pt-4 border-t border-red-100">
+                                    <h4 className="text-sm font-bold text-red-700 mb-2">Danger Zone</h4>
+                                    <button onClick={handleDeleteProjectConfirm} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 text-sm font-medium">
+                                        <Trash2 className="w-4 h-4"/> Delete Project
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                    {project.description || "No description provided."}
+                                </p>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                    {project.tags?.map(tag => (
+                                        <span key={tag} className="text-xs font-medium px-2 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
+                                            #{tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                      </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -765,6 +891,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                                 )}
                             </div>
                          </div>
+                    </div>
+
+                    {/* Key Resources / Drive Integration - Moved to Dashboard for Visibility */}
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Folder className="w-5 h-5 text-indigo-600"/> Key Resources</h3>
+                        <div className="space-y-4">
+                            <EditableResourceLink 
+                                label="Main Google Drive Folder"
+                                url={project.driveFolderUrl || ''} 
+                                onSave={handleDriveUrlChange} 
+                                placeholder="https://drive.google.com/drive/folders/..." 
+                                icon={<Globe className="w-4 h-4 text-slate-500"/>}
+                            />
+                            {project.driveFolderUrl && (
+                                <div className="mt-2 pl-2 border-l-2 border-indigo-100">
+                                    <SyncedDriveFiles driveUrl={project.driveFolderUrl} />
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             );
@@ -969,26 +1114,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                      )}
                  </div>
              );
-        case 'activity':
-            return (
-                <div className="p-6 max-w-3xl mx-auto">
-                    <ul className="space-y-4">
-                        {(project.activity || []).map(act => (
-                            <li key={act.id} className="flex gap-4">
-                                <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
-                                    {(project.collaborators.find(c => c.id === act.authorId)?.initials) || '?'}
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-700">{act.message}</p>
-                                    <p className="text-xs text-slate-400 mt-0.5">{new Date(act.timestamp).toLocaleString()}</p>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            );
-        case 'settings':
-            return <ProjectSettingsTab project={project} onUpdateProject={onUpdateProject} onDeleteProject={onDeleteProject} isGuestView={isGuestView} existingTags={existingTags} />;
         default: return null;
     }
   };
@@ -1070,10 +1195,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
         <TabButton isActive={activeTab === 'board'} onClick={() => setActiveTab('board')} icon={ClipboardList}>Tasks</TabButton>
         <TabButton isActive={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={FolderOpen}>Files</TabButton>
         <TabButton isActive={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users}>Team</TabButton>
-        <TabButton isActive={activeTab === 'activity'} onClick={() => setActiveTab('activity')} icon={Activity}>Activity</TabButton>
-        {!isGuestView && (
-            <TabButton isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={Settings}>Settings</TabButton>
-        )}
       </nav>
 
       {/* Main Content */}
@@ -1082,137 +1203,4 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
       </main>
     </div>
   );
-};
-
-
-// --- SETTINGS TAB COMPONENT ---
-interface ProjectSettingsTabProps {
-    project: Project;
-    onUpdateProject: (p: Project) => void;
-    onDeleteProject: (id: string) => void;
-    isGuestView?: boolean;
-    existingTags?: string[];
-}
-const ProjectSettingsTab: React.FC<ProjectSettingsTabProps> = ({ project, onUpdateProject, onDeleteProject, isGuestView, existingTags=[] }) => {
-    const [status, setStatus] = useState(project.status);
-    const [description, setDescription] = useState(project.description);
-    const [progress, setProgress] = useState(project.progress);
-    const [tags, setTags] = useState(project.tags || []);
-    const [tagInput, setTagInput] = useState('');
-
-    const handleSaveChanges = () => {
-        onUpdateProject({ ...project, status, description, progress, tags });
-        alert("Settings saved!");
-    };
-    
-    const handleDelete = () => {
-        if(window.prompt(`This will permanently delete the project "${project.title}". This cannot be undone. Type the project title to confirm.`) === project.title) {
-            onDeleteProject(project.id);
-        }
-    };
-    
-    const handleTagInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && tagInput.trim() !== '') {
-            e.preventDefault();
-            if (!tags.includes(tagInput.trim())) {
-                setTags([...tags, tagInput.trim()]);
-            }
-            setTagInput('');
-        }
-    };
-
-    const removeTag = (tagToRemove: string) => {
-        setTags(tags.filter(t => t !== tagToRemove));
-    };
-    
-    // Save drive url change
-    const handleDriveUrlChange = (url: string) => {
-        onUpdateProject({ ...project, driveFolderUrl: url });
-    };
-
-    if (isGuestView) return <div className="p-6 text-center text-slate-500">Settings are not available in Guest View.</div>;
-
-    return (
-        <div className="p-6 max-w-3xl mx-auto space-y-8 animate-in fade-in">
-            {/* General Settings */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200">
-                <h3 className="font-semibold text-lg text-slate-800 mb-4">General Settings</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Project Status</label>
-                        <select value={status} onChange={e => setStatus(e.target.value as ProjectStatus)} className="w-full border rounded-md p-2 bg-white">
-                            {Object.values(ProjectStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Project Goal / Description</label>
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full border rounded-md p-2 h-24" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Progress: {progress}%</label>
-                        <input type="range" min="0" max="100" value={progress} onChange={e => setProgress(Number(e.target.value))} className="w-full"/>
-                    </div>
-                </div>
-            </div>
-
-            {/* Integration Settings */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200">
-                <h3 className="font-semibold text-lg text-slate-800 mb-4">Integrations</h3>
-                <EditableResourceLink 
-                    label="Main Google Drive Folder"
-                    url={project.driveFolderUrl || ''} 
-                    onSave={handleDriveUrlChange} 
-                    placeholder="https://drive.google.com/drive/folders/..." 
-                />
-            </div>
-            
-            {/* Tags/Topics */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200">
-                <h3 className="font-semibold text-lg text-slate-800 mb-4 flex items-center gap-2">
-                    <Hash className="w-5 h-5" /> Topics & Tags
-                </h3>
-                <div className="flex flex-wrap gap-2 mb-4">
-                    {tags.map(tag => (
-                        <span key={tag} className="flex items-center gap-1.5 bg-pink-100 text-pink-700 px-2 py-1 rounded-full text-xs font-medium">
-                            {tag}
-                            <button onClick={() => removeTag(tag)} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
-                        </span>
-                    ))}
-                </div>
-                <input 
-                    type="text" 
-                    value={tagInput}
-                    onChange={e => setTagInput(e.target.value)}
-                    onKeyDown={handleTagInput}
-                    className="w-full border rounded-md p-2" 
-                    placeholder="Add a tag and press Enter"
-                    list="existing-tags-datalist"
-                />
-                <datalist id="existing-tags-datalist">
-                    {existingTags.filter(t => !tags.includes(t)).map(tag => <option key={tag} value={tag} />)}
-                </datalist>
-            </div>
-
-
-            <div className="flex justify-end pt-4">
-                <button onClick={handleSaveChanges} className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800">
-                    Save Changes
-                </button>
-            </div>
-            
-            {/* Danger Zone */}
-            <div className="mt-12 pt-6 border-t border-red-200">
-                <h3 className="font-semibold text-lg text-red-700 mb-2">Danger Zone</h3>
-                <div className="bg-red-50 p-4 rounded-xl border border-red-200 flex justify-between items-center">
-                    <div>
-                        <p className="font-medium text-red-900">Delete this project</p>
-                        <p className="text-sm text-red-700">Once deleted, it's gone forever. Please be certain.</p>
-                    </div>
-                    <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700">
-                        Delete Project
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
 };
