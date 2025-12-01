@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity, FileSection } from '../types';
 import { 
@@ -981,6 +982,27 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                  
                  {/* Sidebar Stats */}
                  <div className="space-y-6">
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <h3 className="font-bold text-slate-800 mb-4">Integrations</h3>
+                         <div>
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Main Google Drive Folder</label>
+                            {!isGuestView ? (
+                                <EditableResourceLink 
+                                    url={project.driveFolderUrl || ''} 
+                                    onSave={(url) => onUpdateProject({ ...project, driveFolderUrl: url })}
+                                    placeholder="Paste public Google Drive folder URL..."
+                                    icon={<Globe className="w-4 h-4 text-blue-600" />}
+                                />
+                            ) : (
+                                project.driveFolderUrl ? (
+                                    <a href={project.driveFolderUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 hover:underline text-sm">
+                                        <Globe className="w-4 h-4" /> Open Main Drive Folder
+                                    </a>
+                                ) : <p className="text-sm text-slate-400 italic">No folder linked.</p>
+                            )}
+                         </div>
+                     </div>
+
                      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                          <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Task Completion</h3>
                          <div className="h-48">
