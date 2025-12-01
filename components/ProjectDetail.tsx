@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Project, Collaborator, Task, TaskStatus, TaskPriority, TaskComment, ProjectStatus, ProjectFile, ProjectActivity } from '../types';
 import { 
@@ -6,7 +7,7 @@ import {
     LayoutDashboard, Activity, ChevronDown, Flag,
     Code, FileText, Database, Settings, Link, AlignLeft, FolderOpen, Box, Share2, Hash,
     ClipboardList, Megaphone, Table, Loader2, AlertTriangle, Edit2, Save, Folder, FolderSync, Globe,
-    ExternalLink, Mail, User
+    ExternalLink, Mail, User, UserPlus, BarChart2, CheckCircle2, Clock
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { AIChat } from './AIChat';
@@ -73,103 +74,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, project, onClick, onDragStart
                         </div>
                     ))}
                     {assignees.length > 2 && <div className="w-6 h-6 rounded-full bg-slate-300 flex items-center justify-center font-bold text-slate-600 text-[10px] border-2 border-white">+{assignees.length - 2}</div>}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- MANAGE COLLABORATORS MODAL ---
-interface ManageCollaboratorsModalProps {
-    collaborators: Collaborator[];
-    currentUser: Collaborator;
-    onClose: () => void;
-    onAdd: (email: string, name: string) => void;
-    onRemove: (id: string) => void;
-}
-
-const ManageCollaboratorsModal: React.FC<ManageCollaboratorsModalProps> = ({ collaborators, currentUser, onClose, onAdd, onRemove }) => {
-    const [newEmail, setNewEmail] = useState('');
-    const [newName, setNewName] = useState('');
-
-    const handleAdd = () => {
-        if (newEmail && newName) {
-            onAdd(newEmail, newName);
-            setNewEmail('');
-            setNewName('');
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <Users className="w-5 h-5 text-indigo-600" /> Manage Collaborators
-                    </h3>
-                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
-                </div>
-                
-                <div className="p-6 space-y-6">
-                    {/* List Existing */}
-                    <div className="space-y-3">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase">Current Team</h4>
-                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                            {collaborators.map(c => (
-                                <div key={c.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
-                                            {c.initials}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-semibold text-slate-700">{c.name}</p>
-                                            <p className="text-xs text-slate-500">{c.email}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-500">{c.role}</span>
-                                        {c.id !== currentUser.id && c.role !== 'Owner' && (
-                                            <button onClick={() => onRemove(c.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Add New */}
-                    <div className="space-y-3 pt-4 border-t border-slate-100">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase">Invite New Member</h4>
-                        <div className="grid grid-cols-1 gap-3">
-                            <div className="relative">
-                                <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                                <input 
-                                    value={newName}
-                                    onChange={e => setNewName(e.target.value)}
-                                    placeholder="Full Name"
-                                    className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-                            <div className="relative">
-                                <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                                <input 
-                                    value={newEmail}
-                                    onChange={e => setNewEmail(e.target.value)}
-                                    placeholder="Email Address"
-                                    className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-                            <button 
-                                onClick={handleAdd}
-                                disabled={!newName || !newEmail}
-                                className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                                Add Collaborator
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -270,80 +174,22 @@ interface TaskDetailModalProps {
     onDeleteTask: (taskId: string) => void;
     onSendNotification: (msg: string, type?: 'success' | 'error') => void;
 }
-
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, currentUser, onClose, onUpdateTask, onDeleteTask, onSendNotification }) => {
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [newComment, setNewComment] = useState('');
-    const [showMentionList, setShowMentionList] = useState(false);
-    const [mentionQuery, setMentionQuery] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const commentInputRef = useRef<HTMLInputElement>(null);
     const collaborators = project.collaborators || [];
 
     const handleSave = async () => {
         setIsSaving(true);
-        const oldIds = task.assigneeIds || [];
-        const newIds = editedTask.assigneeIds || [];
-        const addedIds = newIds.filter(id => !oldIds.includes(id));
-
-        if (addedIds.length > 0) {
-            console.log("Found new assignees, triggering email notifications...");
-            
-            const results = await Promise.all(addedIds.map(async (id) => {
-                const user = collaborators.find(c => c.id === id);
-                if (user && user.id !== currentUser.id) { 
-                     const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-                     return await sendEmailNotification(
-                        user.email,
-                        user.name,
-                        `New Task Assigned: ${editedTask.title}`,
-                        `You have been assigned to the task "<strong>${editedTask.title}</strong>" in project <strong>${project.title}</strong> by ${currentUser.name}.`,
-                        taskLink
-                    );
-                }
-                return { success: true }; // Self-assign or not found
-            }));
-
-            // Check if any email failed
-            const failed = results.find(r => !r.success);
-            if (failed) {
-                alert(`Warning: Notification failed. ${failed.message}`);
-            } else {
-                onSendNotification(`Notified ${addedIds.length} new assignee(s)`);
-            }
-        }
-        
         onUpdateTask(editedTask);
         setIsSaving(false);
         onClose();
     };
 
-    const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setNewComment(value);
-        const words = value.split(' ');
-        const lastWord = words[words.length - 1];
-        if (lastWord.startsWith('@')) {
-            setShowMentionList(true);
-            setMentionQuery(lastWord.substring(1));
-        } else {
-            setShowMentionList(false);
-        }
-    };
-
-    const handleSelectMention = (collaborator: Collaborator) => {
-        const words = newComment.split(' ');
-        words.pop(); 
-        const newValue = `${words.join(' ')} @${collaborator.name} `;
-        setNewComment(newValue);
-        setShowMentionList(false);
-        commentInputRef.current?.focus();
-    };
-
-    const filteredCollaborators = collaborators.filter(c => c.name.toLowerCase().includes(mentionQuery.toLowerCase()));
-
-    const handleAddComment = async () => {
-        if (!newComment.trim()) return;
+    const handleAddComment = () => {
+        if(!newComment.trim()) return;
         const comment: TaskComment = {
             id: `comm_${Date.now()}`,
             authorId: currentUser.id,
@@ -354,31 +200,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
         };
         const updatedTask = { ...editedTask, comments: [...(editedTask.comments || []), comment] };
         setEditedTask(updatedTask);
-        onUpdateTask(updatedTask); 
-        
-        // Notify mentioned users
-        const mentionedUsers = collaborators.filter(c => 
-            newComment.includes(`@${c.name}`) && c.id !== currentUser.id
-        );
-
-        if (mentionedUsers.length > 0) {
-            const results = await Promise.all(mentionedUsers.map(c => {
-                 const taskLink = `${window.location.origin}?pid=${project.id}&tid=${task.id}`;
-                 return sendEmailNotification(
-                    c.email,
-                    c.name,
-                    `You were mentioned in ${project.title}`,
-                    `${currentUser.name} mentioned you in a comment on task "<strong>${updatedTask.title}</strong>":<br/><i>"${newComment}"</i>`,
-                    taskLink
-                );
-            }));
-
-             const failed = results.find(r => !r.success);
-             if(failed) alert(`Notification Error: ${failed.message}`);
-        }
-
+        onUpdateTask(updatedTask);
         setNewComment('');
-        setShowMentionList(false);
     };
 
     return (
@@ -394,14 +217,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                             <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
                             <textarea value={editedTask.description} onChange={e => setEditedTask({...editedTask, description: e.target.value})} className="w-full mt-1 p-2 border rounded-md h-24 text-sm" placeholder="Add task details..."/>
                         </div>
-                        
-                        {/* Add Assignee Selector Here */}
-                        <AssigneeSelector 
-                            collaborators={collaborators}
-                            selectedIds={editedTask.assigneeIds || []}
-                            onChange={(ids) => setEditedTask({...editedTask, assigneeIds: ids})}
-                        />
-
+                        <AssigneeSelector collaborators={collaborators} selectedIds={editedTask.assigneeIds || []} onChange={(ids) => setEditedTask({...editedTask, assigneeIds: ids})} />
                         <div>
                             <label className="text-xs font-bold text-slate-400 uppercase">Comments</label>
                             <div className="mt-2 space-y-3 max-h-64 overflow-y-auto pr-2">
@@ -411,30 +227,16 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, project, curren
                                         <div>
                                             <div className="bg-slate-100 p-2 rounded-lg rounded-tl-none relative group/comment">
                                                 <p className="text-xs font-semibold">{c.authorName}</p>
-                                                <p className="text-sm text-slate-700">
-                                                    {c.text.split(' ').map((word, i) => word.startsWith('@') ? <span key={i} className="text-indigo-600 font-medium">{word} </span> : word + ' ')}
-                                                </p>
+                                                <p className="text-sm text-slate-700">{c.text}</p>
                                             </div>
                                             <p className="text-[10px] text-slate-400 mt-1">{new Date(c.timestamp).toLocaleString()}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="mt-3 relative">
-                                {showMentionList && (
-                                    <div className="absolute bottom-full mb-1 left-0 w-64 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-20">
-                                        <div className="bg-slate-50 px-3 py-1 text-[10px] font-bold text-slate-500 uppercase">Mention Member</div>
-                                        {filteredCollaborators.map(c => (
-                                            <button key={c.id} onClick={() => handleSelectMention(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2">
-                                                <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold">{c.initials}</div>{c.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                                <div className="flex gap-2">
-                                    <input ref={commentInputRef} value={newComment} onChange={handleCommentChange} onKeyDown={e => e.key === 'Enter' && handleAddComment()} className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="Add a comment... Type @ to mention" />
-                                    <button onClick={handleAddComment} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"><Send className="w-4 h-4"/></button>
-                                </div>
+                            <div className="mt-3 flex gap-2">
+                                <input ref={commentInputRef} value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="Add a comment..." />
+                                <button onClick={handleAddComment} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"><Send className="w-4 h-4"/></button>
                             </div>
                         </div>
                     </div>
@@ -494,23 +296,6 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
             id: `task_${Date.now()}`,
             title, status, priority, dueDate, assigneeIds, comments: [], description: ''
         };
-        
-        if (assigneeIds.length > 0) {
-            console.log("Sending email notifications to assignees...");
-            const results = await Promise.all(assigneeIds.map(async (id) => {
-                const user = collaborators.find(c => c.id === id);
-                if (user) {
-                     const taskLink = `${window.location.origin}?pid=${project.id}&tid=${newTask.id}`;
-                     return await sendEmailNotification(user.email, user.name, `New Task: ${title}`, `You have been assigned to a new task in <strong>${project.title}</strong>.`, taskLink);
-                }
-                return { success: true };
-            }));
-
-            const failed = results.find(r => !r.success);
-            if (failed) {
-                 alert(`Task created, but email failed: ${failed.message}`);
-            }
-        }
         onSave(newTask);
         setIsSaving(false);
     };
@@ -524,14 +309,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ status, project, onClose, o
                 </div>
                 <div className="p-6 space-y-4">
                     <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title..." className="w-full border rounded-lg p-2 text-lg"/>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="col-span-2 md:col-span-1">
-                             <AssigneeSelector 
-                                collaborators={collaborators}
-                                selectedIds={assigneeIds}
-                                onChange={setAssigneeIds}
-                             />
+                             <AssigneeSelector collaborators={collaborators} selectedIds={assigneeIds} onChange={setAssigneeIds} />
                         </div>
                         <div>
                              <label className="text-xs font-semibold text-slate-500 mb-1 block">Due Date</label>
@@ -569,63 +349,51 @@ const getFileIcon = (type: ProjectFile['type']) => {
     }
 };
 
-// --- NEW GOOGLE DRIVE SECTION COMPONENT ---
-const DriveLinkManager: React.FC<{
-    category: 'drafts' | 'code' | 'assets';
-    project: Project;
-    onUpdateProject: (project: Project) => void;
-}> = ({ category, project, onUpdateProject }) => {
-    const driveUrl = project.categoryDriveUrls?.[category] || '';
-    const [urlInput, setUrlInput] = useState(driveUrl);
-    const [isEditing, setIsEditing] = useState(!driveUrl);
-    
+// --- GENERIC EDITABLE LINK COMPONENT ---
+const EditableResourceLink: React.FC<{
+    url: string;
+    onSave: (url: string) => void;
+    placeholder?: string;
+    label?: string;
+    icon?: React.ReactNode;
+}> = ({ url, onSave, placeholder = "Enter URL...", label, icon }) => {
+    const [isEditing, setIsEditing] = useState(!url);
+    const [inputVal, setInputVal] = useState(url);
+
     useEffect(() => {
-        setUrlInput(driveUrl);
-        if(!driveUrl) setIsEditing(true);
-    }, [driveUrl]);
+        setInputVal(url);
+        if (!url) setIsEditing(true);
+        else setIsEditing(false);
+    }, [url]);
 
-    const handleSaveLink = () => {
-        const updatedProject = {
-            ...project,
-            categoryDriveUrls: {
-                ...project.categoryDriveUrls,
-                [category]: urlInput.trim(),
-            },
-        };
-        onUpdateProject(updatedProject);
-        setIsEditing(false);
-    };
-    
-    const handleClearLink = () => {
-        setUrlInput('');
-         const updatedProject = {
-            ...project,
-            categoryDriveUrls: {
-                ...project.categoryDriveUrls,
-                [category]: '',
-            },
-        };
-        onUpdateProject(updatedProject);
-        setIsEditing(true);
+    const handleSave = () => {
+        onSave(inputVal);
+        if (inputVal) setIsEditing(false);
     };
 
-    if (driveUrl && !isEditing) {
+    if (url && !isEditing) {
         return (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
-                <a 
-                    href={driveUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium truncate"
-                >
-                    <Folder className="w-4 h-4 text-slate-500" />
-                    <span className="truncate">{driveUrl}</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-                <div className="flex gap-2">
-                     <button onClick={() => setIsEditing(true)} className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-md" title="Edit Link">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                {label && <p className="text-xs text-slate-500 mb-1 font-semibold uppercase">{label}</p>}
+                <div className="flex items-center justify-between">
+                    <a 
+                        href={url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium truncate flex-1 mr-2"
+                        title={url}
+                    >
+                        {icon || <Folder className="w-4 h-4 text-slate-500" />}
+                        <span className="truncate">{url}</span>
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    </a>
+                    <button 
+                        onClick={() => setIsEditing(true)} 
+                        className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-md transition-colors"
+                        title="Edit Link"
+                    >
                         <Edit2 className="w-3.5 h-3.5" />
-                     </button>
+                    </button>
                 </div>
             </div>
         );
@@ -633,21 +401,52 @@ const DriveLinkManager: React.FC<{
 
     return (
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-md border border-slate-200 text-slate-500">
-                    <Globe className="w-4 h-4" />
-                </div>
+             {label && <p className="text-xs text-slate-500 mb-1 font-semibold uppercase">{label}</p>}
+             <div className="flex items-center gap-2">
                 <input 
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    className="flex-1 border border-slate-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-indigo-500"
-                    placeholder="Paste public Google Drive folder URL..."
+                    value={inputVal}
+                    onChange={(e) => setInputVal(e.target.value)}
+                    className="flex-1 border border-slate-300 rounded-md p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+                    placeholder={placeholder}
                 />
-                <button onClick={handleSaveLink} className="px-3 py-2 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
-                    Save
-                </button>
+                <div className="flex gap-1">
+                    <button onClick={handleSave} className="px-3 py-2 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
+                        Update
+                    </button>
+                    {url && (
+                        <button onClick={() => setIsEditing(false)} className="px-3 py-2 text-xs rounded-md bg-white border border-slate-300 text-slate-600 hover:bg-slate-50">
+                            Cancel
+                        </button>
+                    )}
+                </div>
              </div>
         </div>
+    );
+};
+
+// --- DRIVE LINK MANAGER (Uses EditableResourceLink) ---
+const DriveLinkManager: React.FC<{
+    category: 'drafts' | 'code' | 'assets';
+    project: Project;
+    onUpdateProject: (project: Project) => void;
+}> = ({ category, project, onUpdateProject }) => {
+    const driveUrl = project.categoryDriveUrls?.[category] || '';
+    
+    const handleSave = (url: string) => {
+        const updatedProject = {
+            ...project,
+            categoryDriveUrls: { ...project.categoryDriveUrls, [category]: url.trim() },
+        };
+        onUpdateProject(updatedProject);
+    };
+    
+    return (
+        <EditableResourceLink 
+            url={driveUrl} 
+            onSave={handleSave} 
+            placeholder={`Paste Google Drive folder URL for ${category}...`}
+            icon={<Globe className="w-4 h-4 text-slate-500"/>}
+        />
     );
 };
 
@@ -659,7 +458,6 @@ const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
     useEffect(() => {
         if (!driveUrl) {
             setIsLoading(false);
-            setError(null);
             setDriveFiles([]);
             return;
         }
@@ -680,23 +478,28 @@ const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
     }, [driveUrl]);
 
     if (isLoading) {
-        return <div className="flex items-center justify-center p-4 text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading files...</div>;
+        return <div className="flex items-center justify-center p-4 text-slate-400 text-xs"><Loader2 className="w-3 h-3 animate-spin mr-2" /> Syncing...</div>;
     }
+    
     if (error) {
         return (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-xs font-semibold text-red-700">
-                     <AlertTriangle className="w-3.5 h-3.5" /> Sync Error
+            <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 flex flex-col gap-1">
+                <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                         <p className="text-xs text-amber-800 font-medium">Google Drive API is not enabled for this project key.</p>
+                         <p className="text-[10px] text-amber-700 mt-1">You can still use the link above to view files directly.</p>
+                         <a href={driveUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline mt-2 font-medium">
+                            Open in Drive <ExternalLink className="w-3 h-3"/>
+                        </a>
+                    </div>
                 </div>
-                <p className="text-xs text-red-600">{error}</p>
-                <a href={driveUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline flex items-center gap-1 mt-1">
-                    Open in Drive <ExternalLink className="w-3 h-3"/>
-                </a>
             </div>
         );
     }
+    
     if (driveFiles.length === 0) {
-        return <p className="text-xs text-center text-slate-400 italic p-4">Synced folder is empty.</p>;
+        return <p className="text-xs text-center text-slate-400 italic p-4">Folder is empty.</p>;
     }
 
     return (
@@ -718,14 +521,7 @@ const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
     );
 };
 
-// FIX: Moved TabButton outside of ProjectDetail to avoid re-declaration on each render and fix potential type inference issues.
-// Updated signature to use React.FC to solve type inference issues with children.
-const TabButton: React.FC<{
-  isActive: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  icon: any;
-}> = ({ isActive, onClick, children, icon: Icon }) => (
+const TabButton: React.FC<{ isActive: boolean; onClick: () => void; children: React.ReactNode; icon: any; }> = ({ isActive, onClick, children, icon: Icon }) => (
     <button
         onClick={onClick}
         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -738,13 +534,15 @@ const TabButton: React.FC<{
 );
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUser, onUpdateProject, onBack, onDeleteProject, isGuestView = false, existingTags = [] }) => {
-  const [activeTab, setActiveTab] = useState<'board' | 'files' | 'notes' | 'activity' | 'settings'>('board');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'board' | 'files' | 'team' | 'activity' | 'settings'>('dashboard');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [addingTaskTo, setAddingTaskTo] = useState<TaskStatus | null>(null);
   const [showNotification, setShowNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [showCollaboratorModal, setShowCollaboratorModal] = useState(false);
   
-  // Title editing state
+  // Team Management State
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [newProjectTitle, setNewProjectTitle] = useState(project.title);
   const [showEditTitleIcon, setShowEditTitleIcon] = useState(false);
@@ -800,15 +598,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const handleAddFile = () => {
       const name = prompt("File name or title:");
       if (!name) return;
-      // Default to "other" category if manual add, but allow user to be organized in next iteration
       const typeStr = prompt("Type (draft, code, data, slide, document):", "document");
-      // Basic validation
       const type = (['draft', 'code', 'data', 'slide', 'document'].includes(typeStr || '') ? typeStr : 'document') as ProjectFile['type'];
       
       const newFile: ProjectFile = {
           id: `file_${Date.now()}`,
           name,
-          url: '', // Manual files might not have URLs initially
+          url: '', 
           description: "Manually added file.",
           type,
           lastModified: new Date().toISOString()
@@ -819,26 +615,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
   const handleDeleteFile = (id: string) => {
       onUpdateProject({ ...project, files: project.files.filter(f => f.id !== id) });
   };
-  
-  const handleUpdateNote = (noteId: string, content: string) => {
-      const updatedNotes = project.notes.map(n => n.id === noteId ? { ...n, content } : n);
-      onUpdateProject({ ...project, notes: updatedNotes });
-  };
-
-  const handleAddNote = () => {
-      const newNote = {
-          id: `note_${Date.now()}`,
-          title: "New Note",
-          content: "",
-          color: 'yellow' as 'yellow',
-          createdAt: new Date().toISOString()
-      };
-      onUpdateProject({ ...project, notes: [...project.notes, newNote] });
-  };
-  
-  const handleDeleteNote = (id: string) => {
-      onUpdateProject({ ...project, notes: project.notes.filter(n => n.id !== id) });
-  };
 
   const handleUpdateProjectTitle = () => {
     if (newProjectTitle.trim() && newProjectTitle !== project.title) {
@@ -847,29 +623,151 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     setIsEditingTitle(false);
   };
   
-  const handleAddCollaborator = (email: string, name: string) => {
-      // Simulate invite or add if system supports user lookup. 
-      // Since this is a client-side demo mostly, we just add to array.
+  // --- Team Management Functions ---
+  const handleAddCollaborator = () => {
+      if (!inviteName || !inviteEmail) return;
+      
       const newCollab: Collaborator = {
-          id: email.replace(/[^a-zA-Z0-9]/g, ''),
-          name: name,
-          email: email,
-          role: 'Viewer', // Default role
-          initials: name.substring(0,2).toUpperCase()
+          id: `collab_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+          name: inviteName,
+          email: inviteEmail,
+          role: 'Viewer',
+          initials: inviteName.substring(0,2).toUpperCase()
       };
       
       const updatedCollaborators = [...project.collaborators, newCollab];
       onUpdateProject({ ...project, collaborators: updatedCollaborators });
-      alert(`Invited ${name} (${email})`);
+      setShowNotification({ message: `Added ${inviteName} to team`, type: 'success' });
+      setInviteName('');
+      setInviteEmail('');
   };
 
   const handleRemoveCollaborator = (id: string) => {
-      const updatedCollaborators = project.collaborators.filter(c => c.id !== id);
+      if (window.confirm("Are you sure you want to remove this member?")) {
+          const updatedCollaborators = project.collaborators.filter(c => c.id !== id);
+          onUpdateProject({ ...project, collaborators: updatedCollaborators });
+          setShowNotification({ message: 'Collaborator removed', type: 'success' });
+      }
+  };
+
+  const handleUpdateRole = (id: string, newRole: 'Owner' | 'Editor' | 'Viewer' | 'Guest') => {
+      const updatedCollaborators = project.collaborators.map(c => 
+          c.id === id ? { ...c, role: newRole } : c
+      );
       onUpdateProject({ ...project, collaborators: updatedCollaborators });
+      setShowNotification({ message: 'Role updated', type: 'success' });
   };
 
   const renderTabContent = () => {
     switch(activeTab) {
+        case 'dashboard':
+            const completedTasks = project.tasks.filter(t => t.status === 'done').length;
+            const totalTasks = project.tasks.length;
+            const tasksInProgress = project.tasks.filter(t => t.status === 'in_progress').length;
+            const tasksTodo = project.tasks.filter(t => t.status === 'todo').length;
+
+            const taskData = [
+                { name: 'To Do', value: tasksTodo, color: '#f59e0b' },
+                { name: 'In Progress', value: tasksInProgress, color: '#6366f1' },
+                { name: 'Done', value: completedTasks, color: '#10b981' }
+            ].filter(d => d.value > 0);
+
+            return (
+                <div className="p-6 space-y-6 max-w-6xl mx-auto">
+                     {/* Description Card */}
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">Project Overview</h3>
+                        <p className="text-slate-600 leading-relaxed">
+                            {project.description || "No description provided."}
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {project.tags?.map(tag => (
+                                <span key={tag} className="text-xs font-medium px-2 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
+                                    #{tag}
+                                </span>
+                            ))}
+                        </div>
+                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
+                            <p className="text-sm font-semibold text-slate-500">Progress</p>
+                            <div className="flex items-end gap-2">
+                                <span className="text-3xl font-bold text-indigo-600">{project.progress}%</span>
+                            </div>
+                             <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2">
+                                <div className="bg-indigo-600 h-1.5 rounded-full" style={{ width: `${project.progress}%` }}></div>
+                            </div>
+                        </div>
+                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
+                             <p className="text-sm font-semibold text-slate-500">Total Tasks</p>
+                             <span className="text-3xl font-bold text-slate-800">{totalTasks}</span>
+                             <div className="flex items-center gap-1 text-xs text-slate-400">
+                                 <ClipboardList className="w-3 h-3"/> {completedTasks} completed
+                             </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
+                             <p className="text-sm font-semibold text-slate-500">Team Size</p>
+                             <span className="text-3xl font-bold text-purple-600">{project.collaborators.length}</span>
+                             <div className="flex items-center gap-1 text-xs text-slate-400">
+                                 <Users className="w-3 h-3"/> Active members
+                             </div>
+                        </div>
+                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-32">
+                             <p className="text-sm font-semibold text-slate-500">Documents</p>
+                             <span className="text-3xl font-bold text-emerald-600">{project.files.length}</span>
+                             <div className="flex items-center gap-1 text-xs text-slate-400">
+                                 <FolderOpen className="w-3 h-3"/> Resources
+                             </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
+                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart2 className="w-4 h-4 text-slate-500"/> Task Status</h4>
+                            {totalTasks > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={taskData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                            {taskData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                        </Pie>
+                                        <Tooltip formatter={(value) => [value, 'Tasks']} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-slate-400 italic">No tasks created yet.</div>
+                            )}
+                             <div className="flex justify-center gap-4 mt-[-20px]">
+                                {taskData.map(entry => (
+                                    <div key={entry.name} className="flex items-center gap-1 text-xs text-slate-600">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                                        {entry.name}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80 overflow-hidden flex flex-col">
+                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Activity className="w-4 h-4 text-slate-500"/> Recent Activity</h4>
+                            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                                {(project.activity || []).slice(0, 10).map(act => (
+                                    <div key={act.id} className="flex gap-3 text-sm border-b border-slate-50 pb-2 last:border-0">
+                                        <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                                            {(project.collaborators.find(c => c.id === act.authorId)?.initials) || '?'}
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-700">{act.message}</p>
+                                            <p className="text-[10px] text-slate-400">{new Date(act.timestamp).toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {(!project.activity || project.activity.length === 0) && (
+                                    <p className="text-center text-slate-400 italic mt-10">No recent activity.</p>
+                                )}
+                            </div>
+                         </div>
+                    </div>
+                </div>
+            );
         case 'board':
             return (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
@@ -908,16 +806,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                         <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                             {project.categoryDriveUrls?.drafts && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.drafts} />}
                             {/* Manual Files */}
-                            {categoryFiles(['draft', 'document']).map(file => (
-                                <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group">
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <FileText className="w-4 h-4 text-blue-500 shrink-0" /> 
-                                        <span className="font-medium text-slate-700">{file.name}</span>
-                                        <span className="text-xs text-slate-400 border border-slate-200 px-1 rounded">Manual</span>
-                                    </div>
-                                    <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                            {categoryFiles(['draft', 'document']).length > 0 && (
+                                <div className="space-y-2">
+                                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
+                                     {categoryFiles(['draft', 'document']).map(file => (
+                                        <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <FileText className="w-4 h-4 text-blue-500 shrink-0" /> 
+                                                <span className="font-medium text-slate-700">{file.name}</span>
+                                            </div>
+                                            <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </div>
                      {/* Code & Data */}
@@ -927,16 +829,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                         <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                             {project.categoryDriveUrls?.code && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.code} />}
                              {/* Manual Files */}
-                             {categoryFiles(['code', 'data']).map(file => (
-                                <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group">
-                                    <div className="flex items-center gap-2 text-sm">
-                                        {getFileIcon(file.type)} 
-                                        <span className="font-medium text-slate-700">{file.name}</span>
-                                        <span className="text-xs text-slate-400 border border-slate-200 px-1 rounded">Manual</span>
-                                    </div>
-                                    <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                             {categoryFiles(['code', 'data']).length > 0 && (
+                                 <div className="space-y-2">
+                                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
+                                    {categoryFiles(['code', 'data']).map(file => (
+                                        <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
+                                            <div className="flex items-center gap-2 text-sm">
+                                                {getFileIcon(file.type)} 
+                                                <span className="font-medium text-slate-700">{file.name}</span>
+                                            </div>
+                                            <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                             )}
                         </div>
                     </div>
                     {/* Other Assets */}
@@ -946,48 +852,123 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                          <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                             {project.categoryDriveUrls?.assets && <SyncedDriveFiles driveUrl={project.categoryDriveUrls.assets} />}
                             {/* Manual Files */}
-                            {categoryFiles(['slide', 'other']).map(file => (
-                                <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group">
-                                    <div className="flex items-center gap-2 text-sm">
-                                        {getFileIcon(file.type)} 
-                                        <span className="font-medium text-slate-700">{file.name}</span>
-                                        <span className="text-xs text-slate-400 border border-slate-200 px-1 rounded">Manual</span>
-                                    </div>
-                                    <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                            {categoryFiles(['slide', 'other']).length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Manual Files</p>
+                                    {categoryFiles(['slide', 'other']).map(file => (
+                                        <div key={file.id} className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded group border border-transparent hover:border-slate-200 transition-colors">
+                                            <div className="flex items-center gap-2 text-sm">
+                                                {getFileIcon(file.type)} 
+                                                <span className="font-medium text-slate-700">{file.name}</span>
+                                            </div>
+                                            <button onClick={() => handleDeleteFile(file.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </div>
                 </div>
             );
-        case 'notes':
+        case 'team':
+             if (isGuestView) return <div className="p-6 text-center text-slate-400">Team management is hidden for guests.</div>;
              return (
-                <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-min">
-                        {(project.notes || []).map(note => (
-                            <div key={note.id} className={`p-4 rounded-lg shadow-sm group relative flex flex-col h-52 ${
-                                note.color === 'yellow' ? 'bg-yellow-100' : 'bg-sky-100'
-                            }`}>
-                                <textarea 
-                                    value={note.content} 
-                                    onChange={(e) => handleUpdateNote(note.id, e.target.value)}
-                                    className="bg-transparent resize-none outline-none text-sm w-full flex-1"
-                                />
-                                <div className="text-xs text-slate-400 mt-2">{new Date(note.createdAt).toLocaleDateString()}</div>
-                                <button onClick={() => handleDeleteNote(note.id)} className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 hover:bg-black/5 rounded">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        ))}
-                        {!isGuestView && (
-                            <button onClick={handleAddNote} className="h-52 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
-                                <Plus className="w-6 h-6" />
-                                <span className="mt-1 text-sm font-medium">Add Note</span>
-                            </button>
-                        )}
-                    </div>
-                </div>
-            );
+                 <div className="p-6 max-w-4xl mx-auto space-y-6">
+                     {/* Team List */}
+                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <Users className="w-5 h-5 text-indigo-600"/> Project Team
+                            </h3>
+                            <span className="text-xs font-semibold px-2 py-1 bg-slate-100 rounded-full text-slate-500">{project.collaborators.length} Members</span>
+                        </div>
+                        <div className="space-y-1">
+                            {project.collaborators.map(member => (
+                                <div key={member.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
+                                    <div className="flex items-center gap-4 mb-3 md:mb-0">
+                                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
+                                            {member.initials}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-slate-700 text-sm">{member.name} {member.id === currentUser.id && <span className="text-slate-400 font-normal">(You)</span>}</p>
+                                            <p className="text-xs text-slate-500">{member.email}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 pl-14 md:pl-0">
+                                        <div className="relative">
+                                            <select 
+                                                value={member.role}
+                                                disabled={member.role === 'Owner' || currentUser.role !== 'Owner'}
+                                                onChange={(e) => handleUpdateRole(member.id, e.target.value as any)}
+                                                className="appearance-none bg-white border border-slate-300 text-slate-700 text-xs font-medium py-1.5 pl-3 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-100"
+                                            >
+                                                <option value="Owner">Owner</option>
+                                                <option value="Editor">Editor</option>
+                                                <option value="Viewer">Viewer</option>
+                                                <option value="Guest">Guest</option>
+                                            </select>
+                                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                                        </div>
+                                        {member.role !== 'Owner' && currentUser.role === 'Owner' && (
+                                            <button 
+                                                onClick={() => handleRemoveCollaborator(member.id)}
+                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" 
+                                                title="Remove Member"
+                                            >
+                                                <Trash2 className="w-4 h-4"/>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                     </div>
+                     
+                     {/* Invite Section */}
+                     {currentUser.role === 'Owner' && (
+                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                             <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                                <UserPlus className="w-5 h-5 text-emerald-600"/> Invite New Member
+                             </h3>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Full Name</label>
+                                    <div className="relative">
+                                        <User className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                                        <input 
+                                            value={inviteName}
+                                            onChange={e => setInviteName(e.target.value)}
+                                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                            placeholder="John Doe"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Email Address</label>
+                                    <div className="relative">
+                                        <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                                        <input 
+                                            value={inviteEmail}
+                                            onChange={e => setInviteEmail(e.target.value)}
+                                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                            placeholder="john@example.com"
+                                        />
+                                    </div>
+                                </div>
+                             </div>
+                             <div className="mt-4 flex justify-end">
+                                 <button 
+                                    onClick={handleAddCollaborator}
+                                    disabled={!inviteName || !inviteEmail}
+                                    className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 disabled:opacity-50 text-sm flex items-center gap-2"
+                                 >
+                                     <Send className="w-4 h-4"/> Send Invite
+                                 </button>
+                             </div>
+                         </div>
+                     )}
+                 </div>
+             );
         case 'activity':
             return (
                 <div className="p-6 max-w-3xl mx-auto">
@@ -1016,15 +997,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
     <div className="h-full flex flex-col bg-slate-100 animate-in fade-in duration-500">
       {selectedTask && <TaskDetailModal task={selectedTask} project={project} currentUser={currentUser} onClose={() => setSelectedTask(null)} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onSendNotification={(message, type='success') => setShowNotification({message, type})} />}
       {addingTaskTo && <AddTaskModal status={addingTaskTo} project={project} onClose={() => setAddingTaskTo(null)} onSave={handleAddTask} />}
-      {showCollaboratorModal && (
-          <ManageCollaboratorsModal 
-            collaborators={project.collaborators} 
-            currentUser={currentUser}
-            onClose={() => setShowCollaboratorModal(false)}
-            onAdd={handleAddCollaborator}
-            onRemove={handleRemoveCollaborator}
-          />
-      )}
+      
       {showNotification && (
           <div className={`fixed top-5 right-5 z-50 px-4 py-2 rounded-lg shadow-lg text-white animate-in slide-in-from-top ${showNotification.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`}>
               {showNotification.message}
@@ -1072,9 +1045,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
                 </div>
                 {!isGuestView && (
                     <button 
-                        onClick={() => setShowCollaboratorModal(true)} 
+                        onClick={() => setActiveTab('team')} 
                         className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Manage Collaborators"
+                        title="Manage Team"
                     >
                         <Users className="w-4 h-4"/>
                     </button>
@@ -1093,9 +1066,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, currentUs
 
       {/* Tabs */}
       <nav className="bg-white border-b border-slate-200 px-6 flex gap-4">
-        <TabButton isActive={activeTab === 'board'} onClick={() => setActiveTab('board')} icon={LayoutDashboard}>Board</TabButton>
+        <TabButton isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={LayoutDashboard}>Dashboard</TabButton>
+        <TabButton isActive={activeTab === 'board'} onClick={() => setActiveTab('board')} icon={ClipboardList}>Tasks</TabButton>
         <TabButton isActive={activeTab === 'files'} onClick={() => setActiveTab('files')} icon={FolderOpen}>Files</TabButton>
-        <TabButton isActive={activeTab === 'notes'} onClick={() => setActiveTab('notes')} icon={AlignLeft}>Notes</TabButton>
+        <TabButton isActive={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users}>Team</TabButton>
         <TabButton isActive={activeTab === 'activity'} onClick={() => setActiveTab('activity')} icon={Activity}>Activity</TabButton>
         {!isGuestView && (
             <TabButton isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={Settings}>Settings</TabButton>
@@ -1123,12 +1097,11 @@ const ProjectSettingsTab: React.FC<ProjectSettingsTabProps> = ({ project, onUpda
     const [status, setStatus] = useState(project.status);
     const [description, setDescription] = useState(project.description);
     const [progress, setProgress] = useState(project.progress);
-    const [driveUrl, setDriveUrl] = useState(project.driveFolderUrl || '');
     const [tags, setTags] = useState(project.tags || []);
     const [tagInput, setTagInput] = useState('');
 
     const handleSaveChanges = () => {
-        onUpdateProject({ ...project, status, description, progress, driveFolderUrl: driveUrl, tags });
+        onUpdateProject({ ...project, status, description, progress, tags });
         alert("Settings saved!");
     };
     
@@ -1150,6 +1123,11 @@ const ProjectSettingsTab: React.FC<ProjectSettingsTabProps> = ({ project, onUpda
 
     const removeTag = (tagToRemove: string) => {
         setTags(tags.filter(t => t !== tagToRemove));
+    };
+    
+    // Save drive url change
+    const handleDriveUrlChange = (url: string) => {
+        onUpdateProject({ ...project, driveFolderUrl: url });
     };
 
     if (isGuestView) return <div className="p-6 text-center text-slate-500">Settings are not available in Guest View.</div>;
@@ -1180,10 +1158,12 @@ const ProjectSettingsTab: React.FC<ProjectSettingsTabProps> = ({ project, onUpda
             {/* Integration Settings */}
             <div className="bg-white p-6 rounded-xl border border-slate-200">
                 <h3 className="font-semibold text-lg text-slate-800 mb-4">Integrations</h3>
-                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Main Google Drive Folder</label>
-                    <input type="text" value={driveUrl} onChange={e => setDriveUrl(e.target.value)} className="w-full border rounded-md p-2" placeholder="https://drive.google.com/drive/folders/..." />
-                </div>
+                <EditableResourceLink 
+                    label="Main Google Drive Folder"
+                    url={project.driveFolderUrl || ''} 
+                    onSave={handleDriveUrlChange} 
+                    placeholder="https://drive.google.com/drive/folders/..." 
+                />
             </div>
             
             {/* Tags/Topics */}

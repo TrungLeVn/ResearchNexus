@@ -35,7 +35,8 @@ export const listFilesInFolder = async (folderUrl: string): Promise<DriveFile[]>
             console.error("Google Drive API Error:", errorData);
             
             const msg = errorData.error?.message || "";
-            if (msg.includes("API has not been used in project") || msg.includes("Drive API")) {
+            // Handle common API enablement error gracefully
+            if (msg.includes("API has not been used in project") || msg.includes("Drive API") || msg.includes("is disabled")) {
                  throw new Error("Google Drive API is not enabled for this project key. You can still use the link above to view files directly.");
             }
             if (response.status === 403) {
