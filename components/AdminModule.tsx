@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { Project, AcademicYearDoc, Reminder, AdminViewState, ProjectStatus } from '../types';
 import { ProjectManager } from './ProjectManager';
-import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2, Bot, X, CheckCircle2, TrendingUp, Layers, PenTool, Save, File } from 'lucide-react';
+import { Briefcase, Folder, Plus, FileText, Search, ExternalLink, FolderPlus, Sparkles, Loader2, Trash2, Bot, X, CheckCircle2, TrendingUp, Layers, PenTool, Save, File, Edit2, Check, AlertTriangle } from 'lucide-react';
 import { suggestAdminPlan } from '../services/gemini';
 import { subscribeToAdminDocs, saveAdminDoc, deleteAdminDoc } from '../services/firebase';
+import { listFilesInFolder, DriveFile } from '../services/googleDrive';
 import { AIChat } from './AIChat';
 import { ProjectDetail } from './ProjectDetail';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
@@ -21,6 +22,79 @@ interface AdminModuleProps {
     onAddProject?: (p: Project) => void;
     onAddReminder?: (reminder: Reminder) => void;
 }
+
+// --- GOOGLE DRIVE SYNC COMPONENT (Reused logic for Admin) ---
+const SyncedDriveFiles: React.FC<{ driveUrl: string }> = ({ driveUrl }) => {
+    const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!driveUrl || !driveUrl.includes('drive.google.com')) {
+            setIsLoading(false);
+            setDriveFiles([]);
+            return;
+        }
+        
+        const fetchFiles = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const files = await listFilesInFolder(driveUrl);
+                setDriveFiles(files);
+            } catch (e) {
+                setError((e as Error).message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchFiles();
+    }, [driveUrl]);
+
+    if (!driveUrl.includes('drive.google.com')) return null;
+
+    if (isLoading) {
+        return <div className="flex items-center p-2 text-slate-400 text-xs"><Loader2 className="w-3 h-3 animate-spin mr-2" /> Loading Drive contents...</div>;
+    }
+    
+    if (error) {
+        return (
+            <div className="bg-amber-50 p-2 rounded-lg border border-amber-100 flex flex-col gap-1 mt-2">
+                <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                         <p className="text-[10px] text-amber-800 font-medium">{error}</p>
+                         <a href={driveUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:underline mt-1 font-medium">
+                            Open in Drive <ExternalLink className="w-3 h-3"/>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
+    if (driveFiles.length === 0) {
+        return <p className="text-[10px] text-slate-400 italic p-2">Folder is empty.</p>;
+    }
+
+    return (
+        <div className="mt-2 pl-2 border-l-2 border-indigo-100 space-y-1">
+            {driveFiles.map(file => (
+                <a 
+                    key={file.id}
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-1.5 rounded hover:bg-slate-100 text-xs text-slate-600 group/file"
+                >
+                    <FileText className="w-3 h-3 text-slate-400 group-hover/file:text-indigo-600 shrink-0" />
+                    <span className="truncate">{file.name}</span>
+                    <ExternalLink className="w-3 h-3 text-slate-300 ml-auto opacity-0 group-hover/file:opacity-100" />
+                </a>
+            ))}
+        </div>
+    );
+};
 
 // --- DOCUMENT DETAIL MODAL ---
 interface DocDetailModalProps {
@@ -279,12 +353,16 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
     const [isAddingDoc, setIsAddingDoc] = useState(false);
     const [isAddingFolder, setIsAddingFolder] = useState(false);
     
+    // Rename State
+    const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
+    const [renameFolderValue, setRenameFolderValue] = useState('');
+
     // Add Doc State
     const [newItemType, setNewItemType] = useState<'link' | 'note'>('link');
     const [newDocData, setNewDocData] = useState({ name: '', url: '', year: '2023-2024', category: 'Report' });
     const [newFolderName, setNewFolderName] = useState('');
 
-    const handleAddDoc = () => {
+    const handleAddDoc = async () => {
         if (!newDocData.name) return;
         
         // If it's a link, we need a URL. If it's a note, we can have empty URL.
@@ -299,7 +377,13 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             type: 'doc',
             content: newItemType === 'note' ? '' : undefined // Initialize empty content for notes
         };
-        saveAdminDoc(newDoc);
+        
+        // Optimistically ensure year exists in UI immediately
+        if (!availableYears.includes(newDocData.year)) {
+            setAvailableYears(prev => [...prev, newDocData.year]);
+        }
+
+        await saveAdminDoc(newDoc);
         setIsAddingDoc(false);
         setNewDocData({ name: '', url: '', year: availableYears[0] || '2023-2024', category: 'Report' });
         
@@ -329,6 +413,28 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
         deleteAdminDoc(id);
         if (selectedDoc?.id === id) setSelectedDoc(null);
     };
+
+    const handleRenameFolder = async (oldName: string) => {
+        if (!renameFolderValue.trim() || renameFolderValue === oldName) {
+            setRenamingFolder(null);
+            return;
+        }
+        const newName = renameFolderValue.trim();
+
+        // 1. Update docs in Firebase
+        const docsToUpdate = docs.filter(d => d.year === oldName);
+        await Promise.all(docsToUpdate.map(d => saveAdminDoc({ ...d, year: newName })));
+
+        // 2. Update local state for empty folders or current view
+        if (availableYears.includes(oldName)) {
+            setAvailableYears(prev => prev.map(y => y === oldName ? newName : y));
+        } else {
+            // If strictly relying on docs, we still push to availableYears to ensure instant UI update
+            setAvailableYears(prev => [...prev, newName]);
+        }
+        
+        setRenamingFolder(null);
+    }
 
     const handleSmartPlan = async () => {
         if (!onAddReminder) return;
@@ -539,9 +645,38 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                             return (
                                 <div key={year} className="group/folder">
                                     <div className="flex justify-between items-center mb-3">
-                                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                                            <Folder className="w-4 h-4" /> Academic Year {year}
-                                        </h3>
+                                        <div className="flex items-center gap-3">
+                                            {renamingFolder === year ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Folder className="w-4 h-4 text-slate-500" />
+                                                    <input 
+                                                        autoFocus
+                                                        value={renameFolderValue} 
+                                                        onChange={(e) => setRenameFolderValue(e.target.value)}
+                                                        className="text-sm font-bold text-slate-600 uppercase tracking-wider bg-white border border-indigo-300 rounded px-2 py-0.5"
+                                                    />
+                                                    <button onClick={() => handleRenameFolder(year)} className="p-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                                                        <Check className="w-3 h-3" />
+                                                    </button>
+                                                    <button onClick={() => setRenamingFolder(null)} className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300">
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                                        <Folder className="w-4 h-4" /> Academic Year {year}
+                                                    </h3>
+                                                    <button 
+                                                        onClick={() => { setRenamingFolder(year); setRenameFolderValue(year); }}
+                                                        className="p-1 text-slate-300 hover:text-indigo-600 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                                                        title="Rename Folder"
+                                                    >
+                                                        <Edit2 className="w-3 h-3" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                         <button 
                                             onClick={() => handleDeleteFolder(year)}
                                             className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/folder:opacity-100 transition-opacity"
@@ -567,13 +702,13 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                         ) : yearDocs.map(doc => {
                                             const isInternalNote = !doc.url;
                                             return (
-                                                <div key={doc.id} className="relative group/doc">
+                                                <div key={doc.id} className="relative group/doc p-3 hover:bg-indigo-50 transition-colors">
                                                     {isInternalNote ? (
                                                          <div 
                                                             onClick={() => setSelectedDoc(doc)}
-                                                            className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors cursor-pointer"
+                                                            className="flex items-center justify-between cursor-pointer"
                                                         >
-                                                            <div className="flex items-center gap-3">
+                                                            <div className="flex items-center gap-3 w-full">
                                                                 <div className={`p-2 rounded transition-colors ${
                                                                     doc.category === 'Meeting' 
                                                                         ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
@@ -581,12 +716,14 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                                 }`}>
                                                                     <File className="w-4 h-4" />
                                                                 </div>
-                                                                <div>
+                                                                <div className="flex-1">
                                                                     <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
-                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
-                                                                        doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
-                                                                    }`}>{doc.category}</span>
-                                                                    <span className="ml-2 text-[10px] text-slate-400 border border-slate-200 px-1 rounded">Note</span>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                                                                            doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
+                                                                        }`}>{doc.category}</span>
+                                                                        <span className="text-[10px] text-slate-400 border border-slate-200 px-1 rounded">Note</span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                             <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
@@ -594,31 +731,38 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <a 
-                                                            href={doc.url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="block p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors"
-                                                        >
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`p-2 rounded transition-colors ${
-                                                                    doc.category === 'Meeting' 
-                                                                        ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
-                                                                        : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white group-hover/doc:text-indigo-600'
-                                                                }`}>
-                                                                    <FileText className="w-4 h-4" />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
-                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
-                                                                        doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
-                                                                    }`}>{doc.category}</span>
+                                                        <div className="flex flex-col">
+                                                            <div className="flex items-center justify-between">
+                                                                <a 
+                                                                    href={doc.url}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="flex items-center gap-3 flex-1"
+                                                                >
+                                                                    <div className={`p-2 rounded transition-colors ${
+                                                                        doc.category === 'Meeting' 
+                                                                            ? 'bg-purple-100 text-purple-600 group-hover/doc:bg-purple-200' 
+                                                                            : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white group-hover/doc:text-indigo-600'
+                                                                    }`}>
+                                                                        <FileText className="w-4 h-4" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
+                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                                                                            doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
+                                                                        }`}>{doc.category}</span>
+                                                                    </div>
+                                                                </a>
+                                                                <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
+                                                                    <ExternalLink className="w-4 h-4" />
                                                                 </div>
                                                             </div>
-                                                            <div className="p-2 text-slate-400 group-hover/doc:text-indigo-600">
-                                                                <ExternalLink className="w-4 h-4" />
-                                                            </div>
-                                                        </a>
+                                                            
+                                                            {/* DRIVE FOLDER PREVIEW IF URL IS DRIVE LINK */}
+                                                            {doc.url && doc.url.includes('drive.google.com') && (
+                                                                <SyncedDriveFiles driveUrl={doc.url} />
+                                                            )}
+                                                        </div>
                                                     )}
                                                    
                                                     <button 
