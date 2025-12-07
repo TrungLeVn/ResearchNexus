@@ -1,6 +1,8 @@
+
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
+  initializeFirestore,
   collection, 
   doc, 
   setDoc, 
@@ -41,7 +43,9 @@ let db: any = null;
 if (isFirebaseConfigured()) {
   try {
     const app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    // db = getFirestore(app);
+    // Initialize Firestore with settings to ignore undefined fields (prevents errors on optional data)
+    db = initializeFirestore(app, { ignoreUndefinedProperties: true });
     console.log("Firebase initialized successfully");
   } catch (error) {
     console.error("Firebase Initialization Error:", error);

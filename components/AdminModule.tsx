@@ -408,7 +408,9 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             year: newDocData.year,
             category: newDocData.category as any,
             type: 'doc',
-            content: newItemType === 'note' ? '' : undefined // Initialize empty content for notes
+            // FIXED: Only add content property if it is a note. 
+            // Firestore throws error if field value is undefined.
+            ...(newItemType === 'note' ? { content: '' } : {})
         };
         
         // Optimistically ensure year exists in UI immediately
