@@ -1,5 +1,4 @@
 
-
 export enum ProjectStatus {
   PLANNING = 'Planning',
   ACTIVE = 'Active',
@@ -254,6 +253,7 @@ export interface MeetingNote {
 export interface AcademicYearDoc {
     id: string;
     name: string;
+    description?: string; // Short description
     type: 'pdf' | 'doc' | 'sheet';
     year: string; // e.g. "2023-2024"
     url: string; // or content if it's a note

@@ -107,10 +107,11 @@ interface DocDetailModalProps {
 const DocDetailModal: React.FC<DocDetailModalProps> = ({ doc, onClose, onSave, onDelete }) => {
     const [content, setContent] = useState(doc.content || '');
     const [name, setName] = useState(doc.name);
+    const [description, setDescription] = useState(doc.description || '');
     const [isEditing, setIsEditing] = useState(false);
 
     const handleSave = () => {
-        onSave({ ...doc, name, content });
+        onSave({ ...doc, name, content, description });
         setIsEditing(false);
     };
 
@@ -157,16 +158,34 @@ const DocDetailModal: React.FC<DocDetailModalProps> = ({ doc, onClose, onSave, o
                     </div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-8 bg-white">
+                <div className="flex-1 overflow-y-auto p-8 bg-white flex flex-col gap-4">
+                     {isEditing ? (
+                        <div className="mb-2">
+                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Description</label>
+                             <input 
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="Short description..."
+                             />
+                        </div>
+                     ) : (
+                         description && (
+                             <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm text-slate-600 italic">
+                                 {description}
+                             </div>
+                         )
+                     )}
+                    
                     {isEditing ? (
                         <textarea 
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
-                            className="w-full h-full resize-none outline-none text-slate-700 leading-relaxed font-mono text-sm"
+                            className="w-full flex-1 resize-none outline-none text-slate-700 leading-relaxed font-mono text-sm border p-4 rounded-lg"
                             placeholder="Type your meeting notes or document content here..."
                         />
                     ) : (
-                        <div className="prose prose-slate max-w-none">
+                        <div className="prose prose-slate max-w-none flex-1">
                             {content ? <ReactMarkdown>{content}</ReactMarkdown> : <p className="text-slate-400 italic">No content. Click edit to add notes.</p>}
                         </div>
                     )}
@@ -359,19 +378,33 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
 
     // Add Doc State
     const [newItemType, setNewItemType] = useState<'link' | 'note'>('link');
-    const [newDocData, setNewDocData] = useState({ name: '', url: '', year: '2023-2024', category: 'Report' });
+    const [newDocData, setNewDocData] = useState({ name: '', description: '', url: '', year: '2023-2024', category: 'Report' });
     const [newFolderName, setNewFolderName] = useState('');
+    
+    // Get years including empty ones created manually or existing in docs
+    const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
 
     const handleAddDoc = async () => {
-        if (!newDocData.name) return;
+        if (!newDocData.name) {
+            alert("Please enter a name for the item.");
+            return;
+        }
+        
+        const trimmedName = newDocData.name.trim();
+        const trimmedUrl = newDocData.url.trim();
+        const trimmedDescription = newDocData.description.trim();
         
         // If it's a link, we need a URL. If it's a note, we can have empty URL.
-        if (newItemType === 'link' && !newDocData.url) return;
+        if (newItemType === 'link' && !trimmedUrl) {
+             alert("Please enter a URL for the link.");
+             return;
+        }
 
         const newDoc: AcademicYearDoc = {
             id: Date.now().toString(),
-            name: newDocData.name,
-            url: newItemType === 'link' ? newDocData.url : '', // Empty URL for notes
+            name: trimmedName,
+            description: trimmedDescription,
+            url: newItemType === 'link' ? trimmedUrl : '', // Empty URL for notes
             year: newDocData.year,
             category: newDocData.category as any,
             type: 'doc',
@@ -383,20 +416,26 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             setAvailableYears(prev => [...prev, newDocData.year]);
         }
 
-        await saveAdminDoc(newDoc);
-        setIsAddingDoc(false);
-        setNewDocData({ name: '', url: '', year: availableYears[0] || '2023-2024', category: 'Report' });
-        
-        // If it's a note, open it immediately
-        if (newItemType === 'note') {
-            setSelectedDoc(newDoc);
+        try {
+            await saveAdminDoc(newDoc);
+            setIsAddingDoc(false);
+            setNewDocData({ name: '', description: '', url: '', year: availableYears[0] || '2023-2024', category: 'Report' });
+            
+            // If it's a note, open it immediately
+            if (newItemType === 'note') {
+                setSelectedDoc(newDoc);
+            }
+        } catch (error) {
+            console.error("Failed to save doc:", error);
+            alert("Failed to save the item. Please check your connection.");
         }
     };
 
     const handleAddFolder = () => {
-        if (!newFolderName.trim()) return;
-        if (!availableYears.includes(newFolderName)) {
-            setAvailableYears([newFolderName, ...availableYears]);
+        const name = newFolderName.trim();
+        if (!name) return;
+        if (!availableYears.includes(name)) {
+            setAvailableYears([name, ...availableYears]);
         }
         setNewFolderName('');
         setIsAddingFolder(false);
@@ -459,9 +498,6 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
             setIsGeneratingPlan(false);
         }
     };
-    
-    // Get years including empty ones created manually or existing in docs
-    const allYears = Array.from(new Set([...availableYears, ...docs.map(d => d.year)])).sort().reverse();
 
     return (
         <div className="h-full flex flex-col bg-slate-50 p-6 animate-in fade-in duration-500 relative">
@@ -550,7 +586,13 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                     <FolderPlus className="w-4 h-4" /> New Folder
                                 </button>
                                 <button 
-                                    onClick={() => setIsAddingDoc(!isAddingDoc)}
+                                    onClick={() => {
+                                        // Ensure year defaults to first available if not set
+                                        if (allYears.length > 0 && !allYears.includes(newDocData.year)) {
+                                            setNewDocData(prev => ({ ...prev, year: allYears[0] }));
+                                        }
+                                        setIsAddingDoc(!isAddingDoc);
+                                    }}
                                     className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
                                 >
                                     <Plus className="w-4 h-4" /> Add Item
@@ -593,19 +635,31 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                    <input 
-                                        placeholder="Item Name / Meeting Title"
-                                        className="w-full px-3 py-2 text-sm border rounded-lg"
-                                        value={newDocData.name}
-                                        onChange={e => setNewDocData({...newDocData, name: e.target.value})}
-                                    />
-                                    {newItemType === 'link' && (
+                                    <div className="md:col-span-2">
                                         <input 
-                                            placeholder="URL (Drive Link, Google Doc)"
+                                            placeholder="Item Name / Meeting Title"
                                             className="w-full px-3 py-2 text-sm border rounded-lg"
-                                            value={newDocData.url}
-                                            onChange={e => setNewDocData({...newDocData, url: e.target.value})}
+                                            value={newDocData.name}
+                                            onChange={e => setNewDocData({...newDocData, name: e.target.value})}
                                         />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <textarea 
+                                            placeholder="Description (Optional)"
+                                            className="w-full px-3 py-2 text-sm border rounded-lg resize-none h-20"
+                                            value={newDocData.description}
+                                            onChange={e => setNewDocData({...newDocData, description: e.target.value})}
+                                        />
+                                    </div>
+                                    {newItemType === 'link' && (
+                                        <div className="md:col-span-2">
+                                            <input 
+                                                placeholder="URL (Drive Link, Google Doc)"
+                                                className="w-full px-3 py-2 text-sm border rounded-lg"
+                                                value={newDocData.url}
+                                                onChange={e => setNewDocData({...newDocData, url: e.target.value})}
+                                            />
+                                        </div>
                                     )}
                                     <select 
                                         className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
@@ -718,6 +772,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                                 </div>
                                                                 <div className="flex-1">
                                                                     <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
+                                                                    {doc.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{doc.description}</p>}
                                                                     <div className="flex items-center gap-2 mt-0.5">
                                                                         <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
                                                                             doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
@@ -748,6 +803,7 @@ export const AdminModule: React.FC<AdminModuleProps> = ({
                                                                     </div>
                                                                     <div>
                                                                         <p className="text-sm font-medium text-slate-800 group-hover/doc:text-indigo-700">{doc.name}</p>
+                                                                        {doc.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{doc.description}</p>}
                                                                         <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
                                                                             doc.category === 'Meeting' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500 group-hover/doc:bg-white'
                                                                         }`}>{doc.category}</span>
